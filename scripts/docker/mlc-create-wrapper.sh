@@ -6,11 +6,13 @@
 # - Automatic resource limits based on user/group
 # - GPU allocation management
 # - Simplified interface for students
+#
+# Installation: sudo ln -sf /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh /usr/local/bin/mlc-create
 
 set -e
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 RESOURCE_PARSER="$SCRIPT_DIR/get_resource_limits.py"
@@ -48,101 +50,86 @@ ${GREEN}DS01 GPU Server - Container Creation${NC}
 
 Usage: mlc-create <name> <framework> [version] [options]
 
-${BLUE}Quick Start (Students):${NC}
-  mlc-create my-project pytorch              # Latest PyTorch
-  mlc-create my-project tensorflow           # Latest TensorFlow
-  mlc-create my-project pytorch 2.5.1        # Specific version
+${BLUE}Quick Start:${NC}
+  mlc-create my-project pytorch              # Latest PyTorch (2.5.1)
+  mlc-create my-project tensorflow           # Latest TensorFlow (2.14.0)
+  mlc-create my-project pytorch 2.4.0        # Specific version
 
-${BLUE}Common Frameworks:${NC}
-  - pytorch      (recommended for most deep learning)
-  - tensorflow   (for TensorFlow users)
+${BLUE}Frameworks:${NC}
+  pytorch, torch       → PyTorch (recommended for most deep learning)
+  tensorflow, tf       → TensorFlow
+  mxnet, mx            → MXNet
 
 ${BLUE}Options:${NC}
   -w=<path>      Workspace directory (default: ~/workspace)
   -d=<path>      Data directory (optional)
-  -g=<id>        Request specific GPU (0-3, admins only)
+  -g=<id>        Request specific GPU 0-3 (admins only)
   --cpu-only     Create CPU-only container (no GPU)
   --show-limits  Show your resource limits
+  --dry-run      Show what would be created without creating
+  -h, --help     Show this help message
 
 ${BLUE}Examples:${NC}
-  # Create PyTorch container for computer vision project
+  # Create PyTorch container
   mlc-create cv-project pytorch
 
-  # Create container with custom workspace
-  mlc-create nlp-project pytorch -w=~/projects/nlp
+  # Create with specific version
+  mlc-create nlp-project pytorch 2.4.0
 
-  # Create CPU-only container for data preprocessing
+  # Create with custom workspace
+  mlc-create analysis tensorflow -w=~/projects/analysis
+
+  # Create CPU-only container
   mlc-create preprocessing pytorch --cpu-only
+
+  # Check what would be created
+  mlc-create test pytorch --dry-run
 
 ${BLUE}After Creation:${NC}
   mlc-open <name>     # Open container
   mlc-list            # List your containers
   mlc-stop <name>     # Stop container
+  mlc-remove <name>   # Delete container
 
 ${BLUE}Need Help?${NC}
-  - User guide: /home/shared/docs/getting-started.md
+  - Docs: /home/shared/docs/getting-started.md
   - Office hours: Tuesdays 2-4pm
   - Email: datasciencelab@university.edu
 
 EOF
 }
 
-# Check if user wants help
+# Pre-flight checks
+preflight_checks() {
+    # Check Docker is running
+    if ! docker info &>/dev/null; then
+        log_error "Docker daemon is not running or you don't have permission"
+        log_info "Try: sudo usermod -aG docker $USER (then logout/login)"
+        exit 1
+    fi
+    
+    # Check original mlc-create exists
+    if [ ! -f "$ORIGINAL_MLC" ]; then
+        log_error "Original mlc-create not found at: $ORIGINAL_MLC"
+        log_error "Please ensure aime-ml-containers is installed"
+        exit 1
+    fi
+    
+    # Check disk space (warn if <10GB free)
+    DISK_FREE=$(df -BG /var/lib/docker | tail -1 | awk '{print $4}' | sed 's/G//')
+    if [ "$DISK_FREE" -lt 10 ]; then
+        log_warning "Low disk space: ${DISK_FREE}GB free in /var/lib/docker"
+    fi
+}
+
+# Check if user wants help or show limits FIRST
 if [[ "$1" == "-h" ]] || [[ "$1" == "--help" ]] || [[ $# -eq 0 ]]; then
     print_usage
     exit 0
 fi
 
-# Parse arguments
-CONTAINER_NAME="$1"
-FRAMEWORK="${2:-pytorch}"  # Default to pytorch
-VERSION="${3}"
-WORKSPACE_DIR="$HOME/workspace"
-DATA_DIR=""
-REQUESTED_GPU=""
-CPU_ONLY=false
-SHOW_LIMITS=false
-
-# Shift past container name and framework
-shift 2 2>/dev/null || shift 1
-
-# Parse remaining arguments
-for arg in "$@"; do
-    case $arg in
-        -w=*|--workspace=*)
-            WORKSPACE_DIR="${arg#*=}"
-            ;;
-        -d=*|--data=*)
-            DATA_DIR="${arg#*=}"
-            ;;
-        -g=*|--gpu=*)
-            REQUESTED_GPU="${arg#*=}"
-            ;;
-        --cpu-only)
-            CPU_ONLY=true
-            ;;
-        --show-limits)
-            SHOW_LIMITS=true
-            ;;
-        *)
-            # Check if it's a version number (starts with digit)
-            if [[ $arg =~ ^[0-9] ]]; then
-                VERSION="$arg"
-            else
-                log_error "Unknown option: $arg"
-                print_usage
-                exit 1
-            fi
-            ;;
-    esac
-done
-
-# Get current user
-CURRENT_USER=$(whoami)
-USER_ID=$(id -u)
-
-# Show resource limits if requested
-if [ "$SHOW_LIMITS" = true ]; then
+if [[ "$1" == "--show-limits" ]]; then
+    CURRENT_USER=$(whoami)
     if [ -f "$RESOURCE_PARSER" ]; then
         python3 "$RESOURCE_PARSER" "$CURRENT_USER"
     else
@@ -152,10 +139,132 @@ if [ "$SHOW_LIMITS" = true ]; then
     exit 0
 fi
 
+# Initialize variables
+CONTAINER_NAME=""
+FRAMEWORK=""
+VERSION=""
+WORKSPACE_DIR="$HOME/workspace"
+DATA_DIR=""
+REQUESTED_GPU=""
+CPU_ONLY=false
+DRY_RUN=false
+
+# Parse container name
+CONTAINER_NAME="$1"
+shift
+
+# Parse framework (with case-insensitive mapping)
+if [ -n "$1" ] && [[ ! "$1" =~ ^- ]]; then
+    FRAMEWORK_INPUT="$1"
+    case "${FRAMEWORK_INPUT,,}" in  # ,, converts to lowercase
+        pytorch|torch)
+            FRAMEWORK="Pytorch"
+            ;;
+        tensorflow|tf)
+            FRAMEWORK="Tensorflow"
+            ;;
+        mxnet|mx)
+            FRAMEWORK="Mxnet"
+            ;;
+        *)
+            # Capitalize first letter for unknown frameworks
+            FRAMEWORK="$(tr '[:lower:]' '[:upper:]' <<< ${FRAMEWORK_INPUT:0:1})${FRAMEWORK_INPUT:1}"
+            ;;
+    esac
+    shift
+fi
+
+# Parse remaining arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -w=*|--workspace=*)
+            WORKSPACE_DIR="${1#*=}"
+            ;;
+        -d=*|--data=*)
+            DATA_DIR="${1#*=}"
+            ;;
+        -g=*|--gpu=*)
+            REQUESTED_GPU="${1#*=}"
+            ;;
+        --cpu-only)
+            CPU_ONLY=true
+            ;;
+        --show-limits)
+            CURRENT_USER=$(whoami)
+            if [ -f "$RESOURCE_PARSER" ]; then
+                python3 "$RESOURCE_PARSER" "$CURRENT_USER"
+            else
+                log_error "Resource parser not found: $RESOURCE_PARSER"
+            fi
+            exit 0
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            ;;
+        -h|--help)
+            print_usage
+            exit 0
+            ;;
+        -*)
+            log_error "Unknown option: $1"
+            print_usage
+            exit 1
+            ;;
+        *)
+            # Assume it's a version number
+            if [[ $1 =~ ^[0-9] ]]; then
+                VERSION="$1"
+            else
+                log_error "Unknown argument: $1"
+                print_usage
+                exit 1
+            fi
+            ;;
+    esac
+    shift
+done
+
+# Auto-select version if not specified
+if [[ -z "$VERSION" ]]; then
+    case "$FRAMEWORK" in
+        Pytorch)
+            VERSION="2.5.1"
+            ;;
+        Tensorflow)
+            VERSION="2.14.0"
+            ;;
+        Mxnet)
+            VERSION="1.8.0-nvidia"
+            ;;
+        *)
+            # Let mlc-create handle version requirement
+            VERSION=""
+            ;;
+    esac
+fi
+
+# Default framework if not specified
+if [[ -z "$FRAMEWORK" ]]; then
+    FRAMEWORK="Pytorch"
+    VERSION="2.5.1"
+    log_info "No framework specified, defaulting to Pytorch 2.5.1"
+fi
+
+# Get current user
+CURRENT_USER=$(whoami)
+USER_ID=$(id -u)
+
 # Validate container name
 if [[ -z "$CONTAINER_NAME" ]]; then
     log_error "Container name is required"
     print_usage
+    exit 1
+fi
+
+# Validate container name format (alphanumeric, hyphens, underscores only)
+if [[ ! "$CONTAINER_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    log_error "Invalid container name: $CONTAINER_NAME"
+    log_info "Use only letters, numbers, hyphens, and underscores"
     exit 1
 fi
 
@@ -167,6 +276,17 @@ if docker ps -a --filter "name=^${CONTAINER_TAG}$" --format '{{.Names}}' | grep 
     log_info "Or:  mlc-remove $CONTAINER_NAME (to delete it first)"
     exit 1
 fi
+
+# Validate GPU ID if specified
+if [ -n "$REQUESTED_GPU" ]; then
+    if [[ ! "$REQUESTED_GPU" =~ ^[0-3]$ ]]; then
+        log_error "Invalid GPU ID: $REQUESTED_GPU (must be 0-3)"
+        exit 1
+    fi
+fi
+
+# Run pre-flight checks
+preflight_checks
 
 # Ensure workspace directory exists
 mkdir -p "$WORKSPACE_DIR"
@@ -198,11 +318,9 @@ if [ "$CPU_ONLY" = true ]; then
     log_info "Creating CPU-only container (no GPU)"
 else
     if [ -n "$REQUESTED_GPU" ]; then
-        # Specific GPU requested
         log_info "Specific GPU requested: $REQUESTED_GPU"
         GPU_ARG="-g=$REQUESTED_GPU"
     else
-        # Auto-allocate GPU (original mlc-create handles this)
         log_info "GPU will be auto-allocated by mlc-create"
     fi
 fi
@@ -223,113 +341,70 @@ if [ -n "$GPU_ARG" ]; then
     ORIGINAL_ARGS="$ORIGINAL_ARGS $GPU_ARG"
 fi
 
+# Dry run mode
+if [ "$DRY_RUN" = true ]; then
+    log_info "DRY RUN MODE - No containers will be created"
+    echo ""
+    log_info "Would execute:"
+    echo "  bash $ORIGINAL_MLC $ORIGINAL_ARGS"
+    echo ""
+    log_info "Would apply resource limits:"
+    echo "$RESOURCE_LIMITS" | tr ' ' '\n' | sed 's/^/  /'
+    echo ""
+    log_info "Container would be named: $CONTAINER_TAG"
+    exit 0
+fi
+
 # Call original mlc-create
 log_info "Creating container with mlc-create..."
 
-if [ -f "$ORIGINAL_MLC" ]; then
-    # Execute the original script
-    bash "$ORIGINAL_MLC" $ORIGINAL_ARGS
-    MLC_EXIT_CODE=$?
-    
-    if [ $MLC_EXIT_CODE -ne 0 ]; then
-        log_error "Container creation failed (exit code: $MLC_EXIT_CODE)"
-        exit $MLC_EXIT_CODE
-    fi
-else
-    log_error "Original mlc-create not found at: $ORIGINAL_MLC"
-    log_error "Please ensure aime-ml-containers is installed"
-    exit 1
+bash "$ORIGINAL_MLC" $ORIGINAL_ARGS
+MLC_EXIT_CODE=$?
+
+if [ $MLC_EXIT_CODE -ne 0 ]; then
+    log_error "Container creation failed (exit code: $MLC_EXIT_CODE)"
+    exit $MLC_EXIT_CODE
 fi
 
-# Now apply resource limits to the created container
+# Apply resource limits to the created container
 log_info "Applying resource limits to container..."
 
-# Get current container config
+# Verify container was created
 if ! docker inspect "$CONTAINER_TAG" &>/dev/null; then
     log_error "Container $CONTAINER_TAG was not created successfully"
     exit 1
 fi
 
-# Update container with resource limits using docker update
-# Note: Some limits can only be set at creation, so we'll recreate if needed
-NEEDS_RECREATE=false
+# Build docker update command
+UPDATE_CMD="docker update"
 
-# Check if we can use docker update for all limits
-if echo "$RESOURCE_LIMITS" | grep -q "shm-size"; then
-    NEEDS_RECREATE=true
-fi
+for arg in $RESOURCE_LIMITS; do
+    case $arg in
+        --cpus=*)
+            UPDATE_CMD="$UPDATE_CMD --cpus=${arg#*=}"
+            ;;
+        --memory=*)
+            UPDATE_CMD="$UPDATE_CMD --memory=${arg#*=}"
+            ;;
+        --memory-swap=*)
+            UPDATE_CMD="$UPDATE_CMD --memory-swap=${arg#*=}"
+            ;;
+        --pids-limit=*)
+            UPDATE_CMD="$UPDATE_CMD --pids-limit=${arg#*=}"
+            ;;
+        --shm-size=*)
+            # shm-size cannot be updated after creation
+            # It would need to be passed to original mlc-create, but that doesn't support it
+            # Just skip it silently
+            ;;
+    esac
+done
 
-if [ "$NEEDS_RECREATE" = true ]; then
-    log_info "Recreating container with resource limits..."
-    
-    # Stop container if running
-    docker stop "$CONTAINER_TAG" 2>/dev/null || true
-    
-    # Get current configuration
-    CURRENT_IMAGE=$(docker inspect "$CONTAINER_TAG" --format='{{.Config.Image}}')
-    CURRENT_CMD=$(docker inspect "$CONTAINER_TAG" --format='{{json .Config.Cmd}}' | sed 's/\[//g; s/\]//g; s/"//g')
-    
-    # Get all volume mounts
-    VOLUME_ARGS=$(docker inspect "$CONTAINER_TAG" --format='{{range .Mounts}}-v {{.Source}}:{{.Destination}} {{end}}')
-    
-    # Get environment variables
-    ENV_ARGS=$(docker inspect "$CONTAINER_TAG" --format='{{range .Config.Env}}--env {{.}} {{end}}')
-    
-    # Get labels
-    LABEL_ARGS=$(docker inspect "$CONTAINER_TAG" --format='{{range $k,$v := .Config.Labels}}--label {{$k}}={{$v}} {{end}}')
-    
-    # Get user
-    CONTAINER_USER=$(docker inspect "$CONTAINER_TAG" --format='{{.Config.User}}')
-    
-    # Get working directory
-    WORKDIR=$(docker inspect "$CONTAINER_TAG" --format='{{.Config.WorkingDir}}')
-    
-    # Remove old container
-    docker rm "$CONTAINER_TAG" 2>/dev/null || true
-    
-    # Create new container with resource limits
-    docker run -dit \
-        --name "$CONTAINER_TAG" \
-        --user "$CONTAINER_USER" \
-        --workdir "$WORKDIR" \
-        $VOLUME_ARGS \
-        $ENV_ARGS \
-        $LABEL_ARGS \
-        --network=host \
-        --ipc=host \
-        --privileged \
-        --restart=unless-stopped \
-        $RESOURCE_LIMITS \
-        "$CURRENT_IMAGE" \
-        bash
-        
-    if [ $? -ne 0 ]; then
-        log_error "Failed to apply resource limits"
-        exit 1
-    fi
+# Apply the update
+if $UPDATE_CMD "$CONTAINER_TAG" &>/dev/null; then
+    log_info "Resource limits applied successfully"
 else
-    # Use docker update for limits that support it
-    UPDATE_ARGS=""
-    for arg in $RESOURCE_LIMITS; do
-        case $arg in
-            --cpus=*)
-                UPDATE_ARGS="$UPDATE_ARGS --cpus=${arg#*=}"
-                ;;
-            --memory=*)
-                UPDATE_ARGS="$UPDATE_ARGS --memory=${arg#*=}"
-                ;;
-            --memory-swap=*)
-                UPDATE_ARGS="$UPDATE_ARGS --memory-swap=${arg#*=}"
-                ;;
-            --pids-limit=*)
-                UPDATE_ARGS="$UPDATE_ARGS --pids-limit=${arg#*=}"
-                ;;
-        esac
-    done
-    
-    if [ -n "$UPDATE_ARGS" ]; then
-        docker update $UPDATE_ARGS "$CONTAINER_TAG" &>/dev/null || log_warning "Some resource limits could not be applied"
-    fi
+    log_warning "Some resource limits could not be applied"
 fi
 
 # Stop container (user will start it with mlc-open)
@@ -347,5 +422,5 @@ echo "  mlc-list           # List your containers"
 echo "  mlc-stats          # Show resource usage"
 echo "  mlc-stop $CONTAINER_NAME  # Stop this container"
 echo ""
-log_warning "Remember to save your work in /workspace - it persists across container restarts!"
+log_warning "Remember: Save your work in /workspace - it persists across container restarts!"
 echo ""
