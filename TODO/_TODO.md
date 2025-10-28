@@ -38,7 +38,7 @@
     - [ ] add h.baker to sudo
     - [ ] script to auto add phds/researchers vs students to their respective groups (currently only possible to scan the home dirs - not efficient, where are these dirs being populated from)
     - [ ] add new user -> user group script to cron
-- [ ] write script to kep dsl in sudo
+- [x] write script to kep dsl in sudo
 - [ ] setup new user workflow -> creates relevant dirs + fixes their read/write permiossions
 
 ### Shared directories
@@ -64,7 +64,6 @@
 - [x] set up basic cron tasks 
 - [x] set up initial logging scripts for resource management
 - [x] set up initial audit scripts
-- [ ] add a database to store logs
 - [x] remove GPU audit
 - [x] make gpu logging more concise
 - [x] clean up output from docker audit
@@ -90,8 +89,16 @@
     - incl all the config files in /etc/ and others
 
 # Containers
-- [ ] write documentation
+- [ ] get it set up so it's launchable from VS Code rather than jupyter
 - [ ] Set up `docker image prune` automation"
+- [ ]Containers should run with user namespaces:
+        Add to /etc/docker/daemon.json:
+        json
+        {
+        "userns-remap": "default"
+        }
+- [ ] documentation
+
 
 # privacy
 - [x] change so users can't see eachothers directories

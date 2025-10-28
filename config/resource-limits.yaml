@@ -1,0 +1,66 @@
+# DS01 GPU Server - Resource Limits Configuration
+# /opt/ds01-infra/config/resource-limits.yaml
+
+# This file controls default and per-user/group resource allocations
+
+# Default limits for all users (unless overridden below)
+defaults:
+  gpus: 1              # Number of GPUs (or "all" for no limit)
+  gpu_memory: null     # GPU memory limit in GB (null = no limit)
+  cpus: 16              # CPU cores
+  memory: 32g          # RAM limit
+  memory_swap: 32g     # Swap limit (should match memory to prevent swap)
+  shm_size: 16g        # Shared memory (important for PyTorch DataLoader)
+  pids_limit: 4096     # Max processes (prevents fork bombs)
+  idle_timeout: 48h    # Auto-stop after X hours of inactivity
+
+# User group definitions
+groups:
+  students:
+    members: []  # TO DO need to autopopulate from LDAP group 'ds01-students'
+    
+  researchers:
+    members: []  
+    gpus: 2      
+    cpus: 32
+    memory: 64g
+    memory_swap: 64g
+    shm_size: 32g
+    idle_timeout: 168h  # 1 week
+    
+  admins:
+    members: []  
+    gpus: all    
+    cpus: 64
+    memory: 128g
+    memory_swap: 128g
+    shm_size: 64g
+    idle_timeout: null  # No timeout
+
+# Per-user overrides (takes precedence over group settings)
+user_overrides:
+  # Example:
+  # john_doe:
+  #   gpus: 2
+  #   memory: 64g
+  #   reason: "Thesis work - approved by supervisor"
+
+# GPU allocation strategy
+gpu_allocation:
+  strategy: round_robin  # Options: round_robin, least_used, manual
+  pin_gpu: true         # Enforce GPU pinning 
+  allow_multi_gpu: false  # Allow single user to span multiple GPUs (for researchers only)
+
+# Container lifecycle policies
+policies:
+  auto_stop_idle: true
+  checkpoint_warning: 36h  # Warn users X hours before auto-stop
+  require_workspace_mount: true  # Force all containers to mount /workspace
+  max_containers_per_user: 5
+  
+# Advanced settings
+advanced:
+  enable_mig: true
+  enable_mps: true 
+  network_mode: host  # or 'bridge'
+  restart_policy: unless-stopped
