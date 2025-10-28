@@ -1,10 +1,10 @@
 #!/bin/bash
-# opt/ds01-infra/scripts/audit_docker.sh
+# /opt/ds01-infra/scripts/monitoring/audit-docker.sh
 # Create a comprehensive Docker Configuration Audit
 # Focus: Images, networks, volumes, security, not real-time stats
 # Run: Weekly or Monthly
 
-DIR=~/server_infra/logs/audits/docker
+DIR=/var/log/ds01-infra/audits/docker
 mkdir -p "$DIR"
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")

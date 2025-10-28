@@ -1,10 +1,10 @@
 #!/bin/bash
-# opt/ds01-infra/scripts/audit_system.sh
+# /opt/ds01-infra/scripts/monitoring/audit-system.sh
 # Create a comprehensive System Configuration Audit
 # Focus: Configuration, not performance
 # Run: Weekly or Monthly
 
-DIR=~/server_infra/logs/audits/system
+DIR=/var/log/ds01-infra/audits/system
 mkdir -p "$DIR"
 
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
