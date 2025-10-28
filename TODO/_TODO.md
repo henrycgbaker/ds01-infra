@@ -1,0 +1,103 @@
+# To do
+
+### Questions for Huy
+- [ ] how to add users to server access (incl myself & new MDS cohort) 
+    - does IT manage that?
+
+### SSH Keys / mosh / hostname
+- [x] set up DSL ssh key
+- [ ] setup ssh keys rather than passwords for all users (gradually migrate to key-only)
+- [x] change dsl passphrase
+- [x] set up mosh
+- [x] set up hostname again
+- [x] write documentation
+- [ ] mosh still down
+- [ ] improve docs
+
+### User Privacy & Permissions
+- [x] Changed UMASK to 077 in /etc/login.defs for new users
+- [x] Created script to update all existing home directories to 700 permissions
+- [x] Applied 700 permissions to all 82 existing home directories
+- [x] Verified USERGROUPS_ENAB setting
+- [ ] come back to /readonly & /collaborative dirs -> base access on user groups
+    - `sudo chgrp datasciencelab /collaborative`
+    - `sudo chmod 2775 /collaborative` 
+    - -> currently group ownership is datasciencelab -> change this to be all MDS students?
+    - [ ] update the documentation when confirmed
+- [x] added /scratch/ dirs (& documentation)
+- [ ] change /scratch/ dirs permissions so it's not automatic -> students have to request access (via usergroups)
+- [ ] change /scratch/ dirs naming conventions
+- [ ] understand & document how to add users to server access 
+- [x] set up user groups for more granular permissions
+- [ ] tidy up previous user groups
+- [ ] write user group documentation
+- [ ] !!! where can i find a list of all server users
+    - [ ] work out what's going on for how AD users don't appear as users (but they do get a /home dir -> what's goin on with these users) I've tried going all around this, but it's not clear what's happening at all
+    - [ ] need to get LDAP query access from IT
+    - [ ] add h.baker to `sudo usermod -g ds-admin -G docker-users,gpu-users,gpu-priority h.baker` (currently I'm not a user)
+    - [ ] add h.baker to sudo
+    - [ ] script to auto add phds/researchers vs students to their respective groups (currently only possible to scan the home dirs - not efficient, where are these dirs being populated from)
+    - [ ] add new user -> user group script to cron
+- [ ] write script to kep dsl in sudo
+- [ ] setup new user workflow -> creates relevant dirs + fixes their read/write permiossions
+
+### Shared directories
+- [ ] once /readonly & /collaborative sorted: set up shared datasets & models
+
+### Documentation
+- [ ] make available both within root folder, and on git
+- [ ] set up shared communication for server announcements / ticketing system for students
+- [ ] admin docs
+    - Cron; backup schedule and restoration process
+    - ssh
+    - 
+
+### Cron
+- [x] implemented some basic scripts, but I don't want them that regular, go back to change regularity & what they are outputting (currently excess info)
+- [x] Set up log rotation with 1-year retention
+- [ ] identify things to backup
+    - /home dirs
+    - docker volumes, 
+    - infra repo
+    - other?
+- [x] set up basic cron tasks 
+- [x] set up initial logging scripts for resource management
+- [x] set up initial audit scripts
+- [ ] add a database to store logs
+- [x] remove GPU audit
+- [x] make gpu logging more concise
+- [x] clean up output from docker audit
+- [x] pull the CPU & GPU & Memory audit stuff about processes & usage into an an improved GPU & CPU & Memory logger (which is then turned into a daily report by the log_analysis_.sh script)
+    - idea would be that logger is dynamic stuff, audit tells you general state of the system (a bit more static)
+- [ ] log containers being spun up / down, 
+    - incl resource allocation 
+    - user ID
+    - name
+    - etc
+
+# SLURM
+
+# Git
+- [x] add all logs to .gitignore
+- [x] setup repo on DSL 
+- [ ] restablish the git repo to be the root folder
+    - but exlcuidng including all users etc
+    - incl all the config files in /etc/ and others
+
+# Containers
+- [ ] write documentation
+- [x] Set up `docker image prune` automation"
+
+# privacy
+- [x] change so users can't see eachothers directories
+
+# logging
+- [ ] set up workflow somewhere that monitors which containers have been allocated which GPUs currently 
+
+
+# Done
+- [x] set up git repo
+- [x] set system groups and encrpytd group passwords immutable & protected
+- [x] set up audit script
+- [x] set up logging script
+- [x] set up initial crontab
