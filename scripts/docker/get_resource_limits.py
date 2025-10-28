@@ -12,10 +12,23 @@ from pathlib import Path
 class ResourceLimitParser:
     def __init__(self, config_path=None):
         if config_path is None:
-            # Default location
-            config_path = Path(__file__).parent.parent / "config" / "resource-limits.yaml"
+            # Try multiple default locations
+            script_dir = Path(__file__).resolve().parent
+            possible_paths = [
+                script_dir.parent.parent / "config" / "resource-limits.yaml",  # /opt/ds01-infra/config/
+                Path("/opt/ds01-infra/config/resource-limits.yaml"),  # Absolute path
+                script_dir / "../../config/resource-limits.yaml",  # Relative
+            ]
+            
+            for path in possible_paths:
+                if path.exists():
+                    config_path = path
+                    break
+            else:
+                # If none found, use first option and let error handle it
+                config_path = possible_paths[0]
         
-        self.config_path = Path(config_path)
+        self.config_path = Path(config_path).resolve()
         self.config = self._load_config()
     
     def _load_config(self):
@@ -28,14 +41,19 @@ class ResourceLimitParser:
     
     def get_user_limits(self, username):
         """Get resource limits for a specific user"""
+        if not self.config:
+            raise ValueError("Configuration is empty or invalid")
+        
         # Check for user-specific override first
-        if username in self.config.get('user_overrides', {}):
+        user_overrides = self.config.get('user_overrides') or {}
+        if username in user_overrides:
             base_limits = self.config['defaults'].copy()
-            base_limits.update(self.config['user_overrides'][username])
+            base_limits.update(user_overrides[username])
             return base_limits
         
         # Check which group the user belongs to
-        for group_name, group_config in self.config.get('groups', {}).items():
+        groups = self.config.get('groups') or {}
+        for group_name, group_config in groups.items():
             if username in group_config.get('members', []):
                 base_limits = self.config['defaults'].copy()
                 # Update with group settings (exclude 'members' key)
