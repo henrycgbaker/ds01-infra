@@ -43,6 +43,7 @@
 
 ### Shared directories
 - [ ] once /readonly & /collaborative sorted: set up shared datasets & models
+- [ ] move collaborative/ & read_only/ into data/ into srv (see server access & security chat) (and make sure scratch is auto-purged still)
 
 ### Documentation
 - [ ] make available both within root folder, and on git
@@ -74,26 +75,26 @@
     - user ID
     - name
     - etc
+- [ ] set up workflow somewhere that monitors which containers have been allocated which GPUs currently 
+- [ ] once have worked out how users are added / recorded -> update the system audit that tracks users 
+    - [ ] + add a tracking of users logging in 
+    - [ ] + add tracking of which users are doing which PIDs etc
 
 # SLURM
 
 # Git
 - [x] add all logs to .gitignore
 - [x] setup repo on DSL 
-- [ ] restablish the git repo to be the root folder
+- [x] restablish the git repo to be the root folder
     - but exlcuidng including all users etc
     - incl all the config files in /etc/ and others
 
 # Containers
 - [ ] write documentation
-- [x] Set up `docker image prune` automation"
+- [ ] Set up `docker image prune` automation"
 
 # privacy
 - [x] change so users can't see eachothers directories
-
-# logging
-- [ ] set up workflow somewhere that monitors which containers have been allocated which GPUs currently 
-
 
 # Done
 - [x] set up git repo
