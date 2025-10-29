@@ -1,6 +1,6 @@
+# File: /opt/ds01-infra/scripts/docker/mlc-create-from-image.sh
 #!/bin/bash
-# Create container from custom Docker image
-# Usage: mlc-create-from-image <container-name> <image-name>
+# Create container from custom image with user namespace support
 
 set -e
 
@@ -27,11 +27,11 @@ ${GREEN}Create Container from Custom Image${NC}
 Usage: mlc-create-from-image <container-name> <image-name> [workspace-dir]
 
 Examples:
-  mlc-create-from-image thesis-run1 my-pytorch-image
-  mlc-create-from-image experiment1 my-pytorch-image ~/projects/thesis
+  mlc-create-from-image thesis-run1 john-pytorch ~/workspace/thesis
+  mlc-create-from-image experiment1 jane-cv-image
 
 Your images:
-$(docker images --format "  - {{.Repository}}" | grep "^  - $(whoami)-")
+$(docker images --format "  - {{.Repository}}:{{.Tag}}" | grep "$(whoami)-" || echo "  (none found)")
 
 EOF
     exit 1
@@ -45,8 +45,12 @@ CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
 # Verify image exists
 if ! docker image inspect "$IMAGE_NAME" &>/dev/null; then
     log_error "Image '$IMAGE_NAME' not found"
+    echo ""
     echo "Available images:"
-    docker images --format "  - {{.Repository}}:{{.Tag}}" | grep "$USERNAME-"
+    docker images --format "  - {{.Repository}}:{{.Tag}}" | grep "$USERNAME-" || echo "  (none found)"
+    echo ""
+    echo "Create an image first with:"
+    echo "  ds01-setup-wizard"
     exit 1
 fi
 
@@ -63,11 +67,13 @@ mkdir -p "$WORKSPACE_DIR"
 
 log_info "Creating container '$CONTAINER_NAME' from image '$IMAGE_NAME'"
 log_info "Workspace: $WORKSPACE_DIR"
+log_info "User namespace: $USER_ID:$GROUP_ID"
 
-# Get resource limits (reuse from mlc-create-wrapper)
+# Get resource limits
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-RESOURCE_PARSER="$SCRIPT_DIR/get_resource_limits.py"
-CONFIG_FILE="$SCRIPT_DIR/../../config/resource-limits.yaml"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
+CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 
 if [ -f "$RESOURCE_PARSER" ] && [ -f "$CONFIG_FILE" ]; then
     RESOURCE_LIMITS=$(python3 "$RESOURCE_PARSER" "$USERNAME" --docker-args 2>/dev/null)
@@ -87,14 +93,16 @@ for arg in $RESOURCE_LIMITS; do
     DOCKER_LIMITS="$DOCKER_LIMITS $arg"
 done
 
-# Create container
-log_info "Creating container..."
+# Create container with user namespace mapping
+log_info "Creating container with user namespace..."
 
 docker run -dit \
     --name "$CONTAINER_TAG" \
     --hostname "$CONTAINER_NAME" \
     --user "$USER_ID:$GROUP_ID" \
+    --userns=host \
     -v "$WORKSPACE_DIR:/workspace" \
+    -v "$HOME/.cache:/root/.cache" \
     -w /workspace \
     --gpus all \
     $DOCKER_LIMITS \
@@ -102,26 +110,36 @@ docker run -dit \
     --ipc host \
     --restart unless-stopped \
     --label "ds01.user=$USERNAME" \
+    --label "ds01.user_id=$USER_ID" \
     --label "ds01.container=$CONTAINER_NAME" \
     --label "ds01.image=$IMAGE_NAME" \
     --label "ds01.created=$(date -Iseconds)" \
+    --label "ds01.type=custom" \
     "$IMAGE_NAME" \
     bash
 
 if [ $? -eq 0 ]; then
+    # Stop container initially (user opens with mlc-open)
     docker stop "$CONTAINER_TAG" &>/dev/null
     
-    log_success "Container '$CONTAINER_NAME' created from image '$IMAGE_NAME'"
+    log_success "Container '$CONTAINER_NAME' created!"
+    echo ""
+    log_info "Container details:"
+    echo "  - Name: $CONTAINER_NAME"
+    echo "  - Full: $CONTAINER_TAG"
+    echo "  - Image: $IMAGE_NAME"
+    echo "  - User: $USERNAME ($USER_ID:$GROUP_ID)"
+    echo "  - Workspace: $WORKSPACE_DIR → /workspace"
     echo ""
     log_info "Next steps:"
-    echo "  1. Open: ${GREEN}mlc-open $CONTAINER_NAME${NC}"
-    echo "  2. Code in /workspace"
-    echo "  3. When done: ${GREEN}mlc-stop $CONTAINER_NAME${NC}"
+    echo "  ${GREEN}mlc-open $CONTAINER_NAME${NC}    # Open container"
+    echo "  ${GREEN}cd /workspace${NC}                # Your project files"
+    echo "  ${GREEN}mlc-stop $CONTAINER_NAME${NC}    # Stop when done"
     echo ""
     log_info "Container lifecycle:"
-    echo "  - Container is disposable (can be killed anytime)"
-    echo "  - Work saved in /workspace persists"
-    echo "  - Recreate from same image: mlc-create-from-image new-name $IMAGE_NAME"
+    echo "  - Container is ephemeral (can be deleted/recreated)"
+    echo "  - Work in /workspace persists"
+    echo "  - Recreate anytime: mlc-create-from-image $CONTAINER_NAME $IMAGE_NAME"
     echo ""
 else
     log_error "Failed to create container"

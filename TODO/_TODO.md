@@ -101,6 +101,11 @@
         {
         "userns-remap": "default"
         }
+- [ ] implement the container dashboard: 
+    # File: /usr/local/bin/ds01-dashboard
+    #!/bin/bash
+    # Symlink to container dashboard
+    #exec /opt/ds01-infra/scripts/monitoring/container-dashboard.sh "$@"
 - [ ] documentation
 
 
