@@ -95,18 +95,29 @@
     -  prints instructions to `exit` + explains what it means for it to be open + when to use `mlc-stop my-container` (when crashed)
     - also workflow to keep container runnint while training, and how to reaccess it later
 - [ ] Set up `docker image prune` automation"
-- [ ]Containers should run with user namespaces:
+- [x]Containers should run with user namespaces:
         Add to /etc/docker/daemon.json:
         json
         {
         "userns-remap": "default"
         }
-- [ ] implement the container dashboard: 
-    # File: /usr/local/bin/ds01-dashboard
-    #!/bin/bash
-    # Symlink to container dashboard
-    #exec /opt/ds01-infra/scripts/monitoring/container-dashboard.sh "$@"
 - [ ] documentation
+- [ ] ds01-dashboard doesn't recognise containers
+- [ ] when ready, set up the cgroups resource allocation & accounting (see scripts/system/setup-cgroups-slices)
+
+- SETUP WIZRD
+    - [ ] the colour formatting (the blue is too dark + also some of the colour formatting doesn't seem to apply)
+    - for the container name, does it make sense to have the username before? surely easier just to call it the image/project name?
+    - currently mlc-create --show-limits => again it makes more sense to have naming convention more intuitive
+    - mlc-stats not working
+    - can i block them from baremetal?
+    - check it is correctly allocating resource limits
+    - improve the mlc-open output text to be more useful
+    - exit currently auto closes the container (make it so it can run?) exit > [datasciencelab-test-4] detached from container, container keeps running > [datasciencelab-test-4] container is inactive, stopping container ... same even if do touch /workspace/.keep-alive.. currently there's no way to run containers after exit
+    - ds01-git-init doesn't work
+    - when robust -> enforce container usage
+
+- [ ] rename some of the instructions e.g. rather than ds01-setup it is setup-wizard 
 
 
 # privacy

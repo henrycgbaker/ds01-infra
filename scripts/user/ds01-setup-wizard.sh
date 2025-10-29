@@ -365,7 +365,7 @@ if [ -n "$CONTAINER_NAME" ] && [ -n "$IMAGE_NAME" ]; then
         echo -e "\n${BLUE}Creating container with user namespace mapping...${NC}"
         
         # Use the mlc-create-from-image script
-        bash /opt/ds01-infra/scripts/mlc-create-from-image.sh "$CONTAINER_NAME" "$IMAGE_NAME" "$PROJECT_DIR"
+        bash /opt/ds01-infra/scripts/docker/mlc-create-from-image.sh "$CONTAINER_NAME" "$IMAGE_NAME" "$PROJECT_DIR"
         
         if [ $? -eq 0 ]; then
             CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
@@ -384,7 +384,20 @@ if [ -n "$CONTAINER_NAME" ] && [ -n "$IMAGE_NAME" ]; then
     fi
 fi
 
-# Step 6: VS Code Setup Guide
+
+# Step 6: Git Setup
+if [ -d "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/.git" ]; then
+    echo -e "\n${CYAN}━━━ Step 6: Git Integration ━━━${NC}\n"
+    
+    read -p "Initialize Git for this project? [Y/n]: " INIT_GIT
+    INIT_GIT=${INIT_GIT:-Y}
+    
+    if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
+        bash /opt/ds01-infra/scripts/user/git-setup-project.sh "$PROJECT_DIR"
+    fi
+fi
+
+# Step 7: VS Code Setup Guide
 echo -e "\n${CYAN}━━━ Step 6: VS Code Connection ━━━${NC}\n"
 
 SERVER_IP=$(hostname -I | awk '{print $1}')
