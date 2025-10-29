@@ -29,7 +29,7 @@ groups:
     idle_timeout: 168h  # 1 week
     
   admins:
-    members: []  
+    members: [datasciencelab]  
     gpus: all    
     cpus: 64
     memory: 128g
