@@ -90,6 +90,10 @@
 
 # Containers
 - [ ] get it set up so it's launchable from VS Code rather than jupyter
+- [ ] create a wrapper for mlc-open that prints explanation
+    - explains you're now in /workspace
+    -  prints instructions to `exit` + explains what it means for it to be open + when to use `mlc-stop my-container` (when crashed)
+    - also workflow to keep container runnint while training, and how to reaccess it later
 - [ ] Set up `docker image prune` automation"
 - [ ]Containers should run with user namespaces:
         Add to /etc/docker/daemon.json:
