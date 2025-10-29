@@ -100,21 +100,44 @@ docker run -dit \
     --name "$CONTAINER_TAG" \
     --hostname "$CONTAINER_NAME" \
     --user "$USER_ID:$GROUP_ID" \
-    --userns=host \
     -v "$WORKSPACE_DIR:/workspace" \
-    -v "$HOME/.cache:/root/.cache" \
+    -v "$HOME/.cache:/home/$USERNAME/.cache" \
     -w /workspace \
     --gpus all \
     $DOCKER_LIMITS \
     --network host \
     --ipc host \
     --restart unless-stopped \
+    \
+    # ===== IDENTIFICATION LABELS ===== \
     --label "ds01.user=$USERNAME" \
     --label "ds01.user_id=$USER_ID" \
+    --label "ds01.group_id=$GROUP_ID" \
     --label "ds01.container=$CONTAINER_NAME" \
     --label "ds01.image=$IMAGE_NAME" \
     --label "ds01.created=$(date -Iseconds)" \
     --label "ds01.type=custom" \
+    --label "ds01.project=$PROJECT_NAME" \
+    --label "ds01.workspace=$WORKSPACE_DIR" \
+    \
+    # ===== SECURITY & ISOLATION ===== \
+    --security-opt=no-new-privileges:true \
+    --cap-drop=ALL \
+    --cap-add=SYS_PTRACE \
+    --cap-add=NET_BIND_SERVICE \
+    \
+    # ===== PROCESS MANAGEMENT ===== \
+    --pids-limit=4096 \
+    \
+    # ===== CGROUP HIERARCHY ===== \
+    --cgroup-parent="ds01.slice/user-${USER_ID}.slice" \
+    \
+    # ===== ENVIRONMENT ===== \
+    -e "DS01_CONTAINER=1" \
+    -e "DS01_USER=$USERNAME" \
+    -e "DS01_USER_ID=$USER_ID" \
+    -e "HOME=/workspace" \
+    \
     "$IMAGE_NAME" \
     bash
 
