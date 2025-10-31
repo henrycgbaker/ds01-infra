@@ -1,0 +1,1 @@
+/var/log/ds01-infra/reports/daily/_latest.md

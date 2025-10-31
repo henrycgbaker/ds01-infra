@@ -1,0 +1,207 @@
+#!/bin/bash
+# /opt/ds01-infra/scripts/user/ds01-run
+# Wrapper for launching containers with proper resource limits
+
+set -euo pipefail
+
+CONFIG_FILE="/opt/ds01-infra/config/resource-limits.yaml"
+CURRENT_USER=$(whoami)
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+usage() {
+    cat << EOF
+Usage: ds01-run [OPTIONS] IMAGE [COMMAND]
+
+Launch a Docker container with DS01 resource limits applied automatically.
+
+Options:
+  -g, --gpu GPU_ID      Specify GPU ID (default: auto-assign)
+  -n, --name NAME       Container name (default: auto-generated)
+  -v, --volume SRC:DST  Mount volume (can be used multiple times)
+  -p, --port HOST:CONT  Publish port (can be used multiple times)
+  --cpu N               Override CPU limit
+  --memory SIZE         Override memory limit
+  -h, --help            Show this help
+
+Examples:
+  ds01-run pytorch/pytorch:latest
+  ds01-run -g 0 -n my-training tensorflow/tensorflow:latest-gpu
+  ds01-run -v /data:/data -p 8888:8888 jupyter/tensorflow-notebook
+
+EOF
+    exit 0
+}
+
+# Check for yq
+if ! command -v yq &> /dev/null; then
+    echo -e "${RED}Error: yq not found. Run setup-resource-slices.sh first${NC}"
+    exit 1
+fi
+
+# Parse arguments
+GPU_ID=""
+CONTAINER_NAME=""
+VOLUMES=()
+PORTS=()
+CPU_OVERRIDE=""
+MEMORY_OVERRIDE=""
+DOCKER_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -g|--gpu)
+            GPU_ID="$2"
+            shift 2
+            ;;
+        -n|--name)
+            CONTAINER_NAME="$2"
+            shift 2
+            ;;
+        -v|--volume)
+            VOLUMES+=("$2")
+            shift 2
+            ;;
+        -p|--port)
+            PORTS+=("$2")
+            shift 2
+            ;;
+        --cpu)
+            CPU_OVERRIDE="$2"
+            shift 2
+            ;;
+        --memory)
+            MEMORY_OVERRIDE="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            # Remaining args are for docker
+            DOCKER_ARGS+=("$@")
+            break
+            ;;
+    esac
+done
+
+if [ ${#DOCKER_ARGS[@]} -eq 0 ]; then
+    echo -e "${RED}Error: No image specified${NC}"
+    usage
+fi
+
+IMAGE="${DOCKER_ARGS[0]}"
+COMMAND="${DOCKER_ARGS[@]:1}"
+
+# Get user's group from YAML
+
+# Check user_overrides first
+USER_CONFIG=$(yq eval ".user_overrides.\"$CURRENT_USER\"" "$CONFIG_FILE")
+
+if [ "$USER_CONFIG" != "null" ]; then
+    echo -e "${GREEN}Using user-specific overrides${NC}"
+    MAX_GPUS=$(yq eval ".user_overrides.\"$CURRENT_USER\".gpus // .defaults.gpus" "$CONFIG_FILE")
+    MAX_CPUS=$(yq eval ".user_overrides.\"$CURRENT_USER\".cpus // .defaults.cpus" "$CONFIG_FILE")
+    MAX_MEMORY=$(yq eval ".user_overrides.\"$CURRENT_USER\".memory // .defaults.memory" "$CONFIG_FILE")
+    SHM_SIZE=$(yq eval ".user_overrides.\"$CURRENT_USER\".shm_size // .defaults.shm_size" "$CONFIG_FILE")
+    USER_GROUP="override"
+else
+    # Find user's group by checking members arrays
+    USER_GROUP=$(yq eval ".groups | to_entries | .[] | select(.value.members | contains([\"$CURRENT_USER\"])) | .key" "$CONFIG_FILE")
+    
+    if [ -z "$USER_GROUP" ]; then
+        USER_GROUP=$(yq eval ".default_group" "$CONFIG_FILE")
+        echo -e "${YELLOW}User not in any group, using default: ${USER_GROUP}${NC}"
+    fi
+    
+    # Get group limits with fallback to defaults
+    MAX_GPUS=$(yq eval ".groups.$USER_GROUP.gpus // .defaults.gpus" "$CONFIG_FILE")
+    MAX_CPUS=$(yq eval ".groups.$USER_GROUP.cpus // .defaults.cpus" "$CONFIG_FILE")
+    MAX_MEMORY=$(yq eval ".groups.$USER_GROUP.memory // .defaults.memory" "$CONFIG_FILE")
+    SHM_SIZE=$(yq eval ".groups.$USER_GROUP.shm_size // .defaults.shm_size" "$CONFIG_FILE")
+fi
+
+# Handle "all" for admin GPUs
+if [ "$MAX_GPUS" = "all" ]; then
+    MAX_GPUS=999  # Effectively unlimited
+fi
+
+# Apply overrides if specified
+if [ -n "$CPU_OVERRIDE" ]; then
+    if [ "$CPU_OVERRIDE" -gt "$MAX_CPUS" ]; then
+        echo -e "${RED}Error: Requested CPUs ($CPU_OVERRIDE) exceeds group limit ($MAX_CPUS)${NC}"
+        exit 1
+    fi
+    MAX_CPUS=$CPU_OVERRIDE
+fi
+
+if [ -n "$MEMORY_OVERRIDE" ]; then
+    MAX_MEMORY=$MEMORY_OVERRIDE
+fi
+
+# Auto-assign GPU if not specified
+if [ -z "$GPU_ID" ]; then
+    if [ "$MAX_GPUS" -gt 0 ]; then
+        # Find least-used GPU
+        GPU_ID=$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | sort -t',' -k2 -n | head -1 | cut -d',' -f1)
+        echo -e "${GREEN}Auto-assigned GPU: ${GPU_ID}${NC}"
+    fi
+fi
+
+# Generate container name if not specified
+if [ -z "$CONTAINER_NAME" ]; then
+    CONTAINER_NAME="${CURRENT_USER}-$(date +%Y%m%d-%H%M%S)"
+fi
+
+# Build docker run command
+DOCKER_CMD=(
+    docker run
+    --rm
+    -it
+    --name "$CONTAINER_NAME"
+    --cgroup-parent="ds01-${USER_GROUP}.slice"
+    --cpus="$MAX_CPUS"
+    --memory="$MAX_MEMORY"
+    --shm-size="$SHM_SIZE"
+)
+
+# Add GPU if allowed
+if [ "$MAX_GPUS" -gt 0 ] && [ -n "$GPU_ID" ]; then
+    DOCKER_CMD+=(--gpus "\"device=${GPU_ID}\"")
+fi
+
+# Add volumes
+for vol in "${VOLUMES[@]}"; do
+    DOCKER_CMD+=(-v "$vol")
+done
+
+# Add ports
+for port in "${PORTS[@]}"; do
+    DOCKER_CMD+=(-p "$port")
+done
+
+# Add image and command
+DOCKER_CMD+=("$IMAGE")
+if [ -n "$COMMAND" ]; then
+    DOCKER_CMD+=($COMMAND)
+fi
+
+# Show summary
+echo ""
+echo -e "${GREEN}=== DS01 Container Launch ===${NC}"
+echo -e "User:       ${CURRENT_USER}"
+echo -e "Group:      ${USER_GROUP}"
+echo -e "Container:  ${CONTAINER_NAME}"
+echo -e "CPUs:       ${MAX_CPUS}"
+echo -e "Memory:     ${MAX_MEMORY}"
+echo -e "Shared Mem: ${SHM_SIZE}"
+echo -e "GPUs:       ${GPU_ID:-none}"
+echo -e "Slice:      ds01-${USER_GROUP}.slice"
+echo ""
+
+# Execute
+exec "${DOCKER_CMD[@]}"
