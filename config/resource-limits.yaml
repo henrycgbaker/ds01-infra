@@ -13,22 +13,38 @@ defaults:
   shm_size: 16g        # Shared memory (important for PyTorch DataLoader)
   pids_limit: 4096     # Max processes (prevents fork bombs)
   idle_timeout: 48h    # Auto-stop after X hours of inactivity
+  max_tasks: 512 
+
+default_group: student
 
 # User group definitions
+
 groups:
-  students:
+  student:
     members: []  # TO DO need to autopopulate from LDAP group 'ds01-students'
+    # CPU/RAM limits (enforced by cgroups)
+    cpus: 16
+    memory: 32g
+    max_tasks: 512
     
-  researchers:
-    members: []  
-    gpus: 2      
+    # GPU policy (enforced by wrapper)
+    max_gpus_per_user: 1        # can't hog multiple GPUs
+    max_concurrent_containers: 2 # can have CPU-only + GPU container
+    gpu_time_limit: 48h         # auto-stop after 48h
+    gpu_idle_threshold: 10      # stop if <10% util for 2h
+    
+  researcher:
+    members: [] 
     cpus: 32
     memory: 64g
-    memory_swap: 64g
-    shm_size: 32g
-    idle_timeout: 168h  # 1 week
+    max_tasks: 2048
+    max_gpus_per_user: 2
+    max_concurrent_containers: 4
+    gpu_time_limit: 168h
+    gpu_idle_threshold: 5
     
-  admins:
+  admin:
+    members: [] 
     members: [datasciencelab]  
     gpus: all    
     cpus: 64
@@ -36,6 +52,7 @@ groups:
     memory_swap: 128g
     shm_size: 64g
     idle_timeout: null  # No timeout
+    max_tasks: null
 
 # Per-user overrides (takes precedence over group settings)
 user_overrides:

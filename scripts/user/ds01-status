@@ -1,0 +1,26 @@
+#!/bin/bash
+# /opt/ds01-infra/scripts/user/ds01-status
+# Show DS01 resource usage
+
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+echo -e "${GREEN}=== DS01 Resource Usage ===${NC}"
+echo ""
+
+# Show slice hierarchy
+echo "Systemd Slice Hierarchy:"
+systemctl status ds01.slice --no-pager | head -20
+
+echo ""
+echo "Group Resource Usage:"
+systemd-cgtop -n 1 --depth=2 | grep ds01
+
+echo ""
+echo "GPU Usage:"
+nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total --format=table
+
+echo ""
+echo "Running Containers:"
+docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
