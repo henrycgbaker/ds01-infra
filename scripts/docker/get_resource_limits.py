@@ -15,9 +15,9 @@ class ResourceLimitParser:
             # Try multiple default locations
             script_dir = Path(__file__).resolve().parent
             possible_paths = [
-                script_dir.parent.parent / "config" / "resource-limits.yaml",  # /opt/ds01-infra/config/
-                Path("/opt/ds01-infra/config/resource-limits.yaml"),  # Absolute path
-                script_dir / "../../config/resource-limits.yaml",  # Relative
+                script_dir.parent.parent / "config" / "resource-limits.yaml",
+                Path("/opt/ds01-infra/config/resource-limits.yaml"),
+                script_dir / "../../config/resource-limits.yaml",
             ]
             
             for path in possible_paths:
@@ -25,7 +25,6 @@ class ResourceLimitParser:
                     config_path = path
                     break
             else:
-                # If none found, use first option and let error handle it
                 config_path = possible_paths[0]
         
         self.config_path = Path(config_path).resolve()
@@ -39,30 +38,54 @@ class ResourceLimitParser:
         with open(self.config_path) as f:
             return yaml.safe_load(f)
     
+    def get_user_group(self, username):
+        """Get the group name for a user"""
+        user_overrides = self.config.get('user_overrides') or {}
+        if username in user_overrides:
+            return 'override'
+        
+        groups = self.config.get('groups') or {}
+        for group_name, group_config in groups.items():
+            if username in group_config.get('members', []):
+                return group_name
+        
+        return self.config.get('default_group', 'student')
+    
     def get_user_limits(self, username):
         """Get resource limits for a specific user"""
         if not self.config:
             raise ValueError("Configuration is empty or invalid")
         
+        defaults = self.config.get('defaults', {})
+        
         # Check for user-specific override first
         user_overrides = self.config.get('user_overrides') or {}
         if username in user_overrides:
-            base_limits = self.config['defaults'].copy()
+            base_limits = defaults.copy()
             base_limits.update(user_overrides[username])
+            base_limits['_group'] = 'override'
             return base_limits
         
         # Check which group the user belongs to
         groups = self.config.get('groups') or {}
         for group_name, group_config in groups.items():
             if username in group_config.get('members', []):
-                base_limits = self.config['defaults'].copy()
-                # Update with group settings (exclude 'members' key)
+                base_limits = defaults.copy()
                 group_limits = {k: v for k, v in group_config.items() if k != 'members'}
                 base_limits.update(group_limits)
+                base_limits['_group'] = group_name
                 return base_limits
         
         # Default limits if user not in any group
-        return self.config['defaults'].copy()
+        default_group = self.config.get('default_group', 'student')
+        group_config = groups.get(default_group, {})
+        
+        base_limits = defaults.copy()
+        group_limits = {k: v for k, v in group_config.items() if k != 'members'}
+        base_limits.update(group_limits)
+        base_limits['_group'] = default_group
+        
+        return base_limits
     
     def get_docker_args(self, username):
         """Generate Docker run arguments for resource limits"""
@@ -70,37 +93,57 @@ class ResourceLimitParser:
         
         args = []
         
-        # GPU settings
-        if limits['gpus'] == 'all':
-            args.append('--gpus=all')
-        else:
-            # Will be set by GPU allocation system
-            args.append(f'--gpus={limits["gpus"]}')
-        
         # CPU limits
         args.append(f'--cpus={limits["cpus"]}')
         
         # Memory limits
         args.append(f'--memory={limits["memory"]}')
-        args.append(f'--memory-swap={limits["memory_swap"]}')
+        args.append(f'--memory-swap={limits.get("memory_swap", limits["memory"])}')
         args.append(f'--shm-size={limits["shm_size"]}')
         
         # Process limits
         args.append(f'--pids-limit={limits["pids_limit"]}')
+        
+        # Storage limits (for tmpfs inside container)
+        if "storage_tmp" in limits:
+            args.append(f'--tmpfs=/tmp:size={limits["storage_tmp"]}')
+        
+        # Cgroup parent (for systemd slices)
+        group = limits.get('_group', 'student')
+        args.append(f'--cgroup-parent=ds01-{group}.slice')
         
         return args
     
     def format_for_display(self, username):
         """Format limits for human-readable display"""
         limits = self.get_user_limits(username)
+        group = limits.get('_group', 'unknown')
         
-        output = f"\nResource limits for user '{username}':\n"
-        output += f"  GPUs:        {limits['gpus']}\n"
-        output += f"  CPU cores:   {limits['cpus']}\n"
-        output += f"  RAM:         {limits['memory']}\n"
-        output += f"  Shared mem:  {limits['shm_size']}\n"
-        output += f"  Max PIDs:    {limits['pids_limit']}\n"
-        output += f"  Idle timeout: {limits['idle_timeout']}\n"
+        max_gpus = limits.get('max_gpus_per_user', 1)
+        if max_gpus is None:
+            max_gpus_str = "unlimited"
+        else:
+            max_gpus_str = str(max_gpus)
+        
+        output = f"\nResource limits for user '{username}' (group: {group}):\n"
+        output += f"\n  GPU Limits:\n"
+        output += f"    Max GPUs (simultaneous):  {max_gpus_str}\n"
+        output += f"    Priority level:           {limits.get('priority', 10)}\n"
+        output += f"    Max containers:           {limits.get('max_containers_per_user', 3)}\n"
+        output += f"\n  Compute (per container):\n"
+        output += f"    CPU cores:                {limits['cpus']}\n"
+        output += f"    RAM:                      {limits['memory']}\n"
+        output += f"    Shared memory:            {limits['shm_size']}\n"
+        output += f"    Max processes:            {limits['pids_limit']}\n"
+        output += f"\n  Storage:\n"
+        output += f"    Workspace (/workspace):   {limits.get('storage_workspace', 'N/A')}\n"
+        output += f"    Data (/data):             {limits.get('storage_data', 'N/A')}\n"
+        output += f"    Tmp (/tmp in container):  {limits.get('storage_tmp', 'N/A')}\n"
+        output += f"\n  Lifecycle:\n"
+        output += f"    Idle timeout:             {limits.get('idle_timeout', 'N/A')}\n"
+        output += f"    Max runtime:              {limits.get('max_runtime', 'unlimited')}\n"
+        output += f"\n  Enforcement:\n"
+        output += f"    Systemd slice:            ds01-{group}.slice\n"
         
         return output
 
@@ -108,18 +151,25 @@ class ResourceLimitParser:
 def main():
     """CLI interface for testing"""
     if len(sys.argv) < 2:
-        print("Usage: get_resource_limits.py <username> [--docker-args]")
+        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--priority]")
         sys.exit(1)
     
     username = sys.argv[1]
     parser = ResourceLimitParser()
     
     if '--docker-args' in sys.argv:
-        # Output Docker arguments (for use in scripts)
         args = parser.get_docker_args(username)
         print(' '.join(args))
+    elif '--group' in sys.argv:
+        print(parser.get_user_group(username))
+    elif '--max-gpus' in sys.argv:
+        limits = parser.get_user_limits(username)
+        max_gpus = limits.get('max_gpus_per_user', 1)
+        print(max_gpus if max_gpus is not None else "unlimited")
+    elif '--priority' in sys.argv:
+        limits = parser.get_user_limits(username)
+        print(limits.get('priority', 10))
     else:
-        # Human-readable output
         print(parser.format_for_display(username))
 
 

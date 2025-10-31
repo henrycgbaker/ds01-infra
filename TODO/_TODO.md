@@ -135,6 +135,10 @@
 - [ ] currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
     - [ ] or at the very least get ds01-setup wizard to call ds01-run
 
+    ### Files Needing Updates:
+- [ ] `scripts/docker/mlc-create-wrapper.sh` - Integrate GPU allocator + priority + graceful errors
+- [ ] `scripts/system/setup-resource-slices.sh` - Update for new YAML structure
+
 # Partitioning & GPU allocation
 - [ ] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
 - [ ] Set up MIG vs MPS?
@@ -153,6 +157,10 @@
 
 - [ ] not sure if i optimally set up cgroups correctly -> maybe within user-group slice, each user should then get their own slice -> can see how much each user is using (in logs / reports)? It would be useful to see who is doing what....
     - [ ] make sure cgroups & user groups are integrated together / consistent
+
+
+# cgroups
+- [ ] I don't think this is set up properly: `systemctl status ds01.slice` shows it being inactive
 
 # clean up
 - [ ] once identified currnet users -> send message out via dsl for saving important work -> begin deleting.
