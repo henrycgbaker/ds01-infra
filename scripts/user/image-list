@@ -1,0 +1,167 @@
+#!/bin/bash
+# List Docker images for DS01 user
+
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+
+usage() {
+    cat << EOF
+${BOLD}Docker Image List${NC}
+
+${CYAN}Usage:${NC}
+  image-list [options]
+
+${CYAN}Options:${NC}
+  -a, --all       Show all images (not just yours)
+  -s, --size      Show image sizes
+  -d, --detailed  Show detailed information
+  -h, --help      Show this help message
+
+${CYAN}Examples:${NC}
+  image-list              # List your images
+  image-list --all        # List all images on server
+  image-list --detailed   # Show detailed info with Dockerfile locations
+
+EOF
+}
+
+show_detailed() {
+    local filter="$1"
+
+    echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}\n"
+
+    local images
+    if [ "$filter" = "all" ]; then
+        images=$(docker images --format "{{.Repository}}" | grep -v "^<none>$" || true)
+    else
+        images=$(docker images --format "{{.Repository}}" | grep "^${USERNAME}-" || true)
+    fi
+
+    if [ -z "$images" ]; then
+        echo -e "${YELLOW}No images found${NC}"
+        echo ""
+        echo "Create your first image with: ${GREEN}image-create my-project${NC}"
+        exit 0
+    fi
+
+    local count=0
+    while IFS= read -r image_name; do
+        [ -z "$image_name" ] && continue
+        count=$((count + 1))
+
+        local size=$(docker images --format "{{.Size}}" "$image_name" | head -1)
+        local created=$(docker images --format "{{.CreatedAt}}" "$image_name" | head -1)
+        local image_id=$(docker images --format "{{.ID}}" "$image_name" | head -1)
+
+        echo -e "${BOLD}$count. ${CYAN}$image_name${NC}"
+        echo "   Size:    $size"
+        echo "   Created: $created"
+        echo "   ID:      $image_id"
+
+        # Check for metadata
+        local info_file="$HOME/ds01-config/images/${image_name}.info"
+        if [ -f "$info_file" ]; then
+            local framework=$(grep "^Framework:" "$info_file" | cut -d: -f2- | xargs)
+            local usecase=$(grep "^Use Case:" "$info_file" | cut -d: -f2- | xargs)
+            local dockerfile=$(grep "^Dockerfile:" "$info_file" | cut -d: -f2- | xargs)
+
+            [ -n "$framework" ] && echo "   Framework: $framework"
+            [ -n "$usecase" ] && echo "   Use case: $usecase"
+            [ -n "$dockerfile" ] && [ -f "$dockerfile" ] && echo -e "   Dockerfile: ${BLUE}$dockerfile${NC}"
+        fi
+
+        # Check for containers using this image
+        local containers=$(docker ps -a --filter "ancestor=$image_name" --format "{{.Names}}" | wc -l)
+        if [ "$containers" -gt 0 ]; then
+            echo -e "   Containers: ${GREEN}$containers${NC}"
+        fi
+
+        echo ""
+    done <<< "$images"
+
+    echo -e "${BOLD}Total:${NC} $count image(s)"
+}
+
+show_simple() {
+    local filter="$1"
+    local show_size="$2"
+
+    if [ "$filter" = "all" ]; then
+        if [ "$show_size" = "true" ]; then
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}"
+        else
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}"
+        fi
+    else
+        echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}\n"
+
+        if [ "$show_size" = "true" ]; then
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" \
+                --filter "reference=${USERNAME}-*"
+        else
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" \
+                --filter "reference=${USERNAME}-*"
+        fi
+
+        local count=$(docker images --format "{{.Repository}}" --filter "reference=${USERNAME}-*" | wc -l)
+
+        echo ""
+        if [ "$count" -eq 0 ]; then
+            echo -e "${YELLOW}No images found${NC}"
+            echo ""
+            echo "Create your first image with: ${GREEN}image-create my-project${NC}"
+        else
+            echo -e "${BOLD}Total:${NC} $count image(s)"
+            echo ""
+            echo -e "${YELLOW}💡 Tips:${NC}"
+            echo "  • Create container: ${GREEN}container-create <image-name>${NC}"
+            echo "  • Update image: ${GREEN}image-update <image-name>${NC}"
+            echo "  • Delete image: ${GREEN}image-delete <image-name>${NC}"
+            echo "  • Detailed view: ${GREEN}image-list --detailed${NC}"
+        fi
+    fi
+}
+
+# Parse arguments
+FILTER="user"
+SHOW_SIZE=false
+DETAILED=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -a|--all)
+            FILTER="all"
+            shift
+            ;;
+        -s|--size)
+            SHOW_SIZE=true
+            shift
+            ;;
+        -d|--detailed)
+            DETAILED=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Show images
+if [ "$DETAILED" = true ]; then
+    show_detailed "$FILTER"
+else
+    show_simple "$FILTER" "$SHOW_SIZE"
+fi

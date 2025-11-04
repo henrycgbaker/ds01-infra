@@ -1,0 +1,233 @@
+#!/bin/bash
+# Delete Docker images for DS01 user
+
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+
+usage() {
+    cat << EOF
+${BOLD}Docker Image Remover${NC}
+
+${CYAN}Usage:${NC}
+  image-delete <image-name> [options]
+
+${CYAN}Options:${NC}
+  -f, --force     Force removal (stop/remove containers first)
+  --keep-dockerfile   Don't delete the Dockerfile
+  -h, --help      Show this help message
+
+${CYAN}Description:${NC}
+  Removes a Docker image and optionally its Dockerfile.
+  Will warn if containers are using the image.
+
+${CYAN}Examples:${NC}
+  image-delete my-old-project              # Remove image (with confirmation)
+  image-delete my-project --force          # Force remove (stop containers first)
+  image-delete test-image --keep-dockerfile  # Keep Dockerfile for later
+
+${CYAN}Safety:${NC}
+  • Warns before deletion
+  • Shows containers using the image
+  • Requires confirmation (unless --force)
+  • Backs up Dockerfile metadata
+
+${YELLOW}⚠ Warning:${NC} This action cannot be undone!
+
+EOF
+}
+
+# Parse arguments
+IMAGE_NAME=""
+FORCE=false
+KEEP_DOCKERFILE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        --keep-dockerfile)
+            KEEP_DOCKERFILE=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$IMAGE_NAME" ]; then
+                IMAGE_NAME="$1"
+            else
+                echo -e "${RED}Multiple image names specified${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate image name
+if [ -z "$IMAGE_NAME" ]; then
+    echo -e "${RED}Error: Image name is required${NC}\n"
+    usage
+    exit 1
+fi
+
+# Add username prefix if not present
+if [[ ! "$IMAGE_NAME" =~ ^${USERNAME}- ]]; then
+    IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+fi
+
+# Check if image exists
+if ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
+    echo -e "${RED}✗ Image '$IMAGE_NAME' not found${NC}\n"
+    echo "Available images:"
+    docker images --format "  {{.Repository}}" --filter "reference=${USERNAME}-*"
+    echo ""
+    exit 1
+fi
+
+echo -e "${CYAN}━━━ Deleting Image: ${BOLD}$IMAGE_NAME${NC} ${CYAN}━━━${NC}\n"
+
+# Show image info
+SIZE=$(docker images --format "{{.Size}}" "$IMAGE_NAME" | head -1)
+CREATED=$(docker images --format "{{.CreatedAt}}" "$IMAGE_NAME" | head -1)
+IMAGE_ID=$(docker images --format "{{.ID}}" "$IMAGE_NAME" | head -1)
+
+echo -e "${BOLD}Image details:${NC}"
+echo "  Name:    $IMAGE_NAME"
+echo "  ID:      $IMAGE_ID"
+echo "  Size:    $SIZE"
+echo "  Created: $CREATED"
+echo ""
+
+# Check for containers
+CONTAINERS=$(docker ps -a --filter "ancestor=$IMAGE_NAME" --format "{{.Names}}" 2>/dev/null)
+CONTAINER_COUNT=$(echo "$CONTAINERS" | grep -v "^$" | wc -l)
+
+if [ "$CONTAINER_COUNT" -gt 0 ]; then
+    echo -e "${YELLOW}⚠ This image is used by $CONTAINER_COUNT container(s):${NC}"
+    echo "$CONTAINERS" | while read -r container; do
+        [ -z "$container" ] && continue
+        STATUS=$(docker ps -a --filter "name=$container" --format "{{.Status}}")
+        echo "  • $container ($STATUS)"
+    done
+    echo ""
+
+    if [ "$FORCE" = false ]; then
+        echo -e "${RED}Cannot delete image while containers exist${NC}"
+        echo ""
+        echo "Options:"
+        echo "  1. Stop and remove containers first:"
+        echo "     ${GREEN}container-stop <name> && container-cleanup${NC}"
+        echo ""
+        echo "  2. Force delete (stops/removes containers):"
+        echo "     ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
+        echo ""
+        exit 1
+    else
+        echo -e "${YELLOW}--force specified: Removing containers...${NC}"
+        echo ""
+
+        # Stop and remove containers
+        echo "$CONTAINERS" | while read -r container; do
+            [ -z "$container" ] && continue
+            echo "  Stopping $container..."
+            docker stop "$container" 2>/dev/null || true
+            echo "  Removing $container..."
+            docker rm "$container" 2>/dev/null || true
+        done
+        echo ""
+    fi
+fi
+
+# Confirm deletion
+if [ "$FORCE" = false ]; then
+    echo -e "${YELLOW}⚠ This will permanently delete the image${NC}"
+    echo ""
+    read -p "Are you sure? [y/N]: " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+    echo ""
+fi
+
+# Remove image
+echo "Removing image..."
+if docker rmi "$IMAGE_NAME"; then
+    echo -e "${GREEN}✓ Image removed${NC}\n"
+
+    # Handle Dockerfile
+    IMAGES_DIR="$HOME/docker-images"
+    DOCKERFILE="$IMAGES_DIR/${IMAGE_NAME}.Dockerfile"
+    INFO_FILE="$HOME/ds01-config/images/${IMAGE_NAME}.info"
+
+    # Check info file for custom Dockerfile location
+    if [ -f "$INFO_FILE" ]; then
+        CUSTOM_DF=$(grep "^Dockerfile:" "$INFO_FILE" | cut -d: -f2- | xargs)
+        [ -n "$CUSTOM_DF" ] && DOCKERFILE="$CUSTOM_DF"
+    fi
+
+    if [ "$KEEP_DOCKERFILE" = false ]; then
+        if [ -f "$DOCKERFILE" ]; then
+            # Create backup
+            BACKUP_DIR="$HOME/ds01-config/images/deleted"
+            mkdir -p "$BACKUP_DIR"
+            BACKUP_FILE="$BACKUP_DIR/${IMAGE_NAME}-$(date +%Y%m%d-%H%M%S).Dockerfile"
+
+            cp "$DOCKERFILE" "$BACKUP_FILE"
+            rm "$DOCKERFILE"
+
+            echo -e "${YELLOW}📄 Dockerfile backed up to:${NC}"
+            echo "   ${BLUE}$BACKUP_FILE${NC}"
+            echo ""
+        fi
+
+        # Remove metadata
+        if [ -f "$INFO_FILE" ]; then
+            rm "$INFO_FILE"
+        fi
+    else
+        echo -e "${YELLOW}📄 Dockerfile kept at:${NC}"
+        echo "   ${BLUE}$DOCKERFILE${NC}"
+        echo ""
+        echo "Rebuild later with: ${GREEN}image-update $IMAGE_NAME${NC}"
+        echo ""
+    fi
+
+    # Show final status
+    REMAINING=$(docker images --format "{{.Repository}}" --filter "reference=${USERNAME}-*" | wc -l)
+    echo -e "${BOLD}Summary:${NC}"
+    echo "  Deleted:   $IMAGE_NAME"
+    echo "  Freed:     $SIZE"
+    echo "  Remaining: $REMAINING image(s)"
+    echo ""
+
+    # Suggest cleanup
+    echo -e "${YELLOW}💡 Tip:${NC} Clean up dangling images with: ${GREEN}docker image prune${NC}"
+else
+    echo -e "\n${RED}✗ Failed to remove image${NC}"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check for running containers: ${GREEN}container-list${NC}"
+    echo "  2. Force deletion: ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
+    echo "  3. Manual removal: ${BLUE}docker rmi $IMAGE_ID${NC}"
+    exit 1
+fi
+
+echo ""
