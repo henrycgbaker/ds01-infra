@@ -14,39 +14,38 @@ USERNAME=$(whoami)
 WORKSPACE_DIR="$HOME/workspace"
 
 usage() {
-    cat << EOF
-${BOLD}Project Initialization Tool${NC}
-
-${CYAN}Usage:${NC}
-  project-init [project-name] [options]
-
-${CYAN}Options:${NC}
-  -g, --git URL       Initialize Git and link to remote repository
-  -t, --type TYPE     Project template (ml, cv, nlp, rl, general)
-  -d, --description   Project description
-  -h, --help          Show this help message
-
-${CYAN}Project Types:${NC}
-  ml      General machine learning (default)
-  cv      Computer vision
-  nlp     Natural language processing
-  rl      Reinforcement learning
-  general Basic project structure
-
-${CYAN}Examples:${NC}
-  project-init my-thesis                              # Basic ML project
-  project-init cv-project -t cv                       # Computer vision project
-  project-init my-research -g git@github.com:user/repo.git   # With Git remote
-  project-init nlp-experiments -t nlp -d "BERT fine-tuning"  # With description
-
-${CYAN}What it creates:${NC}
-  • Organized directory structure
-  • README.md with project info
-  • .gitignore for data science projects
-  • requirements.txt template
-  • Example configuration files
-
-EOF
+    echo ""
+    echo -e "${BOLD}Project Initialization Tool${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  project-init [project-name] [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -g, --git URL       Initialize Git and link to remote repository"
+    echo "  -t, --type TYPE     Project template (ml, cv, nlp, rl, general)"
+    echo "  -d, --description   Project description"
+    echo "  -h, --help          Show this help message"
+    echo ""
+    echo -e "${CYAN}Project Types:${NC}"
+    echo "  ml      General machine learning (default)"
+    echo "  cv      Computer vision"
+    echo "  nlp     Natural language processing"
+    echo "  rl      Reinforcement learning"
+    echo "  general Basic project structure"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  project-init my-thesis                              # Basic ML project"
+    echo "  project-init cv-project -t cv                       # Computer vision project"
+    echo "  project-init my-research -g git@github.com:user/repo.git   # With Git remote"
+    echo "  project-init nlp-experiments -t nlp -d \"BERT fine-tuning\"  # With description"
+    echo ""
+    echo -e "${CYAN}What it creates:${NC}"
+    echo "  • Organized directory structure"
+    echo "  • README.md with project info"
+    echo "  • .gitignore for data science projects"
+    echo "  • requirements.txt template"
+    echo "  • Example configuration files"
+    echo ""
 }
 
 create_gitignore() {

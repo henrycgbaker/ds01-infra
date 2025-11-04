@@ -14,26 +14,25 @@ YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
 usage() {
-    cat << EOF
-Usage: ds01-run [OPTIONS] IMAGE [COMMAND]
-
-Launch a Docker container with DS01 resource limits applied automatically.
-
-Options:
-  -g, --gpu GPU_ID      Specify GPU ID (default: auto-assign)
-  -n, --name NAME       Container name (default: auto-generated)
-  -v, --volume SRC:DST  Mount volume (can be used multiple times)
-  -p, --port HOST:CONT  Publish port (can be used multiple times)
-  --cpu N               Override CPU limit
-  --memory SIZE         Override memory limit
-  -h, --help            Show this help
-
-Examples:
-  ds01-run pytorch/pytorch:latest
-  ds01-run -g 0 -n my-training tensorflow/tensorflow:latest-gpu
-  ds01-run -v /data:/data -p 8888:8888 jupyter/tensorflow-notebook
-
-EOF
+    echo ""
+    echo "Usage: ds01-run [OPTIONS] IMAGE [COMMAND]"
+    echo ""
+    echo "Launch a Docker container with DS01 resource limits applied automatically."
+    echo ""
+    echo "Options:"
+    echo "  -g, --gpu GPU_ID      Specify GPU ID (default: auto-assign)"
+    echo "  -n, --name NAME       Container name (default: auto-generated)"
+    echo "  -v, --volume SRC:DST  Mount volume (can be used multiple times)"
+    echo "  -p, --port HOST:CONT  Publish port (can be used multiple times)"
+    echo "  --cpu N               Override CPU limit"
+    echo "  --memory SIZE         Override memory limit"
+    echo "  -h, --help            Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  ds01-run pytorch/pytorch:latest"
+    echo "  ds01-run -g 0 -n my-training tensorflow/tensorflow:latest-gpu"
+    echo "  ds01-run -v /data:/data -p 8888:8888 jupyter/tensorflow-notebook"
+    echo ""
     exit 0
 }
 

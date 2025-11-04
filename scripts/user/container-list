@@ -14,24 +14,23 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 
 usage() {
-    cat << EOF
-${BOLD}Container List${NC}
-
-${CYAN}Usage:${NC}
-  container-list [options]
-
-${CYAN}Options:${NC}
-  -a, --all       Show all containers (not just running)
-  -d, --detailed  Show detailed information
-  --format FORMAT Output format (table, simple, json)
-  -h, --help      Show this help message
-
-${CYAN}Examples:${NC}
-  container-list               # Show running containers
-  container-list --all         # Show all containers (including stopped)
-  container-list --detailed    # Show detailed info
-
-EOF
+    echo ""
+    echo -e "${BOLD}Container List${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-list [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -a, --all       Show all containers (not just running)"
+    echo "  -d, --detailed  Show detailed information"
+    echo "  --format FORMAT Output format (table, simple, json)"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  container-list               # Show running containers"
+    echo "  container-list --all         # Show all containers (including stopped)"
+    echo "  container-list --detailed    # Show detailed info"
+    echo ""
 }
 
 format_status() {

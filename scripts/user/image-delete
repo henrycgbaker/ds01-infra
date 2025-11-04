@@ -12,35 +12,34 @@ NC='\033[0m'
 USERNAME=$(whoami)
 
 usage() {
-    cat << EOF
-${BOLD}Docker Image Remover${NC}
-
-${CYAN}Usage:${NC}
-  image-delete <image-name> [options]
-
-${CYAN}Options:${NC}
-  -f, --force     Force removal (stop/remove containers first)
-  --keep-dockerfile   Don't delete the Dockerfile
-  -h, --help      Show this help message
-
-${CYAN}Description:${NC}
-  Removes a Docker image and optionally its Dockerfile.
-  Will warn if containers are using the image.
-
-${CYAN}Examples:${NC}
-  image-delete my-old-project              # Remove image (with confirmation)
-  image-delete my-project --force          # Force remove (stop containers first)
-  image-delete test-image --keep-dockerfile  # Keep Dockerfile for later
-
-${CYAN}Safety:${NC}
-  • Warns before deletion
-  • Shows containers using the image
-  • Requires confirmation (unless --force)
-  • Backs up Dockerfile metadata
-
-${YELLOW}⚠ Warning:${NC} This action cannot be undone!
-
-EOF
+    echo ""
+    echo -e "${BOLD}Docker Image Remover${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  image-delete <image-name> [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -f, --force     Force removal (stop/remove containers first)"
+    echo "  --keep-dockerfile   Don't delete the Dockerfile"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Removes a Docker image and optionally its Dockerfile."
+    echo "  Will warn if containers are using the image."
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  image-delete my-old-project              # Remove image (with confirmation)"
+    echo "  image-delete my-project --force          # Force remove (stop containers first)"
+    echo "  image-delete test-image --keep-dockerfile  # Keep Dockerfile for later"
+    echo ""
+    echo -e "${CYAN}Safety:${NC}"
+    echo "  • Warns before deletion"
+    echo "  • Shows containers using the image"
+    echo "  • Requires confirmation (unless --force)"
+    echo "  • Backs up Dockerfile metadata"
+    echo ""
+    echo -e "${YELLOW}⚠ Warning:${NC} This action cannot be undone!"
+    echo ""
 }
 
 # Parse arguments

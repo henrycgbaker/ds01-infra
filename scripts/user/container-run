@@ -14,46 +14,45 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 
 usage() {
-    cat << EOF
-${BOLD}Container Runner${NC}
-
-${CYAN}Usage:${NC}
-  container-run <name> [command]
-
-${CYAN}Arguments:${NC}
-  name              Container name (required)
-  command           Command to run (default: /bin/bash)
-
-${CYAN}Options:${NC}
-  -d, --detach      Start in background (don't attach)
-  -p, --port PORT   Expose additional port (e.g., 8888:8888)
-  --jupyter         Start Jupyter Lab automatically
-  -h, --help        Show this help message
-
-${CYAN}Examples:${NC}
-  ${DIM}# Start and enter container${NC}
-  container-run my-project
-
-  ${DIM}# Start with Jupyter Lab${NC}
-  container-run my-project --jupyter
-
-  ${DIM}# Start in background${NC}
-  container-run training --detach
-
-  ${DIM}# Run specific command${NC}
-  container-run my-project python train.py
-
-${CYAN}Inside the container:${NC}
-  • Your workspace is at ${BLUE}/workspace${NC}
-  • Exit without stopping: ${GREEN}Ctrl+P, Ctrl+Q${NC}
-  • Exit and stop: ${GREEN}exit${NC} or ${GREEN}Ctrl+D${NC}
-
-${YELLOW}💡 Tips:${NC}
-  • View running containers: ${GREEN}container-list${NC}
-  • Stop container: ${GREEN}container-stop <name>${NC}
-  • Check resources: ${GREEN}container-stats${NC}
-
-EOF
+    echo ""
+    echo -e "${BOLD}Container Runner${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-run <name> [command]"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  name              Container name (required)"
+    echo "  command           Command to run (default: /bin/bash)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -d, --detach      Start in background (don't attach)"
+    echo "  -p, --port PORT   Expose additional port (e.g., 8888:8888)"
+    echo "  --jupyter         Start Jupyter Lab automatically"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Start and enter container${NC}"
+    echo "  container-run my-project"
+    echo ""
+    echo -e "  ${DIM}# Start with Jupyter Lab${NC}"
+    echo "  container-run my-project --jupyter"
+    echo ""
+    echo -e "  ${DIM}# Start in background${NC}"
+    echo "  container-run training --detach"
+    echo ""
+    echo -e "  ${DIM}# Run specific command${NC}"
+    echo "  container-run my-project python train.py"
+    echo ""
+    echo -e "${CYAN}Inside the container:${NC}"
+    echo -e "  • Your workspace is at ${BLUE}/workspace${NC}"
+    echo -e "  • Exit without stopping: ${GREEN}Ctrl+P, Ctrl+Q${NC}"
+    echo -e "  • Exit and stop: ${GREEN}exit${NC} or ${GREEN}Ctrl+D${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Tips:${NC}"
+    echo -e "  • View running containers: ${GREEN}container-list${NC}"
+    echo -e "  • Stop container: ${GREEN}container-stop <name>${NC}"
+    echo -e "  • Check resources: ${GREEN}container-stats${NC}"
+    echo ""
 }
 
 get_idle_timeout() {
