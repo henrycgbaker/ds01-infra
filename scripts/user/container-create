@@ -19,53 +19,52 @@ INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
 RESOURCE_PARSER="$INFRA_ROOT/docker/get_resource_limits.py"
 
 usage() {
-    cat << EOF
-${BOLD}Container Creator${NC}
-
-${CYAN}Usage:${NC}
-  container-create <name> [image] [options]
-
-${CYAN}Arguments:${NC}
-  name              Container name (required)
-  image             Docker image to use (default: auto-detect from name)
-
-${CYAN}Options:${NC}
-  -g, --gpu ID      Request specific GPU (admin only)
-  -n, --num-gpus N  Number of MIG instances (default: 1)
-  --cpu-only        Create CPU-only container
-  -w, --workspace   Workspace directory (default: ~/workspace/<name>)
-  -d, --data        Additional data directory to mount
-  --dry-run         Show what would be created
-  -h, --help        Show this help message
-
-${CYAN}Examples:${NC}
-  ${DIM}# Create from existing image${NC}
-  container-create my-project ${USERNAME}-my-project-image
-
-  ${DIM}# Auto-detect image from name${NC}
-  container-create my-cv-project
-
-  ${DIM}# Create with 2 MIG instances${NC}
-  container-create training -n 2
-
-  ${DIM}# CPU-only for preprocessing${NC}
-  container-create preprocessing --cpu-only
-
-  ${DIM}# Custom workspace location${NC}
-  container-create analysis -w ~/projects/analysis
-
-${CYAN}How it works:${NC}
-  1. Checks your resource limits and GPU availability
-  2. Allocates GPU/MIG instances based on priority
-  3. Creates container with proper resource constraints
-  4. Mounts your workspace directory
-
-${YELLOW}💡 After creation:${NC}
-  • Start container: ${GREEN}container-run <name>${NC}
-  • View containers: ${GREEN}container-list${NC}
-  • Check resources: ${GREEN}container-stats${NC}
-
-EOF
+    echo ""
+    echo -e "${BOLD}Container Creator${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-create <name> [image] [options]"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  name              Container name (required)"
+    echo "  image             Docker image to use (default: auto-detect from name)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -g, --gpu ID      Request specific GPU (admin only)"
+    echo "  -n, --num-gpus N  Number of MIG instances (default: 1)"
+    echo "  --cpu-only        Create CPU-only container"
+    echo "  -w, --workspace   Workspace directory (default: ~/workspace/<name>)"
+    echo "  -d, --data        Additional data directory to mount"
+    echo "  --dry-run         Show what would be created"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Create from existing image${NC}"
+    echo "  container-create my-project ${USERNAME}-my-project-image"
+    echo ""
+    echo -e "  ${DIM}# Auto-detect image from name${NC}"
+    echo "  container-create my-cv-project"
+    echo ""
+    echo -e "  ${DIM}# Create with 2 MIG instances${NC}"
+    echo "  container-create training -n 2"
+    echo ""
+    echo -e "  ${DIM}# CPU-only for preprocessing${NC}"
+    echo "  container-create preprocessing --cpu-only"
+    echo ""
+    echo -e "  ${DIM}# Custom workspace location${NC}"
+    echo "  container-create analysis -w ~/projects/analysis"
+    echo ""
+    echo -e "${CYAN}How it works:${NC}"
+    echo "  1. Checks your resource limits and GPU availability"
+    echo "  2. Allocates GPU/MIG instances based on priority"
+    echo "  3. Creates container with proper resource constraints"
+    echo "  4. Mounts your workspace directory"
+    echo ""
+    echo -e "${YELLOW}💡 After creation:${NC}"
+    echo -e "  • Start container: ${GREEN}container-run <name>${NC}"
+    echo -e "  • View containers: ${GREEN}container-list${NC}"
+    echo -e "  • Check resources: ${GREEN}container-stats${NC}"
+    echo ""
 }
 
 check_gpu_availability() {

@@ -13,36 +13,35 @@ USERNAME=$(whoami)
 IMAGES_DIR="$HOME/docker-images"
 
 usage() {
-    cat << EOF
-${BOLD}Docker Image Updater${NC}
-
-${CYAN}Usage:${NC}
-  image-update <image-name> [options]
-
-${CYAN}Options:${NC}
-  --edit          Edit Dockerfile before rebuilding
-  --no-cache      Build without using cache (clean rebuild)
-  -h, --help      Show this help message
-
-${CYAN}Description:${NC}
-  Rebuilds an existing Docker image from its Dockerfile.
-  Useful for updating packages or modifying configuration.
-
-${CYAN}Examples:${NC}
-  image-update my-project                # Rebuild from existing Dockerfile
-  image-update my-project --edit         # Edit Dockerfile first, then rebuild
-  image-update my-project --no-cache     # Clean rebuild (ignores cache)
-
-${CYAN}Common Updates:${NC}
-  • Add packages: Edit Dockerfile, add to RUN pip install line
-  • Update versions: Change version numbers in FROM or RUN commands
-  • Add system tools: Add to apt-get install line
-
-${YELLOW}💡 Tip:${NC} After updating, recreate containers to use the new image:
-     ${GREEN}container-cleanup my-project${NC}
-     ${GREEN}container-create my-project${NC}
-
-EOF
+    echo ""
+    echo -e "${BOLD}Docker Image Updater${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  image-update <image-name> [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --edit          Edit Dockerfile before rebuilding"
+    echo "  --no-cache      Build without using cache (clean rebuild)"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Rebuilds an existing Docker image from its Dockerfile."
+    echo "  Useful for updating packages or modifying configuration."
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  image-update my-project                # Rebuild from existing Dockerfile"
+    echo "  image-update my-project --edit         # Edit Dockerfile first, then rebuild"
+    echo "  image-update my-project --no-cache     # Clean rebuild (ignores cache)"
+    echo ""
+    echo -e "${CYAN}Common Updates:${NC}"
+    echo "  • Add packages: Edit Dockerfile, add to RUN pip install line"
+    echo "  • Update versions: Change version numbers in FROM or RUN commands"
+    echo "  • Add system tools: Add to apt-get install line"
+    echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} After updating, recreate containers to use the new image:"
+    echo -e "     ${GREEN}container-cleanup my-project${NC}"
+    echo -e "     ${GREEN}container-create my-project${NC}"
+    echo ""
 }
 
 # Parse arguments

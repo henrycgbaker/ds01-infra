@@ -15,45 +15,44 @@ USER_ID=$(id -u)
 IMAGES_DIR="$HOME/docker-images"
 
 usage() {
-    cat << EOF
-${BOLD}Docker Image Creator${NC}
-
-${CYAN}Usage:${NC}
-  image-create [image-name] [options]
-
-${CYAN}Options:${NC}
-  -f, --framework FRAMEWORK   Base framework (pytorch, tensorflow, jax)
-  -t, --type TYPE            Use case type (cv, nlp, rl, ml, custom)
-  -p, --packages PACKAGES    Additional Python packages (space-separated)
-  -s, --system PACKAGES      System packages via apt (space-separated)
-  --no-build                 Create Dockerfile only, don't build
-  -h, --help                 Show this help message
-
-${CYAN}Frameworks:${NC}
-  pytorch      PyTorch 2.5.1 + CUDA 11.8 (default)
-  tensorflow   TensorFlow 2.14.0 + CUDA 11.8
-  jax          JAX + CUDA
-
-${CYAN}Use Case Types:${NC}
-  cv       Computer Vision (includes: timm, albumentations, opencv)
-  nlp      Natural Language Processing (includes: transformers, datasets)
-  rl       Reinforcement Learning (includes: gymnasium, stable-baselines3)
-  ml       General ML (scikit-learn, xgboost, lightgbm)
-  custom   Specify all packages manually
-
-${CYAN}Examples:${NC}
-  image-create my-cv-project                    # Interactive mode
-  image-create thesis-model -f pytorch -t cv    # CV project with PyTorch
-  image-create nlp-exp -f pytorch -t nlp -p "wandb optuna"  # With extra packages
-  image-create custom-setup -t custom --no-build  # Just create Dockerfile
-
-${CYAN}Quick Start:${NC}
-  1. Run: ${GREEN}image-create my-project${NC}
-  2. Answer prompts to customize
-  3. Wait 3-5 minutes for build
-  4. Create container: ${GREEN}container-create my-project${NC}
-
-EOF
+    echo ""
+    echo -e "${BOLD}Docker Image Creator${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  image-create [image-name] [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -f, --framework FRAMEWORK   Base framework (pytorch, tensorflow, jax)"
+    echo "  -t, --type TYPE            Use case type (cv, nlp, rl, ml, custom)"
+    echo "  -p, --packages PACKAGES    Additional Python packages (space-separated)"
+    echo "  -s, --system PACKAGES      System packages via apt (space-separated)"
+    echo "  --no-build                 Create Dockerfile only, don't build"
+    echo "  -h, --help                 Show this help message"
+    echo ""
+    echo -e "${CYAN}Frameworks:${NC}"
+    echo "  pytorch      PyTorch 2.5.1 + CUDA 11.8 (default)"
+    echo "  tensorflow   TensorFlow 2.14.0 + CUDA 11.8"
+    echo "  jax          JAX + CUDA"
+    echo ""
+    echo -e "${CYAN}Use Case Types:${NC}"
+    echo "  cv       Computer Vision (includes: timm, albumentations, opencv)"
+    echo "  nlp      Natural Language Processing (includes: transformers, datasets)"
+    echo "  rl       Reinforcement Learning (includes: gymnasium, stable-baselines3)"
+    echo "  ml       General ML (scikit-learn, xgboost, lightgbm)"
+    echo "  custom   Specify all packages manually"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  image-create my-cv-project                    # Interactive mode"
+    echo "  image-create thesis-model -f pytorch -t cv    # CV project with PyTorch"
+    echo "  image-create nlp-exp -f pytorch -t nlp -p \"wandb optuna\"  # With extra packages"
+    echo "  image-create custom-setup -t custom --no-build  # Just create Dockerfile"
+    echo ""
+    echo -e "${CYAN}Quick Start:${NC}"
+    echo -e "  1. Run: ${GREEN}image-create my-project${NC}"
+    echo "  2. Answer prompts to customize"
+    echo "  3. Wait 3-5 minutes for build"
+    echo -e "  4. Create container: ${GREEN}container-create my-project${NC}"
+    echo ""
 }
 
 get_base_image() {

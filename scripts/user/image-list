@@ -11,24 +11,23 @@ NC='\033[0m'
 USERNAME=$(whoami)
 
 usage() {
-    cat << EOF
-${BOLD}Docker Image List${NC}
-
-${CYAN}Usage:${NC}
-  image-list [options]
-
-${CYAN}Options:${NC}
-  -a, --all       Show all images (not just yours)
-  -s, --size      Show image sizes
-  -d, --detailed  Show detailed information
-  -h, --help      Show this help message
-
-${CYAN}Examples:${NC}
-  image-list              # List your images
-  image-list --all        # List all images on server
-  image-list --detailed   # Show detailed info with Dockerfile locations
-
-EOF
+    echo ""
+    echo -e "${BOLD}Docker Image List${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  image-list [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -a, --all       Show all images (not just yours)"
+    echo "  -s, --size      Show image sizes"
+    echo "  -d, --detailed  Show detailed information"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  image-list              # List your images"
+    echo "  image-list --all        # List all images on server"
+    echo "  image-list --detailed   # Show detailed info with Dockerfile locations"
+    echo ""
 }
 
 show_detailed() {

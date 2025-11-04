@@ -14,44 +14,43 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 
 usage() {
-    cat << EOF
-${BOLD}Container Stopper${NC}
-
-${CYAN}Usage:${NC}
-  container-stop <name> [options]
-
-${CYAN}Options:${NC}
-  -f, --force     Force stop (kill immediately)
-  -t, --timeout   Timeout in seconds (default: 10)
-  -a, --all       Stop all your containers
-  -h, --help      Show this help message
-
-${CYAN}Description:${NC}
-  Gracefully stops a running container, allowing processes
-  to save state and clean up. The container can be restarted
-  later with ${GREEN}container-run${NC}.
-
-${RED}⚠ Important:${NC}
-  This ${BOLD}completely stops${NC} the container, including:
-  • All running processes
-  • Jupyter sessions
-  • Training jobs
-  • SSH connections
-
-${YELLOW}💡 Alternative:${NC}
-  To exit without stopping, use: ${GREEN}Ctrl+P, Ctrl+Q${NC} when attached
-
-${CYAN}Examples:${NC}
-  container-stop my-project              # Graceful stop
-  container-stop training --force        # Force stop immediately
-  container-stop --all                   # Stop all your containers
-
-${CYAN}After stopping:${NC}
-  • Restart: ${GREEN}container-run <name>${NC}
-  • Remove:  ${GREEN}container-cleanup <name>${NC}
-  • Status:  ${GREEN}container-list${NC}
-
-EOF
+    echo ""
+    echo -e "${BOLD}Container Stopper${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-stop <name> [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -f, --force     Force stop (kill immediately)"
+    echo "  -t, --timeout   Timeout in seconds (default: 10)"
+    echo "  -a, --all       Stop all your containers"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Gracefully stops a running container, allowing processes"
+    echo "  to save state and clean up. The container can be restarted"
+    echo -e "  later with ${GREEN}container-run${NC}."
+    echo ""
+    echo -e "${RED}⚠ Important:${NC}"
+    echo -e "  This ${BOLD}completely stops${NC} the container, including:"
+    echo "  • All running processes"
+    echo "  • Jupyter sessions"
+    echo "  • Training jobs"
+    echo "  • SSH connections"
+    echo ""
+    echo -e "${YELLOW}💡 Alternative:${NC}"
+    echo -e "  To exit without stopping, use: ${GREEN}Ctrl+P, Ctrl+Q${NC} when attached"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  container-stop my-project              # Graceful stop"
+    echo "  container-stop training --force        # Force stop immediately"
+    echo "  container-stop --all                   # Stop all your containers"
+    echo ""
+    echo -e "${CYAN}After stopping:${NC}"
+    echo -e "  • Restart: ${GREEN}container-run <name>${NC}"
+    echo -e "  • Remove:  ${GREEN}container-cleanup <name>${NC}"
+    echo -e "  • Status:  ${GREEN}container-list${NC}"
+    echo ""
 }
 
 stop_container() {
