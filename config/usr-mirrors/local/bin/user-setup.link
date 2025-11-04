@@ -1,6 +1,0 @@
-# Symlink record for: user-setup
-# Created: 2025-11-04T17:53:11+01:00
-# Source: /opt/ds01-infra/scripts/user/user-setup
-# Target: /usr/local/bin/user-setup
-
-ln -sf /opt/ds01-infra/scripts/user/user-setup /usr/local/bin/user-setup

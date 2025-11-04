@@ -57,7 +57,9 @@ USER_COMMANDS=(
 
     # Standalone commands
     "ssh-config"
-    "user-setup"
+    "new-user-setup:new-user-setup.sh"
+    "new-project-setup"
+    "git-ml-repo-setup:git-ml-repo-setup.sh"
 )
 
 # Admin commands

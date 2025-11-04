@@ -1,6 +1,6 @@
-# File: /opt/ds01-infra/scripts/user/git-setup-project.sh
 #!/bin/bash
-# Initialize Git workflow for DS01 projects
+# Git repository setup for DS01 projects
+# Initialize Git workflow with ML-specific configuration
 
 set -e
 
@@ -21,6 +21,11 @@ cd "$PROJECT_DIR"
 
 echo -e "${GREEN}${BOLD}━━━ Git Setup for DS01 Project ━━━${NC}\n"
 echo "Project directory: $PROJECT_DIR"
+echo ""
+echo -e "${YELLOW}Note:${NC} This script creates an industry-standard ML project repository"
+echo "layout with Git configuration optimized for machine learning workflows."
+echo "The directory structure (data/, models/, notebooks/, scripts/, outputs/)"
+echo "is a recommended template, but you can customize it for your needs."
 echo ""
 
 # Check if already a git repo
