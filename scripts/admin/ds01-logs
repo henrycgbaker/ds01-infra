@@ -1,0 +1,159 @@
+#!/bin/bash
+# DS01 Logs Viewer - View infrastructure logs
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+LOG_DIR="/var/logs/ds01"
+
+show_usage() {
+    cat << EOF
+${BOLD}ds01-logs${NC} - View DS01 infrastructure logs
+
+${CYAN}Usage:${NC}
+  ds01-logs [log-type] [options]
+
+${CYAN}Log Types:${NC}
+  ${BOLD}gpu${NC}          GPU allocation logs
+  ${BOLD}cleanup${NC}      Idle container cleanup logs
+  ${BOLD}metrics${NC}      System metrics logs
+  ${BOLD}audit${NC}        System audit logs
+  ${BOLD}all${NC}          All logs (default)
+
+${CYAN}Options:${NC}
+  -f, --follow     Follow log output (tail -f)
+  -n NUM           Show last NUM lines (default: 50)
+  -h, --help       Show this help
+
+${CYAN}Examples:${NC}
+  ds01-logs                    # Show recent activity from all logs
+  ds01-logs gpu                # Show GPU allocation logs
+  ds01-logs gpu -f             # Follow GPU logs in real-time
+  ds01-logs cleanup -n 100     # Show last 100 cleanup log lines
+
+EOF
+}
+
+# Parse arguments
+LOG_TYPE="all"
+FOLLOW=false
+NUM_LINES=50
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        gpu|cleanup|metrics|audit|all)
+            LOG_TYPE="$1"
+            shift
+            ;;
+        -f|--follow)
+            FOLLOW=true
+            shift
+            ;;
+        -n)
+            NUM_LINES="$2"
+            shift 2
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Error:${NC} Unknown option: $1"
+            echo "Run 'ds01-logs --help' for usage"
+            exit 1
+            ;;
+    esac
+done
+
+# Check if log directory exists
+if [ ! -d "$LOG_DIR" ]; then
+    echo -e "${YELLOW}Warning:${NC} Log directory not found: $LOG_DIR"
+    echo "Logs may not be configured yet."
+    exit 1
+fi
+
+# Display header
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}              DS01 INFRASTRUCTURE LOGS${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Function to show a log file
+show_log() {
+    local log_file="$1"
+    local log_name="$2"
+
+    if [ ! -f "$log_file" ]; then
+        echo -e "${YELLOW}  No logs found: $log_name${NC}"
+        return
+    fi
+
+    echo -e "${BOLD}$log_name${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+    if [ "$FOLLOW" = true ]; then
+        tail -f -n "$NUM_LINES" "$log_file"
+    else
+        tail -n "$NUM_LINES" "$log_file"
+    fi
+    echo ""
+}
+
+# Show logs based on type
+case $LOG_TYPE in
+    gpu)
+        show_log "$LOG_DIR/gpu-allocations.log" "GPU Allocations"
+        ;;
+    cleanup)
+        show_log "$LOG_DIR/idle-cleanup.log" "Container Cleanup"
+        ;;
+    metrics)
+        echo -e "${BOLD}System Metrics${NC}"
+        echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+        if [ -d "$LOG_DIR/metrics" ]; then
+            ls -lh "$LOG_DIR/metrics" | tail -10
+        else
+            echo -e "${YELLOW}  No metrics logs found${NC}"
+        fi
+        echo ""
+        ;;
+    audit)
+        echo -e "${BOLD}System Audits${NC}"
+        echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+        if [ -d "$LOG_DIR/audits" ]; then
+            ls -lh "$LOG_DIR/audits" | tail -10
+        else
+            echo -e "${YELLOW}  No audit logs found${NC}"
+        fi
+        echo ""
+        ;;
+    all)
+        show_log "$LOG_DIR/gpu-allocations.log" "GPU Allocations (last $NUM_LINES)"
+
+        if [ -f "$LOG_DIR/idle-cleanup.log" ]; then
+            show_log "$LOG_DIR/idle-cleanup.log" "Container Cleanup (last $NUM_LINES)"
+        fi
+
+        # Show recent metric files
+        if [ -d "$LOG_DIR/metrics" ]; then
+            echo -e "${BOLD}Recent Metric Files${NC}"
+            echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+            ls -lht "$LOG_DIR/metrics" | head -6 | tail -5
+            echo ""
+        fi
+        ;;
+esac
+
+if [ "$FOLLOW" = false ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Tip:${NC} Use ${CYAN}ds01-logs <type> -f${NC} to follow logs in real-time"
+    echo ""
+fi
