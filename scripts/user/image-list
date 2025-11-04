@@ -45,7 +45,7 @@ show_detailed() {
     if [ -z "$images" ]; then
         echo -e "${YELLOW}No images found${NC}"
         echo ""
-        echo "Create your first image with: ${GREEN}image-create my-project${NC}"
+        echo -e "Create your first image with: ${GREEN}image-create my-project${NC}"
         exit 0
     fi
 
@@ -114,7 +114,7 @@ show_simple() {
         if [ "$count" -eq 0 ]; then
             echo -e "${YELLOW}No images found${NC}"
             echo ""
-            echo "Create your first image with: ${GREEN}image-create my-project${NC}"
+            echo -e "Create your first image with: ${GREEN}image-create my-project${NC}"
         else
             echo -e "${BOLD}Total:${NC} $count image(s)"
             echo ""
