@@ -1,0 +1,377 @@
+#!/bin/bash
+# Clean up stopped containers and unused resources
+
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
+usage() {
+    cat << EOF
+${BOLD}Container Cleanup${NC}
+
+${CYAN}Usage:${NC}
+  container-cleanup [name] [options]
+
+${CYAN}Arguments:${NC}
+  name              Specific container to remove (optional)
+
+${CYAN}Options:${NC}
+  -a, --all         Remove ALL your stopped containers
+  -i, --images      Also remove unused images
+  -f, --force       Skip confirmation prompts
+  -v, --volumes     Also remove anonymous volumes
+  --dry-run         Show what would be removed
+  -h, --help        Show this help message
+
+${CYAN}What gets cleaned:${NC}
+  • Stopped containers
+  • Unused images (with --images)
+  • Dangling volumes (with --volumes)
+
+${CYAN}What is preserved:${NC}
+  ${GREEN}✓${NC} Running containers
+  ${GREEN}✓${NC} Your workspace files
+  ${GREEN}✓${NC} Container configurations
+  ${GREEN}✓${NC} Dockerfiles
+
+${CYAN}Examples:${NC}
+  ${DIM}# Remove specific stopped container${NC}
+  container-cleanup my-old-project
+
+  ${DIM}# Remove all stopped containers${NC}
+  container-cleanup --all
+
+  ${DIM}# Clean containers and unused images${NC}
+  container-cleanup --all --images
+
+  ${DIM}# See what would be removed${NC}
+  container-cleanup --all --dry-run
+
+${RED}⚠ Important:${NC}
+  This permanently removes containers.
+  Recreate with: ${GREEN}container-create <name>${NC}
+
+EOF
+}
+
+format_size() {
+    local size="$1"
+    echo "$size" | numfmt --to=iec-i --suffix=B 2>/dev/null || echo "$size"
+}
+
+show_container_info() {
+    local container_tag="$1"
+    local name=$(echo "$container_tag" | sed "s/\._\.$USER_ID//")
+
+    local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${container_tag}$" 2>/dev/null)
+    local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null | cut -d: -f1)
+    local size=$(docker ps -a --format "{{.Size}}" --filter "name=^${container_tag}$" 2>/dev/null)
+
+    echo -e "  • ${CYAN}$name${NC}"
+    echo -e "    Status: ${DIM}$status${NC}"
+    echo -e "    Image:  ${DIM}$image${NC}"
+    if [ -n "$size" ]; then
+        echo -e "    Size:   ${DIM}$size${NC}"
+    fi
+}
+
+cleanup_container() {
+    local container_name="$1"
+    local force="$2"
+    local container_tag="${container_name}._.$USER_ID"
+
+    # Check if container exists
+    if ! docker ps -a --format "{{.Names}}" | grep -q "^${container_tag}$"; then
+        echo -e "${RED}✗${NC} Container '$container_name' not found"
+        return 1
+    fi
+
+    # Check if running
+    if docker ps --format "{{.Names}}" | grep -q "^${container_tag}$"; then
+        echo -e "${RED}✗${NC} Container '$container_name' is running"
+        echo -e "   Stop first: ${GREEN}container-stop $container_name${NC}"
+        return 1
+    fi
+
+    # Show info
+    show_container_info "$container_tag"
+    echo ""
+
+    # Confirm
+    if [ "$force" != "true" ]; then
+        read -p "Remove this container? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo "Skipped."
+            return 0
+        fi
+    fi
+
+    # Remove
+    if docker rm "$container_tag" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Removed: $container_name"
+
+        # Clean up metadata
+        local info_file="$HOME/ds01-config/containers/${container_name}.info"
+        if [ -f "$info_file" ]; then
+            rm "$info_file"
+        fi
+
+        return 0
+    else
+        echo -e "${RED}✗${NC} Failed to remove: $container_name"
+        return 1
+    fi
+}
+
+cleanup_all_stopped() {
+    local force="$1"
+    local dry_run="$2"
+
+    # Get stopped containers
+    local stopped=$(docker ps -a --filter "status=exited" --filter "status=created" --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null)
+
+    if [ -z "$stopped" ]; then
+        echo -e "${GREEN}✓${NC} No stopped containers to clean up\n"
+        return 0
+    fi
+
+    local count=$(echo "$stopped" | wc -l | tr -d ' ')
+
+    echo -e "${BOLD}Found $count stopped container(s):${NC}\n"
+
+    # Show what will be removed
+    while IFS= read -r container_tag; do
+        [ -z "$container_tag" ] && continue
+        show_container_info "$container_tag"
+        echo ""
+    done <<< "$stopped"
+
+    # Dry run mode
+    if [ "$dry_run" = "true" ]; then
+        echo -e "${YELLOW}━━━ DRY RUN MODE ━━━${NC}"
+        echo -e "${YELLOW}Would remove $count container(s)${NC}\n"
+        return 0
+    fi
+
+    # Confirm
+    if [ "$force" != "true" ]; then
+        echo -e "${YELLOW}⚠ This will permanently remove these containers${NC}"
+        read -p "Continue? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo "Cancelled."
+            return 0
+        fi
+        echo ""
+    fi
+
+    # Remove containers
+    local success=0
+    local failed=0
+
+    while IFS= read -r container_tag; do
+        [ -z "$container_tag" ] && continue
+
+        local name=$(echo "$container_tag" | sed "s/\._\.$USER_ID//")
+
+        if docker rm "$container_tag" > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Removed: $name"
+            success=$((success + 1))
+
+            # Clean up metadata
+            local info_file="$HOME/ds01-config/containers/${name}.info"
+            if [ -f "$info_file" ]; then
+                rm "$info_file"
+            fi
+        else
+            echo -e "${RED}✗${NC} Failed: $name"
+            failed=$((failed + 1))
+        fi
+    done <<< "$stopped"
+
+    echo ""
+    echo -e "${BOLD}Summary:${NC}"
+    echo -e "  Removed: ${GREEN}$success${NC}"
+    if [ "$failed" -gt 0 ]; then
+        echo -e "  Failed:  ${RED}$failed${NC}"
+    fi
+}
+
+cleanup_images() {
+    local force="$1"
+    local dry_run="$2"
+
+    echo ""
+    echo -e "${CYAN}━━━ Cleaning Unused Images ━━━${NC}\n"
+
+    # Get dangling images
+    local dangling=$(docker images -f "dangling=true" -q 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$dangling" -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} No unused images to clean\n"
+        return 0
+    fi
+
+    echo -e "${BOLD}Found $dangling unused image(s)${NC}\n"
+
+    if [ "$dry_run" = "true" ]; then
+        echo -e "${YELLOW}Would remove $dangling dangling image(s)${NC}\n"
+        return 0
+    fi
+
+    if [ "$force" != "true" ]; then
+        read -p "Remove dangling images? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo "Skipped."
+            return 0
+        fi
+    fi
+
+    # Remove
+    docker image prune -f > /dev/null 2>&1
+    echo -e "${GREEN}✓${NC} Removed $dangling dangling image(s)\n"
+}
+
+cleanup_volumes() {
+    local force="$1"
+    local dry_run="$2"
+
+    echo ""
+    echo -e "${CYAN}━━━ Cleaning Unused Volumes ━━━${NC}\n"
+
+    local unused=$(docker volume ls -qf dangling=true 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$unused" -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} No unused volumes to clean\n"
+        return 0
+    fi
+
+    echo -e "${BOLD}Found $unused unused volume(s)${NC}\n"
+
+    if [ "$dry_run" = "true" ]; then
+        echo -e "${YELLOW}Would remove $unused volume(s)${NC}\n"
+        return 0
+    fi
+
+    if [ "$force" != "true" ]; then
+        read -p "Remove unused volumes? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo "Skipped."
+            return 0
+        fi
+    fi
+
+    docker volume prune -f > /dev/null 2>&1
+    echo -e "${GREEN}✓${NC} Removed $unused volume(s)\n"
+}
+
+# Parse arguments
+CONTAINER_NAME=""
+CLEANUP_ALL=false
+CLEANUP_IMAGES=false
+CLEANUP_VOLUMES=false
+FORCE=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -a|--all)
+            CLEANUP_ALL=true
+            shift
+            ;;
+        -i|--images)
+            CLEANUP_IMAGES=true
+            shift
+            ;;
+        -v|--volumes)
+            CLEANUP_VOLUMES=true
+            shift
+            ;;
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$CONTAINER_NAME" ]; then
+                CONTAINER_NAME="$1"
+            else
+                echo -e "${RED}✗ Too many arguments${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}${BOLD}    Container Cleanup${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+if [ "$DRY_RUN" = "true" ]; then
+    echo -e "${YELLOW}━━━ DRY RUN MODE ━━━${NC}\n"
+fi
+
+# Clean specific container
+if [ -n "$CONTAINER_NAME" ]; then
+    cleanup_container "$CONTAINER_NAME" "$FORCE"
+    exit $?
+fi
+
+# Clean all stopped
+if [ "$CLEANUP_ALL" = true ]; then
+    cleanup_all_stopped "$FORCE" "$DRY_RUN"
+else
+    # Show status
+    local stopped_count=$(docker ps -a --filter "status=exited" --filter "status=created" --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$stopped_count" -eq 0 ]; then
+        echo -e "${GREEN}✓${NC} No stopped containers\n"
+    else
+        echo -e "${YELLOW}Found $stopped_count stopped container(s)${NC}\n"
+        echo "Remove all with: ${GREEN}container-cleanup --all${NC}\n"
+    fi
+fi
+
+# Clean images if requested
+if [ "$CLEANUP_IMAGES" = "true" ]; then
+    cleanup_images "$FORCE" "$DRY_RUN"
+fi
+
+# Clean volumes if requested
+if [ "$CLEANUP_VOLUMES" = "true" ]; then
+    cleanup_volumes "$FORCE" "$DRY_RUN"
+fi
+
+# Final status
+if [ "$DRY_RUN" != "true" ] && [ "$CLEANUP_ALL" = "true" ]; then
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}    ✓ Cleanup Complete${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+    echo -e "${YELLOW}💡 Tips:${NC}"
+    echo -e "   View remaining:  ${GREEN}container-list --all${NC}"
+    echo -e "   Free more space: ${GREEN}docker system df${NC}"
+    echo -e "   Deep clean:      ${GREEN}docker system prune -a${NC}"
+    echo ""
+fi
