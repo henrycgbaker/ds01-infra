@@ -1,0 +1,6 @@
+# Symlink record for: container-create
+# Created: 2025-11-04T17:23:00+01:00
+# Source: /opt/ds01-infra/scripts/user/container-create
+# Target: /usr/local/bin/container-create
+
+ln -sf /opt/ds01-infra/scripts/user/container-create /usr/local/bin/container-create
