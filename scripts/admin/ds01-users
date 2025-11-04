@@ -1,0 +1,135 @@
+#!/bin/bash
+# DS01 Users - Show active users and their resource usage
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+show_usage() {
+    cat << EOF
+${BOLD}ds01-users${NC} - View active user activity and resource usage
+
+${CYAN}Usage:${NC}
+  ds01-users [options]
+
+${CYAN}Options:${NC}
+  -d, --detailed   Show detailed per-user resource breakdown
+  -h, --help       Show this help
+
+${CYAN}Examples:${NC}
+  ds01-users           # Show all active users
+  ds01-users -d        # Show detailed resource usage
+
+EOF
+}
+
+DETAILED=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -d|--detailed)
+            DETAILED=true
+            shift
+            ;;
+        -h|--help)
+            show_usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Error:${NC} Unknown option: $1"
+            show_usage
+            exit 1
+            ;;
+    esac
+done
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}              ACTIVE DS01 USERS${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Get list of users with containers
+USERS=$(docker ps --format "{{.Labels}}" | grep -o "aime.mlc.USER=[^,]*" | cut -d= -f2 | sort -u)
+
+if [ -z "$USERS" ]; then
+    echo -e "${YELLOW}No active users with running containers${NC}"
+    echo ""
+    exit 0
+fi
+
+# Iterate through each user
+echo -e "${BOLD}USER SUMMARY${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+for user in $USERS; do
+    # Get user's containers
+    CONTAINERS=$(docker ps --filter "label=aime.mlc.USER=$user" --format "{{.Names}}")
+    CONTAINER_COUNT=$(echo "$CONTAINERS" | wc -l)
+
+    # Get user's GPU allocation (if available)
+    if [ -f /var/lib/ds01/gpu-state.json ]; then
+        GPU_COUNT=$(python3 -c "
+import json
+import sys
+try:
+    with open('/var/lib/ds01/gpu-state.json') as f:
+        state = json.load(f)
+    gpus = state.get('gpus', {})
+    user_gpus = sum(1 for gpu in gpus.values() for c in gpu.get('containers', []) if c.get('user') == '$user')
+    print(user_gpus)
+except:
+    print(0)
+" 2>/dev/null || echo "0")
+    else
+        GPU_COUNT="?"
+    fi
+
+    echo -e "  ${BOLD}${user}${NC}"
+    echo -e "    Containers: ${GREEN}${CONTAINER_COUNT}${NC}"
+    if [ "$GPU_COUNT" != "?" ] && [ "$GPU_COUNT" -gt 0 ]; then
+        echo -e "    GPUs:       ${GREEN}${GPU_COUNT}${NC}"
+    fi
+
+    # Show container details if detailed mode
+    if [ "$DETAILED" = true ]; then
+        echo -e "    ${CYAN}Containers:${NC}"
+        for container in $CONTAINERS; do
+            # Get container stats
+            STATS=$(docker stats "$container" --no-stream --format "{{.CPUPerc}} {{.MemUsage}}" 2>/dev/null || echo "N/A N/A")
+            CPU=$(echo $STATS | awk '{print $1}')
+            MEM=$(echo $STATS | awk '{print $2}')
+
+            echo -e "      - ${BOLD}${container}${NC}"
+            echo -e "        CPU: $CPU | Memory: $MEM"
+        done
+    fi
+
+    echo ""
+done
+
+# Show logged-in users
+echo -e "${BOLD}LOGGED-IN USERS${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+who | while read -r line; do
+    echo -e "  $line"
+done
+echo ""
+
+# Show user processes (top CPU consumers)
+echo -e "${BOLD}TOP PROCESSES BY USER${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+ps aux --sort=-pcpu | head -11 | tail -10 | while read -r user pid cpu mem vsz rss tty stat start time command; do
+    echo -e "  ${BOLD}$user${NC} | CPU: ${cpu}% | Mem: ${mem}% | $command" | cut -c1-80
+done
+echo ""
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${BOLD}Tip:${NC} Use ${CYAN}ds01-users -d${NC} for detailed per-container stats"
+echo ""
