@@ -1,0 +1,6 @@
+# Symlink record for: container-list
+# Created: 2025-11-04T17:23:01+01:00
+# Source: /opt/ds01-infra/scripts/user/container-list
+# Target: /usr/local/bin/container-list
+
+ln -sf /opt/ds01-infra/scripts/user/container-list /usr/local/bin/container-list
