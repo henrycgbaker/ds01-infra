@@ -1,0 +1,6 @@
+# Symlink record for: container-run
+# Created: 2025-11-04T17:23:00+01:00
+# Source: /opt/ds01-infra/scripts/user/container-run
+# Target: /usr/local/bin/container-run
+
+ln -sf /opt/ds01-infra/scripts/user/container-run /usr/local/bin/container-run
