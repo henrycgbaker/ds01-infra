@@ -12,21 +12,19 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    cat << EOF
-${BOLD}ds01-users${NC} - View active user activity and resource usage
-
-${CYAN}Usage:${NC}
-  ds01-users [options]
-
-${CYAN}Options:${NC}
-  -d, --detailed   Show detailed per-user resource breakdown
-  -h, --help       Show this help
-
-${CYAN}Examples:${NC}
-  ds01-users           # Show all active users
-  ds01-users -d        # Show detailed resource usage
-
-EOF
+    echo -e "${BOLD}ds01-users${NC} - View active user activity and resource usage"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  ds01-users [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -d, --detailed   Show detailed per-user resource breakdown"
+    echo "  -h, --help       Show this help"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  ds01-users           # Show all active users"
+    echo "  ds01-users -d        # Show detailed resource usage"
+    echo ""
 }
 
 DETAILED=false

@@ -15,22 +15,20 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    cat << EOF
-${BOLD}project${NC} - Project management commands
-
-${CYAN}Usage:${NC}
-  project <subcommand> [args...]
-
-${CYAN}Subcommands:${NC}
-  ${BOLD}init${NC}        Create a new project with GitHub integration
-
-${CYAN}Examples:${NC}
-  project init
-  project init my-thesis
-
-${CYAN}Tip:${NC} You can also use hyphenated form: project-init
-
-EOF
+    echo -e "${BOLD}project${NC} - Project management commands"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  project <subcommand> [args...]"
+    echo ""
+    echo -e "${CYAN}Subcommands:${NC}"
+    echo -e "  ${BOLD}init${NC}        Create a new project with GitHub integration"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  project init"
+    echo "  project init my-thesis"
+    echo ""
+    echo -e "${CYAN}Tip:${NC} You can also use hyphenated form: project-init"
+    echo ""
 }
 
 # Get subcommand
