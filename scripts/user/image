@@ -1,5 +1,5 @@
 #!/bin/bash
-# Image command dispatcher
+# Docker Image Management - Main dispatcher for image operations
 # Usage: image <subcommand> [args...]
 
 set -e
@@ -15,24 +15,29 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    echo -e "${BOLD}image${NC} - Docker image management commands"
     echo ""
-    echo -e "${CYAN}Usage:${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BOLD}Docker Image Management${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
     echo "  image <subcommand> [args...]"
     echo ""
-    echo -e "${CYAN}Subcommands:${NC}"
-    echo -e "  ${BOLD}create${NC}      Create a custom Docker image"
-    echo -e "  ${BOLD}list${NC}        List available images"
-    echo -e "  ${BOLD}update${NC}      Rebuild/update an existing image"
-    echo -e "  ${BOLD}delete${NC}      Remove unused images"
+    echo -e "${BOLD}Subcommands:${NC}"
+    echo -e "  ${GREEN}create${NC}      Create a custom Docker image"
+    echo -e "  ${GREEN}list${NC}        List available images"
+    echo -e "  ${GREEN}update${NC}      Rebuild/update an existing image"
+    echo -e "  ${GREEN}delete${NC}      Remove unused images"
     echo ""
-    echo -e "${CYAN}Examples:${NC}"
-    echo "  image create"
-    echo "  image list"
-    echo "  image update my-image"
-    echo "  image delete old-image"
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ${CYAN}image create${NC}"
+    echo "  ${CYAN}image list${NC}"
+    echo "  ${CYAN}image update${NC} my-image"
+    echo "  ${CYAN}image delete${NC} old-image"
     echo ""
-    echo -e "${CYAN}Tip:${NC} You can also use hyphenated form: image-create, image-list, etc."
+    echo -e "${YELLOW}Tip:${NC} You can also use hyphenated form: ${CYAN}image-create${NC}, ${CYAN}image-list${NC}, etc."
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 

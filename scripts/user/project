@@ -1,5 +1,5 @@
 #!/bin/bash
-# Project command dispatcher
+# Project Management - Main dispatcher for project operations
 # Usage: project <subcommand> [args...]
 
 set -e
@@ -15,19 +15,24 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    echo -e "${BOLD}project${NC} - Project management commands"
     echo ""
-    echo -e "${CYAN}Usage:${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BOLD}Project Management${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
     echo "  project <subcommand> [args...]"
     echo ""
-    echo -e "${CYAN}Subcommands:${NC}"
-    echo -e "  ${BOLD}init${NC}        Create a new project with GitHub integration"
+    echo -e "${BOLD}Subcommands:${NC}"
+    echo -e "  ${GREEN}init${NC}        Create a new project with GitHub integration"
     echo ""
-    echo -e "${CYAN}Examples:${NC}"
-    echo "  project init"
-    echo "  project init my-thesis"
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ${CYAN}project init${NC}"
+    echo "  ${CYAN}project init${NC} my-thesis"
     echo ""
-    echo -e "${CYAN}Tip:${NC} You can also use hyphenated form: project-init"
+    echo -e "${YELLOW}Tip:${NC} You can also use hyphenated form: ${CYAN}project-init${NC}"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 
