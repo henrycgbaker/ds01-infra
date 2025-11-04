@@ -1,0 +1,365 @@
+#!/bin/bash
+# Create custom Docker image for DS01
+# Interactive wizard for building personalized ML/DL images
+
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+IMAGES_DIR="$HOME/docker-images"
+
+usage() {
+    cat << EOF
+${BOLD}Docker Image Creator${NC}
+
+${CYAN}Usage:${NC}
+  image-create [image-name] [options]
+
+${CYAN}Options:${NC}
+  -f, --framework FRAMEWORK   Base framework (pytorch, tensorflow, jax)
+  -t, --type TYPE            Use case type (cv, nlp, rl, ml, custom)
+  -p, --packages PACKAGES    Additional Python packages (space-separated)
+  -s, --system PACKAGES      System packages via apt (space-separated)
+  --no-build                 Create Dockerfile only, don't build
+  -h, --help                 Show this help message
+
+${CYAN}Frameworks:${NC}
+  pytorch      PyTorch 2.5.1 + CUDA 11.8 (default)
+  tensorflow   TensorFlow 2.14.0 + CUDA 11.8
+  jax          JAX + CUDA
+
+${CYAN}Use Case Types:${NC}
+  cv       Computer Vision (includes: timm, albumentations, opencv)
+  nlp      Natural Language Processing (includes: transformers, datasets)
+  rl       Reinforcement Learning (includes: gymnasium, stable-baselines3)
+  ml       General ML (scikit-learn, xgboost, lightgbm)
+  custom   Specify all packages manually
+
+${CYAN}Examples:${NC}
+  image-create my-cv-project                    # Interactive mode
+  image-create thesis-model -f pytorch -t cv    # CV project with PyTorch
+  image-create nlp-exp -f pytorch -t nlp -p "wandb optuna"  # With extra packages
+  image-create custom-setup -t custom --no-build  # Just create Dockerfile
+
+${CYAN}Quick Start:${NC}
+  1. Run: ${GREEN}image-create my-project${NC}
+  2. Answer prompts to customize
+  3. Wait 3-5 minutes for build
+  4. Create container: ${GREEN}container-create my-project${NC}
+
+EOF
+}
+
+get_base_image() {
+    local framework="$1"
+    case $framework in
+        tensorflow|tf)
+            echo "tensorflow/tensorflow:2.14.0-gpu"
+            ;;
+        jax)
+            echo "nvcr.io/nvidia/jax:23.10-py3"
+            ;;
+        pytorch-cpu)
+            echo "pytorch/pytorch:2.5.1-cpu"
+            ;;
+        *)
+            echo "pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
+            ;;
+    esac
+}
+
+get_usecase_packages() {
+    local usecase="$1"
+    case $usecase in
+        cv)
+            echo "timm albumentations opencv-python-headless torchvision"
+            ;;
+        nlp)
+            echo "transformers datasets tokenizers accelerate sentencepiece"
+            ;;
+        rl)
+            echo "gymnasium stable-baselines3 tensorboard"
+            ;;
+        ml)
+            echo "xgboost lightgbm catboost optuna"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+interactive_mode() {
+    echo -e "${CYAN}━━━ Image Creation Wizard ━━━${NC}\n"
+
+    # Image name
+    if [ -z "$IMAGE_NAME" ]; then
+        read -p "Image name (e.g., my-project, thesis-cv): " IMAGE_NAME
+        IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+    fi
+    FULL_IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+
+    # Check if exists
+    if docker images --format "{{.Repository}}" | grep -q "^${FULL_IMAGE_NAME}$"; then
+        echo -e "${YELLOW}⚠ Image '$FULL_IMAGE_NAME' already exists${NC}"
+        read -p "Overwrite? [y/N]: " OVERWRITE
+        if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+            echo "Cancelled."
+            exit 0
+        fi
+    fi
+
+    echo -e "\n${BOLD}Image will be named: ${CYAN}${FULL_IMAGE_NAME}${NC}\n"
+
+    # Framework
+    if [ -z "$FRAMEWORK" ]; then
+        echo "Select base framework:"
+        echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
+        echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
+        echo -e "  ${BOLD}3)${NC} JAX + CUDA"
+        echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
+        read -p "Choice [1-4, default: 1]: " FW_CHOICE
+
+        case $FW_CHOICE in
+            2) FRAMEWORK="tensorflow" ;;
+            3) FRAMEWORK="jax" ;;
+            4) FRAMEWORK="pytorch-cpu" ;;
+            *) FRAMEWORK="pytorch" ;;
+        esac
+    fi
+
+    # Use case
+    if [ -z "$USECASE" ]; then
+        echo -e "\n${BOLD}Select use case:${NC}"
+        echo -e "  ${BOLD}1)${NC} Computer Vision (timm, albumentations, opencv)"
+        echo -e "  ${BOLD}2)${NC} NLP (transformers, datasets, tokenizers)"
+        echo -e "  ${BOLD}3)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
+        echo -e "  ${BOLD}4)${NC} General ML (scikit-learn, xgboost, lightgbm) (${GREEN}default${NC})"
+        echo -e "  ${BOLD}5)${NC} Custom (specify everything)"
+        read -p "Choice [1-5, default: 4]: " UC_CHOICE
+
+        case $UC_CHOICE in
+            1) USECASE="cv" ;;
+            2) USECASE="nlp" ;;
+            3) USECASE="rl" ;;
+            5) USECASE="custom" ;;
+            *) USECASE="ml" ;;
+        esac
+    fi
+
+    # Additional packages
+    if [ -z "$ADDITIONAL_PACKAGES" ]; then
+        echo -e "\n${BOLD}Additional Python packages?${NC} (space-separated, or press Enter to skip)"
+        echo "Examples: wandb optuna pytorch-lightning tensorboardX"
+        read -p "> " ADDITIONAL_PACKAGES
+    fi
+
+    # System packages
+    if [ -z "$SYSTEM_PACKAGES" ]; then
+        echo -e "\n${BOLD}System packages (apt)?${NC} (or press Enter to skip)"
+        echo "Examples: htop tmux vim git-lfs"
+        read -p "> " SYSTEM_PACKAGES
+    fi
+}
+
+create_dockerfile() {
+    local image_name="$1"
+    local framework="$2"
+    local usecase="$3"
+    local additional="$4"
+    local system_pkgs="$5"
+
+    local base_image=$(get_base_image "$framework")
+    local usecase_packages=$(get_usecase_packages "$usecase")
+
+    mkdir -p "$IMAGES_DIR"
+    local dockerfile="$IMAGES_DIR/${image_name}.Dockerfile"
+
+    cat > "$dockerfile" << DOCKERFILEEOF
+# DS01 Custom Image: $image_name
+# Created: $(date)
+# Framework: $framework
+# Use case: $usecase
+# Author: $USERNAME
+
+FROM $base_image
+
+LABEL maintainer="$USERNAME"
+LABEL ds01.image="$image_name"
+LABEL ds01.framework="$framework"
+LABEL ds01.created="$(date -Iseconds)"
+
+WORKDIR /workspace
+
+# System packages
+RUN apt-get update && apt-get install -y --no-install-recommends \\
+    git \\
+    curl \\
+    wget \\
+    vim \\
+    htop \\
+    $([ -n "$system_pkgs" ] && echo "$system_pkgs \\")
+    && rm -rf /var/lib/apt/lists/*
+
+# Core Python packages
+RUN pip install --no-cache-dir \\
+    jupyter \\
+    jupyterlab \\
+    ipykernel \\
+    ipywidgets \\
+    numpy \\
+    pandas \\
+    matplotlib \\
+    seaborn \\
+    scikit-learn \\
+    scipy \\
+    tqdm \\
+    tensorboard \\
+    Pillow
+
+$([ -n "$usecase_packages" ] && echo "# Use case specific packages
+RUN pip install --no-cache-dir $usecase_packages")
+
+$([ -n "$additional" ] && echo "# Additional user packages
+RUN pip install --no-cache-dir $additional")
+
+# Configure Jupyter
+RUN jupyter lab --generate-config && \\
+    echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \\
+    echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_lab_config.py && \\
+    echo "c.ServerApp.open_browser = False" >> /root/.jupyter/jupyter_lab_config.py && \\
+    echo "c.ServerApp.token = ''" >> /root/.jupyter/jupyter_lab_config.py && \\
+    echo "c.ServerApp.password = ''" >> /root/.jupyter/jupyter_lab_config.py
+
+# IPython kernel
+RUN python -m ipykernel install --user \\
+    --name=$image_name \\
+    --display-name="$image_name ($framework)"
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
+ENV HF_HOME=/workspace/.cache/huggingface
+ENV TORCH_HOME=/workspace/.cache/torch
+ENV MPLCONFIGDIR=/workspace/.cache/matplotlib
+
+CMD ["/bin/bash"]
+DOCKERFILEEOF
+
+    echo "$dockerfile"
+}
+
+# Parse arguments
+IMAGE_NAME=""
+FRAMEWORK=""
+USECASE=""
+ADDITIONAL_PACKAGES=""
+SYSTEM_PACKAGES=""
+NO_BUILD=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -f|--framework)
+            FRAMEWORK="$2"
+            shift 2
+            ;;
+        -t|--type)
+            USECASE="$2"
+            shift 2
+            ;;
+        -p|--packages)
+            ADDITIONAL_PACKAGES="$2"
+            shift 2
+            ;;
+        -s|--system)
+            SYSTEM_PACKAGES="$2"
+            shift 2
+            ;;
+        --no-build)
+            NO_BUILD=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$IMAGE_NAME" ]; then
+                IMAGE_NAME="$1"
+            else
+                echo -e "${RED}Multiple image names specified${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Interactive mode if missing info
+if [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
+    interactive_mode
+else
+    # Non-interactive: sanitize image name
+    IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+    FULL_IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+fi
+
+# Create Dockerfile
+echo -e "\n${CYAN}Creating Dockerfile...${NC}"
+DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES")
+echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
+
+# Build image
+if [ "$NO_BUILD" = false ]; then
+    echo -e "${CYAN}Building image... (this takes 3-5 minutes)${NC}\n"
+
+    if docker build -t "$FULL_IMAGE_NAME" -f "$DOCKERFILE" "$IMAGES_DIR/"; then
+        echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}${BOLD}✓ Image built successfully!${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+        # Save metadata
+        mkdir -p "$HOME/ds01-config/images"
+        cat > "$HOME/ds01-config/images/${FULL_IMAGE_NAME}.info" << INFOEOF
+Image: $FULL_IMAGE_NAME
+Framework: $FRAMEWORK
+Use Case: $USECASE
+Created: $(date)
+Dockerfile: $DOCKERFILE
+
+Packages:
+$([ -n "$(get_usecase_packages $USECASE)" ] && echo "- Use case: $(get_usecase_packages $USECASE)")
+$([ -n "$ADDITIONAL_PACKAGES" ] && echo "- Additional: $ADDITIONAL_PACKAGES")
+$([ -n "$SYSTEM_PACKAGES" ] && echo "- System: $SYSTEM_PACKAGES")
+INFOEOF
+
+        echo -e "${BOLD}Next Steps:${NC}"
+        echo -e "  1. List images:       ${GREEN}image-list${NC}"
+        echo -e "  2. Create container:  ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo -e "  3. Start container:   ${GREEN}container-run $IMAGE_NAME${NC}"
+        echo ""
+        echo -e "${YELLOW}💡 Update packages: Edit ${BLUE}$DOCKERFILE${NC}"
+        echo -e "   ${YELLOW}Then rebuild: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
+    else
+        echo -e "\n${RED}✗ Build failed${NC}"
+        echo "Check Dockerfile: $DOCKERFILE"
+        exit 1
+    fi
+else
+    echo -e "${YELLOW}Build skipped (--no-build)${NC}"
+    echo "Build later with: ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $IMAGES_DIR/${NC}"
+fi
+
+echo ""
