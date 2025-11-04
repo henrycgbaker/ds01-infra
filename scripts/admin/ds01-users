@@ -12,18 +12,23 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    echo -e "${BOLD}ds01-users${NC} - View active user activity and resource usage"
     echo ""
-    echo -e "${CYAN}Usage:${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BOLD}Active User Management${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
     echo "  ds01-users [options]"
     echo ""
-    echo -e "${CYAN}Options:${NC}"
+    echo -e "${BOLD}Options:${NC}"
     echo "  -d, --detailed   Show detailed per-user resource breakdown"
     echo "  -h, --help       Show this help"
     echo ""
-    echo -e "${CYAN}Examples:${NC}"
-    echo "  ds01-users           # Show all active users"
-    echo "  ds01-users -d        # Show detailed resource usage"
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ${CYAN}ds01-users${NC}           # Show all active users"
+    echo "  ${CYAN}ds01-users -d${NC}        # Show detailed resource usage"
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 

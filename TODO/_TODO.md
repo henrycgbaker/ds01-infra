@@ -144,54 +144,10 @@
 - [ ] make sure the commands are all reachable not just be but by all users 
 - [ ] sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh 
 
-- are all the commands accessible to all users on the server, or just me?
-- for all, there's something wrong with the colour formatting, e.g. 
-```
-(base) datasciencelab@ds01:/opt/ds01-infra$ container help
-\033[1mcontainer\033[0m - Container management commands
-
-\033[0;36mUsage:\033[0m
-  container <subcommand> [args...]
-
-\033[0;36mSubcommands:\033[0m
-  \033[1mcreate\033[0m      Create a new container
-  \033[1mrun\033[0m         Start and attach to a container
-  \033[1mstop\033[0m        Stop a running container
-  \033[1mexit\033[0m        Exit container (without stopping)
-  \033[1mlist\033[0m        List your containers
-  \033[1mstats\033[0m       Show resource usage statistics
-  \033[1mcleanup\033[0m     Remove stopped containers
-
-\033[0;36mExamples:\033[0m
-  container create my-project pytorch
-  container list
-  container run my-project
-  container stop my-project
-  container stats
-
-\033[0;36mTip:\033[0m You can also use hyphenated form: container-create, container-list, etc.
-
-(base) datasciencelab@ds01:/opt/ds01-infra$ image list
-━━━ Your Docker Images ━━━
-
-permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Head "http://%2Fvar%2Frun%2Fdocker.sock/_ping": dial unix /var/run/docker.sock: connect: permission denied
-permission denied while trying to connect to the Docker daemon socket at unix:///var/run/docker.sock: Head "http://%2Fvar%2Frun%2Fdocker.sock/_ping": dial unix /var/run/docker.sock: connect: permission denied
-
-No images found
-
-Create your first image with: \033[0;32mimage-create my-project\033[0m
-(base) datasciencelab@ds01:/opt/ds01-infra$ container stats
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    Container Resource Usage
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-No running containers found
-
-View all containers: \033[0;32mcontainer-list --all\033[0m
-```
-sometimes it works, sometimes it doesn't...
 
 - [ ] use .link files for all the other mirrors?? what are they?
+
+- [ ] delete all setup scripts (in the scripts/system)
 
 
 # Partitioning & GPU allocation

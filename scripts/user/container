@@ -1,5 +1,5 @@
 #!/bin/bash
-# Container command dispatcher
+# Container Management - Main dispatcher for container operations
 # Usage: container <subcommand> [args...]
 
 set -e
@@ -15,28 +15,33 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    echo -e "${BOLD}container${NC} - Container management commands"
     echo ""
-    echo -e "${CYAN}Usage:${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "  ${BOLD}Container Management${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
     echo "  container <subcommand> [args...]"
     echo ""
-    echo -e "${CYAN}Subcommands:${NC}"
-    echo -e "  ${BOLD}create${NC}      Create a new container"
-    echo -e "  ${BOLD}run${NC}         Start and attach to a container"
-    echo -e "  ${BOLD}stop${NC}        Stop a running container"
-    echo -e "  ${BOLD}exit${NC}        Exit container (without stopping)"
-    echo -e "  ${BOLD}list${NC}        List your containers"
-    echo -e "  ${BOLD}stats${NC}       Show resource usage statistics"
-    echo -e "  ${BOLD}cleanup${NC}     Remove stopped containers"
+    echo -e "${BOLD}Subcommands:${NC}"
+    echo -e "  ${GREEN}create${NC}      Create a new container"
+    echo -e "  ${GREEN}run${NC}         Start and attach to a container"
+    echo -e "  ${GREEN}stop${NC}        Stop a running container"
+    echo -e "  ${GREEN}exit${NC}        Exit container (without stopping)"
+    echo -e "  ${GREEN}list${NC}        List your containers"
+    echo -e "  ${GREEN}stats${NC}       Show resource usage statistics"
+    echo -e "  ${GREEN}cleanup${NC}     Remove stopped containers"
     echo ""
-    echo -e "${CYAN}Examples:${NC}"
-    echo "  container create my-project pytorch"
-    echo "  container list"
-    echo "  container run my-project"
-    echo "  container stop my-project"
-    echo "  container stats"
+    echo -e "${BOLD}Examples:${NC}"
+    echo "  ${CYAN}container create${NC} my-project pytorch"
+    echo "  ${CYAN}container list${NC}"
+    echo "  ${CYAN}container run${NC} my-project"
+    echo "  ${CYAN}container stop${NC} my-project"
+    echo "  ${CYAN}container stats${NC}"
     echo ""
-    echo -e "${CYAN}Tip:${NC} You can also use hyphenated form: container-create, container-list, etc."
+    echo -e "${YELLOW}Tip:${NC} You can also use hyphenated form: ${CYAN}container-create${NC}, ${CYAN}container-list${NC}, etc."
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 }
 
