@@ -25,78 +25,76 @@ get_idle_timeout() {
     fi
 }
 
-cat << EOF
-${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-${CYAN}${BOLD}    Exit Container (Without Stopping)${NC}
-${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}
-
-${BOLD}When attached to a container, use:${NC}
-
-  ${GREEN}${BOLD}Ctrl+P, Ctrl+Q${NC}  →  Detach and leave container running
-
-${DIM}────────────────────────────────────────────────${NC}
-
-${BOLD}What happens:${NC}
-  ${GREEN}✓${NC} Container keeps running in background
-  ${GREEN}✓${NC} All processes continue (training, Jupyter, etc.)
-  ${GREEN}✓${NC} You can reconnect anytime
-
-${BOLD}Auto-stop timeout:${NC}
-  ${YELLOW}$(get_idle_timeout "$USERNAME")${NC} of idle GPU time
-  ${DIM}(After this period of no GPU activity, container auto-stops)${NC}
-
-${DIM}────────────────────────────────────────────────${NC}
-
-${BOLD}Reconnect later:${NC}
-  ${GREEN}container-run <name>${NC}
-
-${BOLD}Stop manually:${NC}
-  ${GREEN}container-stop <name>${NC}
-
-${BOLD}Check status:${NC}
-  ${GREEN}container-list${NC}
-
-${DIM}────────────────────────────────────────────────${NC}
-
-${BOLD}Comparison:${NC}
-
-  ${GREEN}Ctrl+P, Ctrl+Q${NC}  →  Exit without stopping
-                      ${DIM}(Container keeps running)${NC}
-
-  ${YELLOW}exit${NC} or ${YELLOW}Ctrl+D${NC}  →  Exit and stop container
-                      ${DIM}(Container terminates)${NC}
-
-${DIM}────────────────────────────────────────────────${NC}
-
-${YELLOW}💡 Best Practices:${NC}
-
-  • ${BOLD}For long training:${NC} Use ${GREEN}Ctrl+P, Ctrl+Q${NC} to detach
-    Your job continues running
-
-  • ${BOLD}Quick tasks:${NC} Just ${YELLOW}exit${NC} when done
-    Saves resources for others
-
-  • ${BOLD}Check before closing:${NC} Use ${GREEN}container-list${NC}
-    See what's still running
-
-${DIM}────────────────────────────────────────────────${NC}
-
-${BOLD}Examples:${NC}
-
-  ${DIM}# Start long training${NC}
-  container-run my-project
-  ${DIM}(in container)${NC} python train.py --epochs 100
-  ${GREEN}Ctrl+P, Ctrl+Q${NC}  ${DIM}# Detach, training continues${NC}
-
-  ${DIM}# Check on it later${NC}
-  container-list  ${DIM}# See it's still running${NC}
-  container-run my-project  ${DIM}# Reconnect${NC}
-
-${DIM}────────────────────────────────────────────────${NC}
-
-${RED}⚠ Important:${NC}
-  Containers are ${BOLD}not${NC} VMs - they share server resources
-  Please stop containers when not in use:
-    ${GREEN}container-stop <name>${NC}
-
-EOF
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}${BOLD}    Exit Container (Without Stopping)${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${BOLD}When attached to a container, use:${NC}"
+echo ""
+echo -e "  ${GREEN}${BOLD}Ctrl+P, Ctrl+Q${NC}  →  Detach and leave container running"
+echo ""
+echo -e "${DIM}────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${BOLD}What happens:${NC}"
+echo -e "  ${GREEN}✓${NC} Container keeps running in background"
+echo -e "  ${GREEN}✓${NC} All processes continue (training, Jupyter, etc.)"
+echo -e "  ${GREEN}✓${NC} You can reconnect anytime"
+echo ""
+echo -e "${BOLD}Auto-stop timeout:${NC}"
+echo -e "  ${YELLOW}$(get_idle_timeout "$USERNAME")${NC} of idle GPU time"
+echo -e "  ${DIM}(After this period of no GPU activity, container auto-stops)${NC}"
+echo ""
+echo -e "${DIM}────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${BOLD}Reconnect later:${NC}"
+echo -e "  ${GREEN}container-run <name>${NC}"
+echo ""
+echo -e "${BOLD}Stop manually:${NC}"
+echo -e "  ${GREEN}container-stop <name>${NC}"
+echo ""
+echo -e "${BOLD}Check status:${NC}"
+echo -e "  ${GREEN}container-list${NC}"
+echo ""
+echo -e "${DIM}────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${BOLD}Comparison:${NC}"
+echo ""
+echo -e "  ${GREEN}Ctrl+P, Ctrl+Q${NC}  →  Exit without stopping"
+echo -e "                      ${DIM}(Container keeps running)${NC}"
+echo ""
+echo -e "  ${YELLOW}exit${NC} or ${YELLOW}Ctrl+D${NC}  →  Exit and stop container"
+echo -e "                      ${DIM}(Container terminates)${NC}"
+echo ""
+echo -e "${DIM}────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${YELLOW}💡 Best Practices:${NC}"
+echo ""
+echo -e "  • ${BOLD}For long training:${NC} Use ${GREEN}Ctrl+P, Ctrl+Q${NC} to detach"
+echo "    Your job continues running"
+echo ""
+echo -e "  • ${BOLD}Quick tasks:${NC} Just ${YELLOW}exit${NC} when done"
+echo "    Saves resources for others"
+echo ""
+echo -e "  • ${BOLD}Check before closing:${NC} Use ${GREEN}container-list${NC}"
+echo "    See what's still running"
+echo ""
+echo -e "${DIM}────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${BOLD}Examples:${NC}"
+echo ""
+echo -e "  ${DIM}# Start long training${NC}"
+echo "  container-run my-project"
+echo -e "  ${DIM}(in container)${NC} python train.py --epochs 100"
+echo -e "  ${GREEN}Ctrl+P, Ctrl+Q${NC}  ${DIM}# Detach, training continues${NC}"
+echo ""
+echo -e "  ${DIM}# Check on it later${NC}"
+echo -e "  container-list  ${DIM}# See it's still running${NC}"
+echo -e "  container-run my-project  ${DIM}# Reconnect${NC}"
+echo ""
+echo -e "${DIM}────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${RED}⚠ Important:${NC}"
+echo -e "  Containers are ${BOLD}not${NC} VMs - they share server resources"
+echo "  Please stop containers when not in use:"
+echo -e "    ${GREEN}container-stop <name>${NC}"
+echo ""

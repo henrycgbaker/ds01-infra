@@ -141,13 +141,14 @@
 
 
 # Wizards 
-- [ ] make sure the commands are all reachable not just be but by all users 
-- [ ] sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh 
+- [x] make sure the commands are all reachable not just be but by all users 
+- [x] sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh 
 
 
 - [ ] use .link files for all the other mirrors?? what are they?
 
-- [ ] delete all setup scripts (in the scripts/system)
+- [ ] delete all setup scripts (in the scripts/system
+)
 
 
 # Partitioning & GPU allocation

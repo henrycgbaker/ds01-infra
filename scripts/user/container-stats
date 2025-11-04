@@ -14,35 +14,34 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 
 usage() {
-    cat << EOF
-${BOLD}Container Resource Statistics${NC}
-
-${CYAN}Usage:${NC}
-  container-stats [name] [options]
-
-${CYAN}Arguments:${NC}
-  name              Specific container to show (optional)
-
-${CYAN}Options:${NC}
-  -w, --watch       Continuous monitoring (refresh every 2s)
-  -g, --gpu         Show GPU stats (if available)
-  --no-trunc        Don't truncate output
-  -h, --help        Show this help message
-
-${CYAN}Examples:${NC}
-  container-stats               # Show all your containers
-  container-stats my-project    # Show specific container
-  container-stats --watch       # Live monitoring
-  container-stats --gpu         # Include GPU stats
-
-${CYAN}Metrics shown:${NC}
-  • CPU usage (%)
-  • Memory usage / limit
-  • Network I/O
-  • Block I/O
-  • PIDs (processes)
-
-EOF
+    echo ""
+    echo -e "${BOLD}Container Resource Statistics${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-stats [name] [options]"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  name              Specific container to show (optional)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -w, --watch       Continuous monitoring (refresh every 2s)"
+    echo "  -g, --gpu         Show GPU stats (if available)"
+    echo "  --no-trunc        Don't truncate output"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  container-stats               # Show all your containers"
+    echo "  container-stats my-project    # Show specific container"
+    echo "  container-stats --watch       # Live monitoring"
+    echo "  container-stats --gpu         # Include GPU stats"
+    echo ""
+    echo -e "${CYAN}Metrics shown:${NC}"
+    echo "  • CPU usage (%)"
+    echo "  • Memory usage / limit"
+    echo "  • Network I/O"
+    echo "  • Block I/O"
+    echo "  • PIDs (processes)"
+    echo ""
 }
 
 get_color_for_percentage() {

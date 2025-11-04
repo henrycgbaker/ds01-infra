@@ -16,26 +16,25 @@ KEY_FILE="$SSH_DIR/id_ed25519"
 SERVER_IP=$(hostname -I | awk '{print $1}')
 
 usage() {
-    cat << EOF
-${BOLD}SSH Configuration Manager${NC}
-
-${CYAN}Usage:${NC}
-  ssh-config [command]
-
-${CYAN}Commands:${NC}
-  generate    Generate new SSH keys (ed25519)
-  test        Test SSH connection to localhost
-  show        Display public key and connection info
-  vscode      Show VS Code Remote-SSH setup instructions
-  help        Show this help message
-
-${CYAN}Examples:${NC}
-  ssh-config generate    # Create new SSH keys
-  ssh-config test        # Test if SSH is working
-  ssh-config show        # Display your public key
-  ssh-config vscode      # Get VS Code setup instructions
-
-EOF
+    echo ""
+    echo -e "${BOLD}SSH Configuration Manager${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  ssh-config [command]"
+    echo ""
+    echo -e "${CYAN}Commands:${NC}"
+    echo "  generate    Generate new SSH keys (ed25519)"
+    echo "  test        Test SSH connection to localhost"
+    echo "  show        Display public key and connection info"
+    echo "  vscode      Show VS Code Remote-SSH setup instructions"
+    echo "  help        Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  ssh-config generate    # Create new SSH keys"
+    echo "  ssh-config test        # Test if SSH is working"
+    echo "  ssh-config show        # Display your public key"
+    echo "  ssh-config vscode      # Get VS Code setup instructions"
+    echo ""
 }
 
 generate_keys() {
@@ -123,48 +122,46 @@ show_key() {
 
 show_vscode_setup() {
     echo -e "${CYAN}━━━ VS Code Remote-SSH Setup ━━━${NC}\n"
-
-    cat << VSCODEEOF
-${BOLD}Step 1: Install Extensions${NC}
-  In VS Code, install:
-  • Remote - SSH
-  • Python
-  • Jupyter
-  • Docker (optional)
-
-${BOLD}Step 2: Configure SSH Connection${NC}
-  1. Open Command Palette (${CYAN}Cmd/Ctrl+Shift+P${NC})
-  2. Type: ${CYAN}Remote-SSH: Open SSH Configuration File${NC}
-  3. Select your config file (usually ~/.ssh/config)
-  4. Add this entry:
-
-  ${BLUE}Host ds01
-      HostName ${SERVER_IP}
-      User ${USERNAME}
-      ForwardAgent yes
-      ServerAliveInterval 60
-      ServerAliveCountMax 3${NC}
-
-${BOLD}Step 3: Connect${NC}
-  1. Open Command Palette (${CYAN}Cmd/Ctrl+Shift+P${NC})
-  2. Type: ${CYAN}Remote-SSH: Connect to Host${NC}
-  3. Select ${CYAN}ds01${NC}
-  4. Wait for connection to establish
-
-${BOLD}Step 4: Open Your Workspace${NC}
-  • File → Open Folder
-  • Navigate to: ${CYAN}/home/${USERNAME}/workspace${NC}
-
-${BOLD}Step 5: Work in Container${NC}
-  Open terminal in VS Code and run:
-  ${GREEN}container-run <container-name>${NC}
-
-${YELLOW}💡 Troubleshooting:${NC}
-  • Test connection first: ${CYAN}ssh-config test${NC}
-  • View your key: ${CYAN}ssh-config show${NC}
-  • Regenerate keys: ${CYAN}ssh-config generate${NC}
-
-VSCODEEOF
+    echo ""
+    echo -e "${BOLD}Step 1: Install Extensions${NC}"
+    echo "  In VS Code, install:"
+    echo "  • Remote - SSH"
+    echo "  • Python"
+    echo "  • Jupyter"
+    echo "  • Docker (optional)"
+    echo ""
+    echo -e "${BOLD}Step 2: Configure SSH Connection${NC}"
+    echo -e "  1. Open Command Palette (${CYAN}Cmd/Ctrl+Shift+P${NC})"
+    echo -e "  2. Type: ${CYAN}Remote-SSH: Open SSH Configuration File${NC}"
+    echo "  3. Select your config file (usually ~/.ssh/config)"
+    echo "  4. Add this entry:"
+    echo ""
+    echo -e "  ${BLUE}Host ds01"
+    echo "      HostName ${SERVER_IP}"
+    echo "      User ${USERNAME}"
+    echo "      ForwardAgent yes"
+    echo "      ServerAliveInterval 60"
+    echo -e "      ServerAliveCountMax 3${NC}"
+    echo ""
+    echo -e "${BOLD}Step 3: Connect${NC}"
+    echo -e "  1. Open Command Palette (${CYAN}Cmd/Ctrl+Shift+P${NC})"
+    echo -e "  2. Type: ${CYAN}Remote-SSH: Connect to Host${NC}"
+    echo -e "  3. Select ${CYAN}ds01${NC}"
+    echo "  4. Wait for connection to establish"
+    echo ""
+    echo -e "${BOLD}Step 4: Open Your Workspace${NC}"
+    echo "  • File → Open Folder"
+    echo -e "  • Navigate to: ${CYAN}/home/${USERNAME}/workspace${NC}"
+    echo ""
+    echo -e "${BOLD}Step 5: Work in Container${NC}"
+    echo "  Open terminal in VS Code and run:"
+    echo -e "  ${GREEN}container-run <container-name>${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Troubleshooting:${NC}"
+    echo -e "  • Test connection first: ${CYAN}ssh-config test${NC}"
+    echo -e "  • View your key: ${CYAN}ssh-config show${NC}"
+    echo -e "  • Regenerate keys: ${CYAN}ssh-config generate${NC}"
+    echo ""
 }
 
 # Main command router

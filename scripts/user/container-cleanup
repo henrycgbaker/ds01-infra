@@ -14,52 +14,51 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 
 usage() {
-    cat << EOF
-${BOLD}Container Cleanup${NC}
-
-${CYAN}Usage:${NC}
-  container-cleanup [name] [options]
-
-${CYAN}Arguments:${NC}
-  name              Specific container to remove (optional)
-
-${CYAN}Options:${NC}
-  -a, --all         Remove ALL your stopped containers
-  -i, --images      Also remove unused images
-  -f, --force       Skip confirmation prompts
-  -v, --volumes     Also remove anonymous volumes
-  --dry-run         Show what would be removed
-  -h, --help        Show this help message
-
-${CYAN}What gets cleaned:${NC}
-  • Stopped containers
-  • Unused images (with --images)
-  • Dangling volumes (with --volumes)
-
-${CYAN}What is preserved:${NC}
-  ${GREEN}✓${NC} Running containers
-  ${GREEN}✓${NC} Your workspace files
-  ${GREEN}✓${NC} Container configurations
-  ${GREEN}✓${NC} Dockerfiles
-
-${CYAN}Examples:${NC}
-  ${DIM}# Remove specific stopped container${NC}
-  container-cleanup my-old-project
-
-  ${DIM}# Remove all stopped containers${NC}
-  container-cleanup --all
-
-  ${DIM}# Clean containers and unused images${NC}
-  container-cleanup --all --images
-
-  ${DIM}# See what would be removed${NC}
-  container-cleanup --all --dry-run
-
-${RED}⚠ Important:${NC}
-  This permanently removes containers.
-  Recreate with: ${GREEN}container-create <name>${NC}
-
-EOF
+    echo ""
+    echo -e "${BOLD}Container Cleanup${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-cleanup [name] [options]"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  name              Specific container to remove (optional)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -a, --all         Remove ALL your stopped containers"
+    echo "  -i, --images      Also remove unused images"
+    echo "  -f, --force       Skip confirmation prompts"
+    echo "  -v, --volumes     Also remove anonymous volumes"
+    echo "  --dry-run         Show what would be removed"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo -e "${CYAN}What gets cleaned:${NC}"
+    echo "  • Stopped containers"
+    echo "  • Unused images (with --images)"
+    echo "  • Dangling volumes (with --volumes)"
+    echo ""
+    echo -e "${CYAN}What is preserved:${NC}"
+    echo -e "  ${GREEN}✓${NC} Running containers"
+    echo -e "  ${GREEN}✓${NC} Your workspace files"
+    echo -e "  ${GREEN}✓${NC} Container configurations"
+    echo -e "  ${GREEN}✓${NC} Dockerfiles"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Remove specific stopped container${NC}"
+    echo "  container-cleanup my-old-project"
+    echo ""
+    echo -e "  ${DIM}# Remove all stopped containers${NC}"
+    echo "  container-cleanup --all"
+    echo ""
+    echo -e "  ${DIM}# Clean containers and unused images${NC}"
+    echo "  container-cleanup --all --images"
+    echo ""
+    echo -e "  ${DIM}# See what would be removed${NC}"
+    echo "  container-cleanup --all --dry-run"
+    echo ""
+    echo -e "${RED}⚠ Important:${NC}"
+    echo "  This permanently removes containers."
+    echo -e "  Recreate with: ${GREEN}container-create <name>${NC}"
+    echo ""
 }
 
 format_size() {
