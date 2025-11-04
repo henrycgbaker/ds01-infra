@@ -1,0 +1,108 @@
+#!/bin/bash
+# alias-list - List all available DS01 command aliases and symlinks
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}              DS01 COMMAND REFERENCE${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# User Commands
+echo -e "${BOLD}USER COMMANDS${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+echo ""
+
+echo -e "${BOLD}Setup & Configuration:${NC}"
+echo -e "  ${GREEN}user-setup${NC}           Complete onboarding wizard"
+echo -e "  ${GREEN}ssh-config${NC}           Configure/regenerate SSH keys"
+echo ""
+
+echo -e "${BOLD}Container Management:${NC}"
+echo -e "  ${GREEN}container create${NC}     Create a new container"
+echo -e "  ${GREEN}container run${NC}        Start and attach to container"
+echo -e "  ${GREEN}container stop${NC}       Stop a running container"
+echo -e "  ${GREEN}container exit${NC}       Exit container (without stopping)"
+echo -e "  ${GREEN}container list${NC}       List your containers"
+echo -e "  ${GREEN}container stats${NC}      Resource usage statistics"
+echo -e "  ${GREEN}container cleanup${NC}    Remove stopped containers"
+echo ""
+echo -e "  ${YELLOW}Hyphenated forms also work:${NC} container-create, container-list, etc."
+echo ""
+
+echo -e "${BOLD}Image Management:${NC}"
+echo -e "  ${GREEN}image create${NC}         Create custom Docker image"
+echo -e "  ${GREEN}image list${NC}           List available images"
+echo -e "  ${GREEN}image update${NC}         Rebuild/update an image"
+echo -e "  ${GREEN}image delete${NC}         Remove unused images"
+echo ""
+
+echo -e "${BOLD}Project Management:${NC}"
+echo -e "  ${GREEN}project init${NC}         Create new project with GitHub"
+echo ""
+
+# Admin Commands
+echo -e "${BOLD}ADMIN COMMANDS${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+echo ""
+
+echo -e "  ${GREEN}ds01-dashboard${NC}       System overview dashboard"
+echo -e "  ${GREEN}ds01-logs${NC}            View infrastructure logs"
+echo -e "  ${GREEN}ds01-users${NC}           See active users and processes"
+echo -e "  ${GREEN}alias-list${NC}           List all commands (this screen)"
+echo -e "  ${GREEN}alias-create${NC}         Create custom command alias"
+echo ""
+
+# System Symlinks
+echo -e "${BOLD}ACTIVE SYMLINKS IN /usr/local/bin${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+if [ -d /usr/local/bin ]; then
+    DS01_LINKS=$(ls -la /usr/local/bin/ 2>/dev/null | grep "ds01-infra" | wc -l)
+    if [ "$DS01_LINKS" -gt 0 ]; then
+        echo ""
+        ls -la /usr/local/bin/ | grep "ds01-infra" | while read -r line; do
+            link_name=$(echo "$line" | awk '{print $9}')
+            link_target=$(echo "$line" | awk '{print $11}')
+            echo -e "  ${GREEN}$link_name${NC} → $link_target"
+        done
+    else
+        echo -e "${YELLOW}  No DS01 symlinks found in /usr/local/bin${NC}"
+        echo -e "  Run: ${CYAN}sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh${NC}"
+    fi
+else
+    echo -e "${YELLOW}  /usr/local/bin not accessible${NC}"
+fi
+echo ""
+
+# Custom Aliases
+echo -e "${BOLD}CUSTOM USER ALIASES${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+if [ -f ~/.bash_aliases ] && grep -q "ds01" ~/.bash_aliases 2>/dev/null; then
+    echo ""
+    grep "ds01\|container\|image\|project" ~/.bash_aliases | while read -r line; do
+        echo -e "  $line"
+    done
+else
+    echo -e "${YELLOW}  No custom aliases found${NC}"
+    echo -e "  Create one with: ${CYAN}alias-create${NC}"
+fi
+echo ""
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${BOLD}Tips:${NC}"
+echo "  • All container/image commands work in both forms:"
+echo "    ${CYAN}container list${NC} or ${CYAN}container-list${NC}"
+echo "  • Run any command with ${CYAN}--help${NC} for detailed usage"
+echo "  • Admin commands require appropriate permissions"
+echo ""

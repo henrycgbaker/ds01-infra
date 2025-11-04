@@ -1,0 +1,113 @@
+#!/bin/bash
+# alias-create - Create custom command aliases
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+show_usage() {
+    cat << EOF
+${BOLD}alias-create${NC} - Create custom command aliases
+
+${CYAN}Usage:${NC}
+  alias-create
+  alias-create <alias-name> <command>
+
+${CYAN}Interactive Mode:${NC}
+  Run without arguments for guided setup
+
+${CYAN}Direct Mode:${NC}
+  alias-create cls 'container list'
+  alias-create gstat 'nvidia-smi'
+
+${CYAN}Examples:${NC}
+  alias-create                    # Interactive wizard
+  alias-create mycontainers 'container list'
+  alias-create gpus 'nvidia-smi'
+
+EOF
+}
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    show_usage
+    exit 0
+fi
+
+ALIAS_FILE=~/.bash_aliases
+
+# Ensure alias file exists and is sourced
+if [ ! -f "$ALIAS_FILE" ]; then
+    touch "$ALIAS_FILE"
+fi
+
+if ! grep -q ".bash_aliases" ~/.bashrc 2>/dev/null; then
+    echo "" >> ~/.bashrc
+    echo "# Source custom aliases" >> ~/.bashrc
+    echo "if [ -f ~/.bash_aliases ]; then" >> ~/.bashrc
+    echo "    . ~/.bash_aliases" >> ~/.bashrc
+    echo "fi" >> ~/.bashrc
+fi
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}              CREATE CUSTOM ALIAS${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Check if direct mode (arguments provided)
+if [ $# -eq 2 ]; then
+    ALIAS_NAME="$1"
+    ALIAS_COMMAND="$2"
+else
+    # Interactive mode
+    echo -e "${BOLD}Common shortcuts:${NC}"
+    echo "  cls  → container list"
+    echo "  cst  → container stats"
+    echo "  gpu  → nvidia-smi"
+    echo "  imgs → image list"
+    echo ""
+
+    read -p "Alias name (short command): " ALIAS_NAME
+    if [ -z "$ALIAS_NAME" ]; then
+        echo -e "${RED}Error:${NC} Alias name cannot be empty"
+        exit 1
+    fi
+
+    read -p "Command to run: " ALIAS_COMMAND
+    if [ -z "$ALIAS_COMMAND" ]; then
+        echo -e "${RED}Error:${NC} Command cannot be empty"
+        exit 1
+    fi
+fi
+
+# Check if alias already exists
+if grep -q "^alias ${ALIAS_NAME}=" "$ALIAS_FILE" 2>/dev/null; then
+    echo -e "${YELLOW}Warning:${NC} Alias '${ALIAS_NAME}' already exists"
+    read -p "Overwrite? [y/N]: " OVERWRITE
+    if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
+        echo "Cancelled"
+        exit 0
+    fi
+    # Remove old alias
+    sed -i "/^alias ${ALIAS_NAME}=/d" "$ALIAS_FILE"
+fi
+
+# Add alias
+echo "alias ${ALIAS_NAME}='${ALIAS_COMMAND}'" >> "$ALIAS_FILE"
+
+echo ""
+echo -e "${GREEN}✓${NC} Alias created: ${BOLD}${ALIAS_NAME}${NC} → ${CYAN}${ALIAS_COMMAND}${NC}"
+echo ""
+echo -e "Location: ${CYAN}${ALIAS_FILE}${NC}"
+echo ""
+echo -e "${YELLOW}To use immediately:${NC}"
+echo -e "  ${CYAN}source ~/.bash_aliases${NC}"
+echo -e "  ${CYAN}${ALIAS_NAME}${NC}"
+echo ""
+echo "The alias will be available automatically in new terminal sessions."
+echo ""
