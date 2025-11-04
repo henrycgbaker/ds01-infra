@@ -46,12 +46,15 @@ ${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━�
 ${BOLD}For New Users:${NC}
 
 1. Run the setup wizard:
-   ${CYAN}user-setup${NC}
+   ${CYAN}new-user-setup${NC}
 
    This will guide you through:
    - SSH key generation
    - Project creation
    - Custom Docker image
+
+   For additional projects:
+   ${CYAN}new-project-setup${NC}
    - VS Code setup
 
 2. After setup, create your first container:
@@ -352,7 +355,9 @@ ${GREEN}image list${NC}                 List available images
 ${GREEN}image create${NC}               Build custom image
 
 ${GREEN}nvidia-smi${NC}                 Check GPU status
-${GREEN}user-setup${NC}                 Complete setup wizard
+${GREEN}new-user-setup${NC}             First-time setup wizard
+${GREEN}new-project-setup${NC}          Create new project
+${GREEN}git-ml-repo-setup${NC}          Initialize Git for ML project
 
 ${GREEN}alias-list${NC}                 See all commands
 ${GREEN}help${NC}                       This help menu

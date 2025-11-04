@@ -22,7 +22,9 @@ echo -e "${CYAN}─────────────────────�
 echo ""
 
 echo -e "${BOLD}Setup & Configuration:${NC}"
-echo -e "  ${GREEN}user-setup${NC}           Complete onboarding wizard"
+echo -e "  ${GREEN}new-user-setup${NC}       First-time user onboarding wizard"
+echo -e "  ${GREEN}new-project-setup${NC}    Create new project (quick workflow)"
+echo -e "  ${GREEN}git-ml-repo-setup${NC}    Initialize Git for ML project"
 echo -e "  ${GREEN}ssh-config${NC}           Configure/regenerate SSH keys"
 echo ""
 
