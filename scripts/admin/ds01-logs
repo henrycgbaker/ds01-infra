@@ -14,31 +14,29 @@ NC='\033[0m'
 LOG_DIR="/var/logs/ds01"
 
 show_usage() {
-    cat << EOF
-${BOLD}ds01-logs${NC} - View DS01 infrastructure logs
-
-${CYAN}Usage:${NC}
-  ds01-logs [log-type] [options]
-
-${CYAN}Log Types:${NC}
-  ${BOLD}gpu${NC}          GPU allocation logs
-  ${BOLD}cleanup${NC}      Idle container cleanup logs
-  ${BOLD}metrics${NC}      System metrics logs
-  ${BOLD}audit${NC}        System audit logs
-  ${BOLD}all${NC}          All logs (default)
-
-${CYAN}Options:${NC}
-  -f, --follow     Follow log output (tail -f)
-  -n NUM           Show last NUM lines (default: 50)
-  -h, --help       Show this help
-
-${CYAN}Examples:${NC}
-  ds01-logs                    # Show recent activity from all logs
-  ds01-logs gpu                # Show GPU allocation logs
-  ds01-logs gpu -f             # Follow GPU logs in real-time
-  ds01-logs cleanup -n 100     # Show last 100 cleanup log lines
-
-EOF
+    echo -e "${BOLD}ds01-logs${NC} - View DS01 infrastructure logs"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  ds01-logs [log-type] [options]"
+    echo ""
+    echo -e "${CYAN}Log Types:${NC}"
+    echo -e "  ${BOLD}gpu${NC}          GPU allocation logs"
+    echo -e "  ${BOLD}cleanup${NC}      Idle container cleanup logs"
+    echo -e "  ${BOLD}metrics${NC}      System metrics logs"
+    echo -e "  ${BOLD}audit${NC}        System audit logs"
+    echo -e "  ${BOLD}all${NC}          All logs (default)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  -f, --follow     Follow log output (tail -f)"
+    echo "  -n NUM           Show last NUM lines (default: 50)"
+    echo "  -h, --help       Show this help"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  ds01-logs                    # Show recent activity from all logs"
+    echo "  ds01-logs gpu                # Show GPU allocation logs"
+    echo "  ds01-logs gpu -f             # Follow GPU logs in real-time"
+    echo "  ds01-logs cleanup -n 100     # Show last 100 cleanup log lines"
+    echo ""
 }
 
 # Parse arguments
