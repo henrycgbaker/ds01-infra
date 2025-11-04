@@ -15,27 +15,25 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 show_usage() {
-    cat << EOF
-${BOLD}image${NC} - Docker image management commands
-
-${CYAN}Usage:${NC}
-  image <subcommand> [args...]
-
-${CYAN}Subcommands:${NC}
-  ${BOLD}create${NC}      Create a custom Docker image
-  ${BOLD}list${NC}        List available images
-  ${BOLD}update${NC}      Rebuild/update an existing image
-  ${BOLD}delete${NC}      Remove unused images
-
-${CYAN}Examples:${NC}
-  image create
-  image list
-  image update my-image
-  image delete old-image
-
-${CYAN}Tip:${NC} You can also use hyphenated form: image-create, image-list, etc.
-
-EOF
+    echo -e "${BOLD}image${NC} - Docker image management commands"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  image <subcommand> [args...]"
+    echo ""
+    echo -e "${CYAN}Subcommands:${NC}"
+    echo -e "  ${BOLD}create${NC}      Create a custom Docker image"
+    echo -e "  ${BOLD}list${NC}        List available images"
+    echo -e "  ${BOLD}update${NC}      Rebuild/update an existing image"
+    echo -e "  ${BOLD}delete${NC}      Remove unused images"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  image create"
+    echo "  image list"
+    echo "  image update my-image"
+    echo "  image delete old-image"
+    echo ""
+    echo -e "${CYAN}Tip:${NC} You can also use hyphenated form: image-create, image-list, etc."
+    echo ""
 }
 
 # Get subcommand
