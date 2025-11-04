@@ -1,0 +1,62 @@
+#!/bin/bash
+# Image command dispatcher
+# Usage: image <subcommand> [args...]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+show_usage() {
+    cat << EOF
+${BOLD}image${NC} - Docker image management commands
+
+${CYAN}Usage:${NC}
+  image <subcommand> [args...]
+
+${CYAN}Subcommands:${NC}
+  ${BOLD}create${NC}      Create a custom Docker image
+  ${BOLD}list${NC}        List available images
+  ${BOLD}update${NC}      Rebuild/update an existing image
+  ${BOLD}delete${NC}      Remove unused images
+
+${CYAN}Examples:${NC}
+  image create
+  image list
+  image update my-image
+  image delete old-image
+
+${CYAN}Tip:${NC} You can also use hyphenated form: image-create, image-list, etc.
+
+EOF
+}
+
+# Get subcommand
+SUBCOMMAND="${1:-}"
+
+if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" ] || [ "$SUBCOMMAND" = "--help" ]; then
+    show_usage
+    exit 0
+fi
+
+# Check if subcommand script exists
+SUBCOMMAND_SCRIPT="$SCRIPT_DIR/image-$SUBCOMMAND"
+
+if [ ! -f "$SUBCOMMAND_SCRIPT" ]; then
+    echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"
+    echo ""
+    echo "Available subcommands: create, list, update, delete"
+    echo "Run 'image help' for more information"
+    exit 1
+fi
+
+# Execute subcommand, passing all remaining arguments
+shift
+exec "$SUBCOMMAND_SCRIPT" "$@"
