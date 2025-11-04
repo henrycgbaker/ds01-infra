@@ -5,7 +5,7 @@
 
 set -e
 
-BLUE='\033[0;34m'
+BLUE='\033[94m'  # Light blue 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -52,13 +52,18 @@ else
     echo -e "${GREEN}✓${NC} Workspace exists: ~/workspace"
 fi
 
-# Check if user has any images
-USER_IMAGES=$(docker images --format "{{.Repository}}" | grep "^${USERNAME}-" | wc -l)
-if [ "$USER_IMAGES" -eq 0 ]; then
-    NEEDS_IMAGE=true
-    echo -e "${YELLOW}✗${NC} No custom images created"
+# Check if user has any images (skip if docker access fails)
+if docker images --format "{{.Repository}}" &>/dev/null; then
+    USER_IMAGES=$(docker images --format "{{.Repository}}" 2>/dev/null | grep "^${USERNAME}-" | wc -l)
+    if [ "$USER_IMAGES" -eq 0 ]; then
+        NEEDS_IMAGE=true
+        echo -e "${YELLOW}○${NC} No custom images yet (we'll create one)"
+    else
+        echo -e "${GREEN}✓${NC} $USER_IMAGES custom image(s) found"
+    fi
 else
-    echo -e "${GREEN}✓${NC} $USER_IMAGES custom image(s) found"
+    NEEDS_IMAGE=true
+    echo -e "${YELLOW}○${NC} Docker access not configured (will set up later)"
 fi
 
 echo ""
@@ -161,10 +166,10 @@ if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
     
     # Framework selection
     echo "Select base framework:"
-    echo "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
-    echo "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
-    echo "  ${BOLD}3)${NC} PyTorch 2.5.1 (CPU only)"
-    read -p "Choice [1-3]: " FRAMEWORK_CHOICE
+    echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
+    echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
+    echo -e "  ${BOLD}3)${NC} PyTorch 2.5.1 (CPU only)"
+    read -p "Choice [1-3, default: 1]: " FRAMEWORK_CHOICE
     
     case $FRAMEWORK_CHOICE in
         2)
@@ -183,12 +188,12 @@ if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
     
     # Use case packages
     echo -e "\n${BOLD}Select your use case (for pre-configured packages):${NC}"
-    echo "  ${BOLD}1)${NC} Computer Vision (timm, albumentations, opencv)"
-    echo "  ${BOLD}2)${NC} NLP (transformers, datasets, tokenizers)"
-    echo "  ${BOLD}3)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
-    echo "  ${BOLD}4)${NC} General ML (just the basics)"
-    echo "  ${BOLD}5)${NC} Custom (I'll specify everything)"
-    read -p "Choice [1-5]: " USECASE_CHOICE
+    echo -e "  ${BOLD}1)${NC} Computer Vision (timm, albumentations, opencv)"
+    echo -e "  ${BOLD}2)${NC} NLP (transformers, datasets, tokenizers)"
+    echo -e "  ${BOLD}3)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
+    echo -e "  ${BOLD}4)${NC} General ML (just the basics) (${GREEN}default${NC})"
+    echo -e "  ${BOLD}5)${NC} Custom (I'll specify everything)"
+    read -p "Choice [1-5, default: 4]: " USECASE_CHOICE
     
     USECASE_PACKAGES=""
     case $USECASE_CHOICE in
@@ -204,14 +209,15 @@ if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
             USECASE_PACKAGES="gymnasium stable-baselines3 tensorboard"
             USECASE_NAME="Reinforcement Learning"
             ;;
-        4)
-            USECASE_PACKAGES=""
-            USECASE_NAME="General ML"
-            ;;
         5)
             echo "Enter packages (space-separated):"
             read -p "> " USECASE_PACKAGES
             USECASE_NAME="Custom"
+            ;;
+        *)
+            # Default to General ML (option 4 or invalid input)
+            USECASE_PACKAGES=""
+            USECASE_NAME="General ML"
             ;;
     esac
     
