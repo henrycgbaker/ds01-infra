@@ -1,0 +1,66 @@
+#!/bin/bash
+# Container command dispatcher
+# Usage: container <subcommand> [args...]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+show_usage() {
+    cat << EOF
+${BOLD}container${NC} - Container management commands
+
+${CYAN}Usage:${NC}
+  container <subcommand> [args...]
+
+${CYAN}Subcommands:${NC}
+  ${BOLD}create${NC}      Create a new container
+  ${BOLD}run${NC}         Start and attach to a container
+  ${BOLD}stop${NC}        Stop a running container
+  ${BOLD}exit${NC}        Exit container (without stopping)
+  ${BOLD}list${NC}        List your containers
+  ${BOLD}stats${NC}       Show resource usage statistics
+  ${BOLD}cleanup${NC}     Remove stopped containers
+
+${CYAN}Examples:${NC}
+  container create my-project pytorch
+  container list
+  container run my-project
+  container stop my-project
+  container stats
+
+${CYAN}Tip:${NC} You can also use hyphenated form: container-create, container-list, etc.
+
+EOF
+}
+
+# Get subcommand
+SUBCOMMAND="${1:-}"
+
+if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" ] || [ "$SUBCOMMAND" = "--help" ]; then
+    show_usage
+    exit 0
+fi
+
+# Check if subcommand script exists
+SUBCOMMAND_SCRIPT="$SCRIPT_DIR/container-$SUBCOMMAND"
+
+if [ ! -f "$SUBCOMMAND_SCRIPT" ]; then
+    echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"
+    echo ""
+    echo "Available subcommands: create, run, stop, exit, list, stats, cleanup"
+    echo "Run 'container help' for more information"
+    exit 1
+fi
+
+# Execute subcommand, passing all remaining arguments
+shift
+exec "$SUBCOMMAND_SCRIPT" "$@"

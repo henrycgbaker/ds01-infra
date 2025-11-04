@@ -1,0 +1,57 @@
+#!/bin/bash
+# Project command dispatcher
+# Usage: project <subcommand> [args...]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+show_usage() {
+    cat << EOF
+${BOLD}project${NC} - Project management commands
+
+${CYAN}Usage:${NC}
+  project <subcommand> [args...]
+
+${CYAN}Subcommands:${NC}
+  ${BOLD}init${NC}        Create a new project with GitHub integration
+
+${CYAN}Examples:${NC}
+  project init
+  project init my-thesis
+
+${CYAN}Tip:${NC} You can also use hyphenated form: project-init
+
+EOF
+}
+
+# Get subcommand
+SUBCOMMAND="${1:-}"
+
+if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" ] || [ "$SUBCOMMAND" = "--help" ]; then
+    show_usage
+    exit 0
+fi
+
+# Check if subcommand script exists
+SUBCOMMAND_SCRIPT="$SCRIPT_DIR/project-$SUBCOMMAND"
+
+if [ ! -f "$SUBCOMMAND_SCRIPT" ]; then
+    echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"
+    echo ""
+    echo "Available subcommands: init"
+    echo "Run 'project help' for more information"
+    exit 1
+fi
+
+# Execute subcommand, passing all remaining arguments
+shift
+exec "$SUBCOMMAND_SCRIPT" "$@"
