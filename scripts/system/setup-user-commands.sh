@@ -1,0 +1,134 @@
+#!/bin/bash
+# Setup user command symlinks in /usr/local/bin
+# Also creates records in config/usr-mirrors for tracking
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+USER_SCRIPTS_DIR="$INFRA_ROOT/scripts/user"
+ADMIN_SCRIPTS_DIR="$INFRA_ROOT/scripts/admin"
+MIRROR_DIR="$INFRA_ROOT/config/usr-mirrors/local/bin"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Error:${NC} This script must be run as root (use sudo)"
+    exit 1
+fi
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}DS01 User Command Symlink Setup${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# List of user commands to symlink
+USER_COMMANDS=(
+    # Main dispatchers
+    "container"
+    "image"
+    "project"
+
+    # Container subcommands (also available as standalone)
+    "container-create"
+    "container-run"
+    "container-stop"
+    "container-exit"
+    "container-list"
+    "container-stats"
+    "container-cleanup"
+
+    # Image subcommands
+    "image-create"
+    "image-list"
+    "image-update"
+    "image-delete"
+
+    # Project subcommands
+    "project-init"
+
+    # Standalone commands
+    "ssh-config"
+    "user-setup"
+)
+
+# Admin commands
+ADMIN_COMMANDS=(
+    "ds01-dashboard"
+    "ds01-logs"
+    "ds01-users"
+    "alias-list"
+    "alias-create"
+    "help"
+    "version"
+)
+
+# Create symlinks for user commands
+echo -e "${BOLD}Creating user command symlinks...${NC}"
+echo ""
+
+for cmd in "${USER_COMMANDS[@]}"; do
+    SOURCE="$USER_SCRIPTS_DIR/$cmd"
+    TARGET="/usr/local/bin/$cmd"
+
+    # Check if source exists
+    if [ ! -f "$SOURCE" ]; then
+        echo -e "${YELLOW}⚠${NC}  Skip: $cmd (source not found)"
+        continue
+    fi
+
+    # Remove existing symlink if it exists
+    if [ -L "$TARGET" ]; then
+        rm "$TARGET"
+    fi
+
+    # Create symlink
+    ln -sf "$SOURCE" "$TARGET"
+    echo -e "${GREEN}✓${NC} $cmd -> /usr/local/bin/$cmd"
+done
+
+echo ""
+echo -e "${BOLD}Creating admin command symlinks...${NC}"
+echo ""
+
+for cmd in "${ADMIN_COMMANDS[@]}"; do
+    SOURCE="$ADMIN_SCRIPTS_DIR/$cmd"
+    TARGET="/usr/local/bin/$cmd"
+
+    # Check if source exists
+    if [ ! -f "$SOURCE" ]; then
+        echo -e "${YELLOW}⚠${NC}  Skip: $cmd (source not found)"
+        continue
+    fi
+
+    # Remove existing symlink if it exists
+    if [ -L "$TARGET" ]; then
+        rm "$TARGET"
+    fi
+
+    # Create symlink
+    ln -sf "$SOURCE" "$TARGET"
+    echo -e "${GREEN}✓${NC} $cmd -> /usr/local/bin/$cmd"
+done
+
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Setup Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+TOTAL_COMMANDS=$((${#USER_COMMANDS[@]} + ${#ADMIN_COMMANDS[@]}))
+echo -e "Symlinks created: ${BOLD}${TOTAL_COMMANDS}${NC}"
+echo ""
+echo -e "${BOLD}Test commands:${NC}"
+echo "  container help"
+echo "  image list"
+echo "  alias-list"
+echo "  ds01-dashboard"
+echo ""
