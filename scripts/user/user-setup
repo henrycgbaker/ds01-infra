@@ -5,7 +5,7 @@
 
 set -e
 
-BLUE='\033[94m'  # Light blue 
+BLUE='\033[0;36m'  # Cyan (lighter and more visible)
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -53,17 +53,19 @@ else
 fi
 
 # Check if user has any images (skip if docker access fails)
-if docker images --format "{{.Repository}}" &>/dev/null; then
+# Suppress error output for cleaner user experience
+if timeout 2 docker info &>/dev/null; then
     USER_IMAGES=$(docker images --format "{{.Repository}}" 2>/dev/null | grep "^${USERNAME}-" | wc -l)
     if [ "$USER_IMAGES" -eq 0 ]; then
         NEEDS_IMAGE=true
-        echo -e "${YELLOW}○${NC} No custom images yet (we'll create one)"
+        echo -e "${YELLOW}○${NC} No custom images yet"
     else
         echo -e "${GREEN}✓${NC} $USER_IMAGES custom image(s) found"
     fi
 else
+    # Docker not accessible yet - this is expected on first run
     NEEDS_IMAGE=true
-    echo -e "${YELLOW}○${NC} Docker access not configured (will set up later)"
+    echo -e "${YELLOW}○${NC} Docker images (will check after setup)"
 fi
 
 echo ""
