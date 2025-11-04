@@ -1,6 +1,6 @@
 # Symlink record for: project
 # Created: 2025-11-04T17:33:24+01:00
-# Source: /opt/ds01-infra/scripts/user/project
+# Source: /opt/ds01-infra/scripts/user/project-dispatcher.sh
 # Target: /usr/local/bin/project
 
-ln -sf /opt/ds01-infra/scripts/user/project /usr/local/bin/project
+ln -sf /opt/ds01-infra/scripts/user/project-dispatcher.sh /usr/local/bin/project
