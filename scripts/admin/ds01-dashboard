@@ -1,0 +1,149 @@
+#!/bin/bash
+# DS01 Admin Dashboard - System overview for administrators
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}              DS01 GPU SERVER ADMIN DASHBOARD${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# System Info
+echo -e "${BOLD}SYSTEM INFORMATION${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+echo -e "  Hostname:     $(hostname)"
+echo -e "  Uptime:       $(uptime -p)"
+echo -e "  Kernel:       $(uname -r)"
+echo -e "  Date:         $(date)"
+echo ""
+
+# GPU Status
+echo -e "${BOLD}GPU STATUS${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+if command -v nvidia-smi &>/dev/null; then
+    nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=table
+else
+    echo -e "${YELLOW}  nvidia-smi not available${NC}"
+fi
+echo ""
+
+# MIG Status (if enabled)
+if nvidia-smi mig -lgi &>/dev/null 2>&1; then
+    echo -e "${BOLD}MIG INSTANCES${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    nvidia-smi mig -lgi
+    echo ""
+fi
+
+# Container Stats
+echo -e "${BOLD}CONTAINER OVERVIEW${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+TOTAL_CONTAINERS=$(docker ps -a | wc -l)
+RUNNING_CONTAINERS=$(docker ps | wc -l)
+STOPPED_CONTAINERS=$((TOTAL_CONTAINERS - RUNNING_CONTAINERS - 1))
+
+echo -e "  Total containers:   ${BOLD}$TOTAL_CONTAINERS${NC}"
+echo -e "  Running:            ${GREEN}$RUNNING_CONTAINERS${NC}"
+echo -e "  Stopped:            ${YELLOW}$STOPPED_CONTAINERS${NC}"
+echo ""
+
+# Active Users
+echo -e "${BOLD}ACTIVE USERS${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+docker ps --format "{{.Labels}}" | grep -o "aime.mlc.USER=[^,]*" | cut -d= -f2 | sort -u | while read -r user; do
+    USER_CONTAINERS=$(docker ps --filter "label=aime.mlc.USER=$user" | wc -l)
+    echo -e "  ${BOLD}$user${NC}: $USER_CONTAINERS container(s)"
+done
+echo ""
+
+# Resource Usage
+echo -e "${BOLD}SYSTEM RESOURCES${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+# CPU
+CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | cut -d% -f1)
+echo -e "  CPU Usage:    ${BOLD}${CPU_USAGE}%${NC}"
+
+# Memory
+MEM_INFO=$(free -h | grep Mem:)
+MEM_TOTAL=$(echo $MEM_INFO | awk '{print $2}')
+MEM_USED=$(echo $MEM_INFO | awk '{print $3}')
+MEM_PERCENT=$(free | grep Mem | awk '{printf("%.1f", $3/$2 * 100.0)}')
+echo -e "  Memory:       ${BOLD}${MEM_USED}${NC} / ${MEM_TOTAL} (${MEM_PERCENT}%)"
+
+# Disk
+DISK_INFO=$(df -h / | tail -1)
+DISK_USED=$(echo $DISK_INFO | awk '{print $3}')
+DISK_TOTAL=$(echo $DISK_INFO | awk '{print $2}')
+DISK_PERCENT=$(echo $DISK_INFO | awk '{print $5}')
+echo -e "  Disk (root):  ${BOLD}${DISK_USED}${NC} / ${DISK_TOTAL} (${DISK_PERCENT})"
+
+DOCKER_DISK=$(df -h /var/lib/docker 2>/dev/null | tail -1 || df -h / | tail -1)
+DOCKER_USED=$(echo $DOCKER_DISK | awk '{print $3}')
+DOCKER_AVAIL=$(echo $DOCKER_DISK | awk '{print $4}')
+echo -e "  Disk (docker): ${BOLD}${DOCKER_USED}${NC} used, ${DOCKER_AVAIL} available"
+echo ""
+
+# Systemd Slice Status
+if systemctl status ds01.slice &>/dev/null; then
+    echo -e "${BOLD}CGROUP SLICE STATUS${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    systemd-cgtop -n 1 --depth=2 2>/dev/null | grep ds01 || echo "  No active cgroup activity"
+    echo ""
+fi
+
+# Recent Allocation Logs
+if [ -f /var/logs/ds01/gpu-allocations.log ]; then
+    echo -e "${BOLD}RECENT GPU ALLOCATIONS (Last 5)${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    tail -5 /var/logs/ds01/gpu-allocations.log | while read -r line; do
+        echo -e "  ${line}"
+    done
+    echo ""
+fi
+
+# Warnings
+echo -e "${BOLD}SYSTEM HEALTH${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+WARNINGS=0
+
+# Check disk space
+if [ "${DISK_PERCENT%\%}" -gt 85 ]; then
+    echo -e "  ${RED}⚠${NC}  Disk usage high: ${DISK_PERCENT}"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# Check memory
+if (( $(echo "$MEM_PERCENT > 90" | bc -l) )); then
+    echo -e "  ${RED}⚠${NC}  Memory usage high: ${MEM_PERCENT}%"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+# Check for many stopped containers
+if [ "$STOPPED_CONTAINERS" -gt 10 ]; then
+    echo -e "  ${YELLOW}⚠${NC}  Many stopped containers: ${STOPPED_CONTAINERS}"
+    WARNINGS=$((WARNINGS + 1))
+fi
+
+if [ $WARNINGS -eq 0 ]; then
+    echo -e "  ${GREEN}✓${NC} All systems nominal"
+fi
+
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "${BOLD}Quick Actions:${NC}"
+echo "  ds01-logs           - View infrastructure logs"
+echo "  ds01-users          - See detailed user activity"
+echo "  ds01-container-cleanup - Clean up stopped containers"
+echo ""
