@@ -13,10 +13,11 @@ MIRROR_DIR="$INFRA_ROOT/config/usr-mirrors/local/bin"
 mkdir -p "$MIRROR_DIR"
 
 # List of user commands to symlink
+# Format: "target_name:source_file" or just "name" if they match
 USER_COMMANDS=(
-    "container"
-    "image"
-    "project"
+    "container:container-dispatcher.sh"
+    "image:image-dispatcher.sh"
+    "project:project-dispatcher.sh"
     "container-create"
     "container-run"
     "container-stop"
@@ -37,17 +38,26 @@ echo "Creating symlink records in $MIRROR_DIR"
 echo ""
 
 for cmd in "${USER_COMMANDS[@]}"; do
-    SOURCE="$USER_SCRIPTS_DIR/$cmd"
-    TARGET="/usr/local/bin/$cmd"
-    MIRROR_FILE="$MIRROR_DIR/$cmd.link"
+    # Parse command (format: "target:source" or just "name")
+    if [[ "$cmd" == *":"* ]]; then
+        TARGET_NAME="${cmd%%:*}"
+        SOURCE_FILE="${cmd#*:}"
+    else
+        TARGET_NAME="$cmd"
+        SOURCE_FILE="$cmd"
+    fi
+
+    SOURCE="$USER_SCRIPTS_DIR/$SOURCE_FILE"
+    TARGET="/usr/local/bin/$TARGET_NAME"
+    MIRROR_FILE="$MIRROR_DIR/$TARGET_NAME.link"
 
     if [ ! -f "$SOURCE" ]; then
-        echo "⚠  Skip: $cmd (source not found)"
+        echo "⚠  Skip: $TARGET_NAME (source not found: $SOURCE_FILE)"
         continue
     fi
 
     cat > "$MIRROR_FILE" << EOF
-# Symlink record for: $cmd
+# Symlink record for: $TARGET_NAME
 # Created: $(date -Iseconds)
 # Source: $SOURCE
 # Target: $TARGET
@@ -55,7 +65,7 @@ for cmd in "${USER_COMMANDS[@]}"; do
 ln -sf $SOURCE $TARGET
 EOF
 
-    echo "✓ Record created: $cmd.link"
+    echo "✓ Record created: $TARGET_NAME.link"
 done
 
 echo ""

@@ -30,11 +30,12 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # List of user commands to symlink
+# Format: "target_name:source_file" or just "name" if they match
 USER_COMMANDS=(
-    # Main dispatchers
-    "container"
-    "image"
-    "project"
+    # Main dispatchers (different source file names)
+    "container:container-dispatcher.sh"
+    "image:image-dispatcher.sh"
+    "project:project-dispatcher.sh"
 
     # Container subcommands (also available as standalone)
     "container-create"
@@ -75,12 +76,21 @@ echo -e "${BOLD}Creating user command symlinks...${NC}"
 echo ""
 
 for cmd in "${USER_COMMANDS[@]}"; do
-    SOURCE="$USER_SCRIPTS_DIR/$cmd"
-    TARGET="/usr/local/bin/$cmd"
+    # Parse command (format: "target:source" or just "name")
+    if [[ "$cmd" == *":"* ]]; then
+        TARGET_NAME="${cmd%%:*}"
+        SOURCE_FILE="${cmd#*:}"
+    else
+        TARGET_NAME="$cmd"
+        SOURCE_FILE="$cmd"
+    fi
+
+    SOURCE="$USER_SCRIPTS_DIR/$SOURCE_FILE"
+    TARGET="/usr/local/bin/$TARGET_NAME"
 
     # Check if source exists
     if [ ! -f "$SOURCE" ]; then
-        echo -e "${YELLOW}⚠${NC}  Skip: $cmd (source not found)"
+        echo -e "${YELLOW}⚠${NC}  Skip: $TARGET_NAME (source not found: $SOURCE_FILE)"
         continue
     fi
 
@@ -91,7 +101,7 @@ for cmd in "${USER_COMMANDS[@]}"; do
 
     # Create symlink
     ln -sf "$SOURCE" "$TARGET"
-    echo -e "${GREEN}✓${NC} $cmd -> /usr/local/bin/$cmd"
+    echo -e "${GREEN}✓${NC} $TARGET_NAME -> /usr/local/bin/$TARGET_NAME"
 done
 
 echo ""
