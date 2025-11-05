@@ -39,7 +39,8 @@ usage() {
     echo "  • SSH connections"
     echo ""
     echo -e "${YELLOW}💡 Alternative:${NC}"
-    echo -e "  To exit without stopping, use: ${GREEN}Ctrl+P, Ctrl+Q${NC} when attached"
+    echo -e "  To exit without stopping: Just type ${GREEN}exit${NC} (container keeps running)"
+    echo -e "  Reconnect later with: ${GREEN}container-run <name>${NC}"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  container-stop my-project              # Graceful stop"
@@ -204,7 +205,7 @@ echo -e "  • Training jobs"
 echo -e "  • Jupyter sessions  "
 echo -e "  • SSH connections"
 echo ""
-echo -e "${YELLOW}💡 Tip:${NC} To exit without stopping, use ${GREEN}Ctrl+P, Ctrl+Q${NC} instead"
+echo -e "${YELLOW}💡 Tip:${NC} To exit without stopping: Just type ${GREEN}exit${NC} (container keeps running)"
 echo ""
 
 read -p "Continue? [y/N]: " CONFIRM

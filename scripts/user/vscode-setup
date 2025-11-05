@@ -1,0 +1,364 @@
+#!/bin/bash
+# DS01 VS Code Setup - Configure VS Code Remote-SSH connection
+# Tier 2 Command - Can be used standalone or called by orchestrators
+
+set -e
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033=0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 VS Code Setup${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  vscode-setup [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --project=NAME     Project name (for specific instructions)"
+    echo "  --container=NAME   Container name (for specific instructions)"
+    echo "  --guided           Show detailed explanations for beginners"
+    echo "  -h, --help         Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Provides VS Code Remote-SSH setup instructions and generates"
+    echo "  SSH config snippets for connecting to the DS01 server."
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# General VS Code setup guide${NC}"
+    echo "  vscode-setup"
+    echo ""
+    echo -e "  ${DIM}# With project-specific instructions${NC}"
+    echo "  vscode-setup --project=my-thesis"
+    echo ""
+    echo -e "  ${DIM}# With guided explanations${NC}"
+    echo "  vscode-setup --guided"
+    echo ""
+}
+
+# Parse arguments
+PROJECT_NAME=""
+CONTAINER_NAME=""
+GUIDED=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --project=*)
+            PROJECT_NAME="${1#*=}"
+            shift
+            ;;
+        --container=*)
+            CONTAINER_NAME="${1#*=}"
+            shift
+            ;;
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Get server IP
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
+# Show guided introduction
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Connecting VS Code to DS01${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What is VS Code Remote-SSH?${NC}"
+    echo ""
+    echo "  VS Code Remote-SSH lets you:"
+    echo "  • Edit files on the DS01 server from your local computer"
+    echo "  • Use all VS Code features (debugging, IntelliSense, extensions)"
+    echo "  • Access the server's GPUs and computing power"
+    echo "  • Work as if the files were local"
+    echo ""
+    echo -e "${BOLD}How It Works:${NC}"
+    echo ""
+    echo "  1. VS Code on your computer connects via SSH"
+    echo "  2. It installs a VS Code Server on DS01 (automatic)"
+    echo "  3. You edit files, they're saved on the server"
+    echo "  4. You can run terminals, debug code, use Jupyter"
+    echo ""
+    echo -e "${BOLD}Requirements:${NC}"
+    echo ""
+    echo "  • VS Code installed on your local computer"
+    echo "  • SSH keys set up (run ${GREEN}ssh-setup${NC} if not done)"
+    echo "  • Remote-SSH extension installed in VS Code"
+    echo ""
+    read -p "Press Enter to see setup instructions..." </dev/tty
+    echo ""
+fi
+
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}VS Code Remote-SSH Setup${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Step 1: Extensions
+echo -e "${YELLOW}${BOLD}Step 1: Install VS Code Extensions${NC}"
+echo ""
+echo "  Open VS Code and install these extensions:"
+echo ""
+echo -e "  ${BOLD}Required:${NC}"
+echo "    • Remote - SSH (ms-vscode-remote.remote-ssh)"
+echo "    • Remote - SSH: Editing Configuration Files"
+echo ""
+echo -e "  ${BOLD}Recommended:${NC}"
+echo "    • Python (ms-python.python)"
+echo "    • Jupyter (ms-toolsai.jupyter)"
+echo "    • Docker (ms-azuretools.vscode-docker)"
+echo "    • GitLens (eamodio.gitlens)"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "  ${DIM}You can install extensions via:${NC}"
+    echo -e "    ${DIM}• VS Code: View → Extensions (Ctrl+Shift+X)${NC}"
+    echo -e "    ${DIM}• Search for extension name and click Install${NC}"
+    echo ""
+fi
+
+read -p "Press Enter when extensions are installed..." </dev/tty
+echo ""
+
+# Step 2: SSH Config
+echo -e "${YELLOW}${BOLD}Step 2: Configure SSH Connection${NC}"
+echo ""
+echo "  In VS Code:"
+echo -e "    ${CYAN}Command Palette${NC} (Ctrl+Shift+P / Cmd+Shift+P)"
+echo -e "    → Type: ${CYAN}\"Remote-SSH: Open SSH Configuration File\"${NC}"
+echo -e "    → Select your SSH config file (usually ${CYAN}~/.ssh/config${NC})"
+echo ""
+echo "  Add this configuration:"
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+cat << SSHCONFIG
+Host ds01
+    HostName $SERVER_IP
+    User $USERNAME
+    IdentityFile ~/.ssh/ds01_id_ed25519
+    ForwardAgent yes
+    ServerAliveInterval 60
+    ServerAliveCountMax 3
+SSHCONFIG
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "  ${BOLD}What do these settings mean?${NC}"
+    echo ""
+    echo -e "    ${CYAN}HostName${NC} - The server's IP address"
+    echo -e "    ${CYAN}User${NC} - Your username on the server"
+    echo -e "    ${CYAN}IdentityFile${NC} - Your private SSH key"
+    echo -e "    ${CYAN}ForwardAgent${NC} - Allows using your local SSH keys on the server"
+    echo -e "    ${CYAN}ServerAliveInterval${NC} - Keeps connection alive (sends ping every 60s)"
+    echo ""
+fi
+
+read -p "Press Enter when SSH config is saved..." </dev/tty
+echo ""
+
+# Step 3: Connect
+echo -e "${YELLOW}${BOLD}Step 3: Connect to DS01${NC}"
+echo ""
+echo "  In VS Code:"
+echo -e "    ${CYAN}Command Palette${NC} → ${CYAN}\"Remote-SSH: Connect to Host\"${NC}"
+echo -e "    → Select: ${GREEN}ds01${NC}"
+echo ""
+echo "  The first connection will:"
+echo "    • Install VS Code Server on DS01 (automatic, takes ~1 minute)"
+echo "    • Open a new VS Code window connected to the server"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "  ${YELLOW}💡 Tip:${NC} Look at the bottom-left corner of VS Code."
+    echo "     It should show: ${GREEN}SSH: ds01${NC}"
+    echo ""
+fi
+
+read -p "Press Enter after connecting..." </dev/tty
+echo ""
+
+# Step 4: Open Project
+echo -e "${YELLOW}${BOLD}Step 4: Open Your Project${NC}"
+echo ""
+
+if [ -n "$PROJECT_NAME" ]; then
+    PROJECT_DIR="/home/$USERNAME/workspace/$PROJECT_NAME"
+    echo "  In the connected VS Code window:"
+    echo -e "    ${CYAN}File → Open Folder${NC}"
+    echo -e "    → Navigate to: ${GREEN}$PROJECT_DIR${NC}"
+    echo "    → Click ${CYAN}OK${NC}"
+    echo ""
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "  ${BOLD}What happens now:${NC}"
+        echo "    • VS Code opens your project folder"
+        echo "    • You can edit files, create new ones"
+        echo "    • All changes are saved on the server"
+        echo "    • You can use the integrated terminal (Ctrl+\`)"
+        echo ""
+    fi
+else
+    echo "  In the connected VS Code window:"
+    echo -e "    ${CYAN}File → Open Folder${NC}"
+    echo -e "    → Navigate to: ${GREEN}/home/$USERNAME/workspace${NC}"
+    echo "    → Select your project folder"
+    echo ""
+fi
+
+# Step 5: Working in Container
+echo ""
+echo -e "${YELLOW}${BOLD}Step 5: Work in Your Container${NC}"
+echo ""
+
+if [ -n "$CONTAINER_NAME" ]; then
+    echo "  ${BOLD}Option A: Using VS Code Terminal${NC}"
+    echo "    1. Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
+    echo -e "    2. Enter container: ${GREEN}container-run $CONTAINER_NAME${NC}"
+    echo -e "    3. Navigate: ${GREEN}cd /workspace/$PROJECT_NAME${NC}"
+    echo "    4. Start coding!"
+    echo ""
+    echo "  ${BOLD}Option B: Using Dev Containers Extension (Advanced)${NC}"
+    echo "    1. Install 'Dev Containers' extension in VS Code"
+    echo -e "    2. Command Palette → ${CYAN}\"Dev Containers: Attach to Running Container\"${NC}"
+    echo -e "    3. Select: ${GREEN}${CONTAINER_NAME}._.$USER_ID${NC}"
+    echo "    4. Entire VS Code session runs inside the container"
+    echo ""
+else
+    echo "  Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
+    echo ""
+    echo -e "  Then enter your container:"
+    echo -e "    ${GREEN}container-list${NC}          # See available containers"
+    echo -e "    ${GREEN}container-run <name>${NC}   # Enter a container"
+    echo ""
+fi
+
+if [ "$GUIDED" = true ]; then
+    echo -e "  ${BOLD}Understanding the Setup:${NC}"
+    echo ""
+    echo "    • ${CYAN}VS Code (local)${NC} - Your editor running on your computer"
+    echo "    • ${CYAN}SSH Connection${NC} - Secure link to DS01 server"
+    echo "    • ${CYAN}Workspace${NC} - Your project files on the server"
+    echo "    • ${CYAN}Container${NC} - GPU-enabled computing environment"
+    echo ""
+    echo "    Your workflow:"
+    echo "      1. Edit in VS Code (connected via SSH)"
+    echo "      2. Run code in container terminal (with GPUs)"
+    echo "      3. Files save to workspace (persistent)"
+    echo ""
+fi
+
+# Summary
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ VS Code Setup Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+echo -e "${BOLD}Quick Reference:${NC}"
+echo ""
+echo -e "  ${CYAN}Connect:${NC}       Command Palette → Remote-SSH: Connect to Host → ds01"
+echo -e "  ${CYAN}Disconnect:${NC}    Command Palette → Remote-SSH: Close Remote Connection"
+echo -e "  ${CYAN}Terminal:${NC}      Ctrl+\` (or Terminal → New Terminal)"
+if [ -n "$PROJECT_NAME" ]; then
+    echo -e "  ${CYAN}Project:${NC}       /home/$USERNAME/workspace/$PROJECT_NAME"
+fi
+if [ -n "$CONTAINER_NAME" ]; then
+    echo -e "  ${CYAN}Container:${NC}     container-run $CONTAINER_NAME"
+fi
+echo ""
+
+echo -e "${YELLOW}💡 Helpful Commands (in VS Code terminal):${NC}"
+echo -e "   ${CYAN}container-list${NC}       # See your containers"
+echo -e "   ${CYAN}container-run <name>${NC} # Enter a container"
+echo -e "   ${CYAN}gpu${NC}                  # Check GPU status (inside container)"
+echo -e "   ${CYAN}jlab${NC}                 # Start Jupyter Lab (inside container)"
+echo ""
+
+# Create setup summary file
+SUMMARY_FILE="$HOME/ds01-config/vscode-setup-summary.txt"
+mkdir -p "$HOME/ds01-config"
+
+cat > "$SUMMARY_FILE" << SUMMARYEOF
+DS01 VS Code Setup Summary
+==========================
+Date: $(date)
+User: $USERNAME
+Server: $SERVER_IP
+
+SSH Configuration:
+-----------------
+Host ds01
+    HostName $SERVER_IP
+    User $USERNAME
+    IdentityFile ~/.ssh/ds01_id_ed25519
+    ForwardAgent yes
+    ServerAliveInterval 60
+
+VS Code Extensions:
+------------------
+- Remote - SSH (required)
+- Python (recommended)
+- Jupyter (recommended)
+- Docker (recommended)
+- GitLens (recommended)
+
+Connection Steps:
+----------------
+1. Command Palette (Ctrl+Shift+P)
+2. "Remote-SSH: Connect to Host"
+3. Select "ds01"
+
+$([ -n "$PROJECT_NAME" ] && echo "Project Information:
+-------------------
+Name: $PROJECT_NAME
+Location: /home/$USERNAME/workspace/$PROJECT_NAME")
+
+$([ -n "$CONTAINER_NAME" ] && echo "Container Information:
+---------------------
+Name: $CONTAINER_NAME
+Enter: container-run $CONTAINER_NAME")
+
+Quick Commands:
+--------------
+container-list       # See your containers
+container-run <name> # Enter a container
+container-stats      # Check resource usage
+image-list           # See available images
+alias-list           # See all commands
+
+Inside Container:
+----------------
+cd /workspace/$PROJECT_NAME  # Navigate to project
+gpu                          # Check GPU status
+jlab                         # Start Jupyter Lab
+nvidia-smi                   # Detailed GPU info
+
+SUMMARYEOF
+
+echo -e "Summary saved to: ${BLUE}$SUMMARY_FILE${NC}"
+echo ""

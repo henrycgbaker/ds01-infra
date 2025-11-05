@@ -7,9 +7,9 @@
 # Container Exit Commands
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-alias detach='echo -e "\033[1;33m💡 To detach without stopping: Press Ctrl+P, then Ctrl+Q\033[0m"'
-alias exit-stop='echo -e "\033[1;33m💡 To stop container: Type '\''exit'\'' or press Ctrl+D\033[0m"'
-alias exit-help='echo -e "\033[1;36m━━━ Exit Options ━━━\033[0m\n  • \033[1;32mdetach\033[0m or \033[1;33mCtrl+P, Ctrl+Q\033[0m - Exit without stopping\n  • \033[1;32mexit\033[0m or \033[1;33mCtrl+D\033[0m - Exit and stop container\n  • Type \033[1;32mdetach\033[0m or \033[1;32mexit-stop\033[0m for reminders\n"'
+alias exit-help='echo -e "\033[1;36m━━━ Exit Options ━━━\033[0m\n  • \033[1;32mexit\033[0m or \033[1;33mCtrl+D\033[0m - Exit session (container keeps running)\n  • To stop container: Use \033[1;32mcontainer-stop <name>\033[0m on host\n  • Reconnect: Use \033[1;32mcontainer-run <name>\033[0m on host\n\n\033[1;33m💡 Note:\033[0m DS01 uses docker exec - container stays running after exit\n"'
+
+alias how-to-stop='echo -e "\033[1;33m💡 To stop this container:\033[0m\n  1. Type \033[1;32mexit\033[0m to leave container\n  2. On host, run: \033[1;32mcontainer-stop <name>\033[0m\n\nTo check status: \033[1;32mcontainer-list\033[0m (on host)"'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Workspace Navigation
@@ -66,9 +66,8 @@ Available Commands Inside Container
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Exit & Navigation:
-  detach           Show Ctrl+P,Ctrl+Q reminder
-  exit-stop        Show exit/Ctrl+D reminder
-  exit-help        Show all exit options
+  exit-help        Show exit options and behavior
+  how-to-stop      How to stop this container
   ws / cdw         Go to /workspace
   ll               List files (ls -lah)
 
@@ -87,10 +86,16 @@ Git Shortcuts:
   gl               git log (last 10)
   gd               git diff
 
-Need host commands? (container-list, image-list, etc.)
-  → Exit container first (Ctrl+P, Ctrl+Q)
-  → Run management commands on DS01 host
-  → Containers should focus on development, not management
+Container Management:
+  Type 'exit' to leave (container keeps running)
+  Use 'container-stop <name>' on host to stop
+  Use 'container-run <name>' on host to reconnect
+
+Host Commands (run these on DS01 host, not in container):
+  container-list   See all your containers
+  container-stats  Check resource usage
+  image-list       See available images
+  alias-list       See host commands
 
 Your custom aliases: /workspace/.ds01_bashrc_custom
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -98,10 +103,11 @@ ALIASHELP
 '
 
 # Helpful reminders for common mistakes (host-only commands)
-alias container-list='echo -e "\033[1;33m⚠ container-list is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host\n\nFor security, containers cannot manage other containers."'
-alias container-run='echo -e "\033[1;33m⚠ container-run is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host"'
-alias alias-list='echo -e "\033[1;33m⚠ alias-list is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host\n\nInside container, use: \033[1;32maliases\033[0m"'
-alias image-list='echo -e "\033[1;33m⚠ image-list is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host"'
+alias container-list='echo -e "\033[1;33m⚠ container-list is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host\n\nFor security, containers cannot manage other containers."'
+alias container-run='echo -e "\033[1;33m⚠ container-run is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host"'
+alias container-stop='echo -e "\033[1;33m⚠ container-stop is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host"'
+alias alias-list='echo -e "\033[1;33m⚠ alias-list is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host\n\nInside container, use: \033[1;32maliases\033[0m"'
+alias image-list='echo -e "\033[1;33m⚠ image-list is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host"'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Custom PS1 Prompt (colorized, handles missing username)

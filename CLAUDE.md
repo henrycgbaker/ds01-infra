@@ -14,25 +14,72 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 
 ## Architecture
 
-### Three-Layer Design
+### Four-Tier Hierarchical Design
 
-1. **Base System**: `aime-ml-containers` (external dependency at `/opt/aime-ml-containers`)
-   - Provides core `mlc-*` CLI commands (`mlc-create`, `mlc-open`, `mlc-list`, etc.)
-   - Handles container image repository and basic lifecycle
+**TIER 1: Base System** (`aime-ml-containers` v1 at `/opt/aime-ml-containers`)
+- **9 Core Commands**: `mlc-create`, `mlc-open`, `mlc-list`, `mlc-stats`, `mlc-start`, `mlc-stop`, `mlc-remove`, `mlc-update-sys`, `mlc-upgrade-sys`
+- **Container Image Repository**: Framework versions (PyTorch, TensorFlow, MXNet) via `ml_images.repo`
+- **Container Lifecycle**: Creation, starting, stopping, removal with framework-focused workflow
+- **Naming Convention**: `$CONTAINER_NAME._.$USER_ID` for multi-user isolation
+- **Label System**: Uses `aime.mlc.*` labels for container identification
 
-2. **Enhancement Layer**: `ds01-infra` (this repository)
-   - Wraps base system with resource limit enforcement
-   - Manages GPU allocation state and reservations
-   - Implements systemd cgroup slices per user group
+**DS01 Usage of Base System (3 of 9 commands):**
+- ✅ **`mlc-create`** - WRAPPED by `/opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh`
+  - Adds: Resource limits from YAML, GPU allocation, systemd slice integration
+  - Called by: `container-create`
+- ✅ **`mlc-open`** - CALLED DIRECTLY by `container-run`
+  - Works perfectly as-is (uses `docker exec`, auto-starts container)
+  - No wrapping needed
+- ✅ **`mlc-stats`** - WRAPPED by `/opt/ds01-infra/scripts/monitoring/mlc-stats-wrapper.sh`
+  - Adds: GPU process information, resource limit display
+  - Called by: `container-stats`
 
-3. **User Interface**: Enhanced CLI commands
-   - **Onboarding wizards**: `user-setup` (educational) and `new-project` (streamlined)
-   - **Container commands**: `container-*` for simplified management
-   - **Image commands**: `image-*` for Docker image management
-   - **Command dispatchers**: Flexible syntax (e.g., `user setup` or `container list`)
-   - `mlc-create-wrapper.sh`: Wraps original `mlc-create` with automatic resource limits
-   - `ds01-run`: Standalone launcher with resource enforcement
-   - `ds01-status`: System-wide resource usage dashboard
+**DS01 Does NOT Use (6 of 9 commands - built custom alternatives):**
+- ❌ **`mlc-list`** → DS01's `container-list` uses `docker ps` directly
+  - Why: Needs DS01-specific labels (`ds01.*`), custom formatting, project names
+- ❌ **`mlc-stop`** → DS01's `container-stop` uses `docker stop` directly
+  - Why: Custom warnings, force/timeout options, process count display
+- ❌ **`mlc-remove`** → DS01's `container-cleanup` uses `docker rm` directly
+  - Why: Bulk operations, GPU state cleanup, safety checks
+- ❌ **`mlc-start`** → DS01 uses `docker start` directly when needed
+  - Why: Rarely used (container-run handles starting via mlc-open)
+- ❌ **`mlc-update-sys`, `mlc-upgrade-sys`** → Not applicable to DS01
+
+**Why Strategic Usage:**
+DS01 uses MLC where it excels (framework management, entering containers) and builds custom where needs differ (resource quotas, GPU scheduling, bulk operations, educational features). See `/opt/ds01-infra/docs/COMMAND_LAYERS.md` for complete details.
+
+- ✅ **Symlinks configured** in `/usr/local/bin/` for 2 wrapped commands
+
+**TIER 2: Modular Unit Commands** (Single-purpose, reusable)
+- **Container Management** (7 commands): `container-create`, `container-run`, `container-stop`, `container-list`, `container-stats`, `container-cleanup`, `container-exit`
+  - `container-create` → calls `mlc-create-wrapper.sh`
+  - `container-run` → calls `mlc-open`
+  - Others use Docker API directly for fine-grained DS01 control
+- **Image Management** (4 commands): `image-create`, `image-list`, `image-update`, `image-delete`
+- **Project Setup Modules** (5 commands): `dir-create`, `git-init`, `readme-create`, `ssh-setup`, `vscode-setup`
+- **All support `--guided` flag** for educational mode with detailed explanations
+
+**TIER 3: Workflow Orchestrators** (Multi-step workflows)
+- **`project-init`**: Complete project setup workflow
+  - Orchestrates: dir-create → git-init → readme-create → image-create → container-create → container-run
+  - Eliminated 561 lines of duplication (58.5% reduction from original)
+- **Command Dispatchers**: Route flexible command syntax
+  - `container-dispatcher.sh`, `image-dispatcher.sh`, `project-dispatcher.sh`, `user-dispatcher.sh`
+  - Support both forms: `command subcommand` and `command-subcommand`
+
+**TIER 4: Workflow Wizards** (Complete onboarding experiences)
+- **`user-setup`**: Educational first-time user onboarding
+  - Orchestrates: ssh-setup → project-init → vscode-setup
+  - 69.4% reduction from original (932 → 285 lines)
+  - Target: Students new to Docker/containers
+- Command variants: `user-setup`, `user setup`, `new-user`
+
+**Enhancement Layer (DS01-specific):**
+- Resource limit enforcement via YAML config
+- GPU allocation state management and MIG support
+- Systemd cgroup slices per user group
+- Container lifecycle automation (idle detection, auto-cleanup)
+- Monitoring and metrics collection
 
 ### Core Components
 
@@ -85,7 +132,7 @@ DS01 provides two onboarding experiences with distinct purposes:
 
 **Key Conventions**:
 - Image naming: Always `{project}-image` (not `{username}-{project}`)
-- Docker group: Always `docker-users` (not `docker`)
+- Docker group: Use standard `docker` group for Docker socket access
 - Use case order: General ML, Computer Vision, NLP, RL, Custom
 - Color output: All scripts use `echo -e` for ANSI color codes
 - Shebang: Must be on line 1 (#!/bin/bash)
@@ -129,13 +176,10 @@ python3 -c "import yaml; yaml.safe_load(open('config/resource-limits.yaml'))"
 # Initial setup (requires root)
 sudo scripts/system/setup-resource-slices.sh
 
-# Create docker-users group (if not exists)
-sudo groupadd docker-users
-
 # Create command symlinks (makes commands available system-wide)
 sudo scripts/system/update-symlinks.sh
 
-# Add users to docker-users group
+# Add users to docker group
 sudo scripts/system/add-user-to-docker.sh <username>
 
 # Deploy config file changes (no root required)
@@ -337,7 +381,7 @@ When modifying resource allocation logic:
 - **Colors in output**: Use GREEN/YELLOW/RED variables, reset with NC (No Color)
 - **Color rendering**: ALWAYS use `echo -e` for ANSI color codes (not plain `echo`)
 - **Shebang**: Must be on line 1 (#!/bin/bash) with no leading whitespace or comments
-- **Docker group**: Always use `docker-users` group (not `docker`)
+- **Docker group**: Use standard `docker` group for Docker socket access
 - **Image naming**: Always `{project}-image` format (e.g., `my-thesis-image`)
 - **Command dispatchers**: Support both forms: `command subcommand` and `command-subcommand`
 
@@ -361,8 +405,8 @@ When modifying resource allocation logic:
 - Standard library only (subprocess, json, datetime, pathlib)
 
 **Groups:**
-- `docker-users` group must exist for Docker permissions
-- Users must be added to `docker-users` group (not `docker`)
+- `docker` group must exist for Docker permissions (standard Docker setup)
+- Users must be added to `docker` group for Docker socket access
 
 ## Recent Changes (November 2025)
 
@@ -376,7 +420,7 @@ When modifying resource allocation logic:
 - Fixed color code rendering: all scripts now use `echo -e` for ANSI codes
 
 **New Scripts:**
-- `scripts/system/add-user-to-docker.sh` - Helper for adding users to docker-users group
+- `scripts/system/add-user-to-docker.sh` - Helper for adding users to docker group
 - `scripts/system/update-symlinks.sh` - Automates symlink management in /usr/local/bin
 - `scripts/user/user-dispatcher.sh` - Routes user subcommands to appropriate scripts
 - `scripts/user/new-project` - Streamlined project setup (renamed from new-project-setup)
@@ -391,3 +435,36 @@ When modifying resource allocation logic:
 - Fixed all heredocs to use proper color code format
 - Fixed Docker permission error handling in onboarding scripts
 - Fixed success messages appearing on failed builds
+
+**Major Refactoring (November 2025 - Phases 1-6):**
+- **Phase 1 [NEW]**: Audited base system integration
+  - Documented all 9 mlc-* commands and their DS01 integration
+  - Verified actual usage: 3 of 9 commands used (1 wrapped, 1 called directly, 1 wrapped)
+  - Confirmed 6 commands NOT used (DS01 built custom alternatives)
+  - Created comprehensive documentation: `docs/COMMAND_LAYERS.md`
+- **Phase 2**: Extracted modular commands
+  - Created `dir-create`, `git-init`, `readme-create` from project-init
+  - All new commands support --guided flag
+- **Phase 3**: Added --guided flags across all commands
+  - Enhanced educational content for beginners
+  - Consistent --guided behavior throughout system
+- **Phase 4**: Refactored orchestrators
+  - Reduced `project-init` from 958 to 397 lines (58.5% reduction)
+  - Eliminated 561 lines of duplicated code
+  - Now calls Tier 2 modules instead of duplicating logic
+- **Phase 5**: Created wizards
+  - New `ssh-setup` and `vscode-setup` Tier 2 modules
+  - Refactored `user-setup` from 932 to 285 lines (69.4% reduction)
+  - Clean Tier 4 orchestrator pattern achieved
+- **Phase 6**: Fixed exit functionality/documentation
+  - Completely rewrote `container-exit` with accurate docker exec behavior
+  - Removed all misleading Ctrl+P, Ctrl+Q references (doesn't work with docker exec)
+  - Updated `container-aliases.sh` and `container-stop` with correct exit instructions
+  - Added deprecation notices to legacy files (`new-project`, `project-init-beginner`)
+
+**Results:**
+- Total code reduction: >1,100 lines eliminated through modularization
+- Zero code duplication: Single source of truth for each operation
+- Enhanced user experience: Consistent --guided mode across all commands
+- Accurate documentation: All exit behavior now correctly documented
+- Clean architecture: Four-tier hierarchy (Base → Modules → Orchestrators → Wizards)

@@ -1,6 +1,20 @@
 #!/bin/bash
 # DS01 New Project Setup Wizard
 # Complete interactive setup for data science projects
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ⚠️  DEPRECATED: This script is superseded by the modular project-init
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Please use instead:
+#   project-init           # Streamlined project setup
+#   project-init --guided  # Educational mode with explanations
+#
+# This file is kept for compatibility but may be removed in the future.
+# The new project-init uses modular Tier 2 components for better
+# maintainability and consistency.
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 set -e
 

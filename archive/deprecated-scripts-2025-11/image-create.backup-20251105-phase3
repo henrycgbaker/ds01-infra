@@ -27,7 +27,6 @@ usage() {
     echo "  -p, --packages PACKAGES    Additional Python packages (space-separated)"
     echo "  -s, --system PACKAGES      System packages via apt (space-separated)"
     echo "  --no-build                 Create Dockerfile only, don't build"
-    echo "  --guided                   Show detailed explanations for beginners"
     echo "  -h, --help                 Show this help message"
     echo ""
     echo -e "${CYAN}Frameworks:${NC}"
@@ -119,26 +118,6 @@ interactive_mode() {
 
     # Framework
     if [ -z "$FRAMEWORK" ]; then
-        if [ "$GUIDED" = true ]; then
-            echo -e "${BOLD}Choosing a Framework${NC}"
-            echo ""
-            echo "A framework is the foundation for your ML/DL work:"
-            echo ""
-            echo "• ${CYAN}PyTorch${NC} - Most popular, great community, PyTorch + torchvision"
-            echo "  Used by: Most research, computer vision, NLP"
-            echo ""
-            echo "• ${CYAN}TensorFlow${NC} - Google's framework, production-ready"
-            echo "  Used by: Industry applications, deployment"
-            echo ""
-            echo "• ${CYAN}JAX${NC} - High-performance, functional approach"
-            echo "  Used by: Research, custom algorithms"
-            echo ""
-            echo "• ${CYAN}PyTorch CPU${NC} - No GPU, for testing or CPU-only work"
-            echo ""
-            echo -e "${YELLOW}💡 Recommendation:${NC} Choose PyTorch unless you have specific needs"
-            echo ""
-        fi
-
         echo "Select base framework:"
         echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
         echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
@@ -156,32 +135,6 @@ interactive_mode() {
 
     # Use case
     if [ -z "$USECASE" ]; then
-        if [ "$GUIDED" = true ]; then
-            echo ""
-            echo -e "${BOLD}Choosing a Use Case${NC}"
-            echo ""
-            echo "This determines which specialized packages get installed:"
-            echo ""
-            echo "• ${CYAN}Computer Vision (CV)${NC} - Images, videos, object detection"
-            echo "  Packages: timm, albumentations, opencv, torchvision"
-            echo "  Example: Image classification, object detection, segmentation"
-            echo ""
-            echo "• ${CYAN}NLP${NC} - Text, language models, transformers"
-            echo "  Packages: transformers, datasets, tokenizers, accelerate"
-            echo "  Example: Text classification, translation, chatbots"
-            echo ""
-            echo "• ${CYAN}Reinforcement Learning${NC} - Agents, environments, decision making"
-            echo "  Packages: gymnasium, stable-baselines3"
-            echo "  Example: Game AI, robotics, optimization"
-            echo ""
-            echo "• ${CYAN}General ML${NC} - Traditional ML, tabular data, boosting"
-            echo "  Packages: scikit-learn, xgboost, lightgbm"
-            echo "  Example: Classification, regression, feature engineering"
-            echo ""
-            echo -e "${YELLOW}💡 Note:${NC} All options include: numpy, pandas, matplotlib, jupyter"
-            echo ""
-        fi
-
         echo -e "\n${BOLD}Select use case:${NC}"
         echo -e "  ${BOLD}1)${NC} Computer Vision (timm, albumentations, opencv)"
         echo -e "  ${BOLD}2)${NC} NLP (transformers, datasets, tokenizers)"
@@ -308,7 +261,6 @@ USECASE=""
 ADDITIONAL_PACKAGES=""
 SYSTEM_PACKAGES=""
 NO_BUILD=false
-GUIDED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -330,10 +282,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-build)
             NO_BUILD=true
-            shift
-            ;;
-        --guided)
-            GUIDED=true
             shift
             ;;
         -h|--help)
@@ -358,51 +306,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Show guided introduction
-if [ "$GUIDED" = true ]; then
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Docker Image Creation - Guided Mode${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "${BOLD}What is a Docker Image?${NC}"
-    echo ""
-    echo "  A Docker image is a blueprint for your computing environment:"
-    echo "  • Contains operating system (Ubuntu Linux)"
-    echo "  • Pre-installed software (Python, PyTorch, TensorFlow, etc.)"
-    echo "  • All libraries and dependencies"
-    echo "  • Configuration and settings"
-    echo ""
-    echo -e "${BOLD}Why Create a Custom Image?${NC}"
-    echo ""
-    echo "  You create an image to:"
-    echo "  • Install specific Python packages you need"
-    echo "  • Set up your preferred ML/DL framework version"
-    echo "  • Include domain-specific libraries (CV, NLP, RL)"
-    echo "  • Save time - install once, use many times"
-    echo ""
-    echo -e "${BOLD}Image vs Container:${NC}"
-    echo ""
-    echo "  • ${CYAN}Image${NC} = Blueprint (like a recipe)"
-    echo "  • ${CYAN}Container${NC} = Running instance (like the cooked dish)"
-    echo "  • One image can create many containers"
-    echo "  • Containers inherit everything from the image"
-    echo ""
-    echo -e "${BOLD}The Process:${NC}"
-    echo ""
-    echo "  1. Choose base framework (PyTorch, TensorFlow, JAX)"
-    echo "  2. Select use case (CV, NLP, RL, or general ML)"
-    echo "  3. Add extra packages if needed"
-    echo "  4. Build image (takes 3-5 minutes)"
-    echo "  5. Create containers from this image"
-    echo ""
-    echo -e "${YELLOW}💡 Pro Tip:${NC} Start with a simple setup first."
-    echo "   You can always create more specialized images later!"
-    echo ""
-    read -p "Press Enter to start creating your image..." </dev/tty
-    echo ""
-fi
-
 # Interactive mode if missing info
 if [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
     interactive_mode
@@ -416,43 +319,6 @@ fi
 echo -e "\n${CYAN}Creating Dockerfile...${NC}"
 DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES")
 echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
-
-# Guided explanation of Dockerfile
-if [ "$GUIDED" = true ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}What is a Dockerfile?${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo "A Dockerfile is a recipe for building your image:"
-    echo ""
-    echo "  • ${CYAN}FROM${NC} - Start with a base image (PyTorch, TensorFlow, etc.)"
-    echo "  • ${CYAN}RUN${NC} - Execute commands (install packages, configure)"
-    echo "  • ${CYAN}ENV${NC} - Set environment variables"
-    echo "  • ${CYAN}WORKDIR${NC} - Set working directory"
-    echo ""
-    echo "Your Dockerfile is saved at:"
-    echo -e "  ${BLUE}$DOCKERFILE${NC}"
-    echo ""
-    echo "You can edit it later to:"
-    echo "  • Add more packages"
-    echo "  • Change configurations"
-    echo "  • Install system tools"
-    echo ""
-    echo -e "Then rebuild with: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
-    echo ""
-    echo -e "${BOLD}Now Building the Image${NC}"
-    echo ""
-    echo "This will:"
-    echo "  1. Download base image (~2 GB)"
-    echo "  2. Install all packages"
-    echo "  3. Configure Jupyter and Python"
-    echo "  4. Save final image (~4-5 GB)"
-    echo ""
-    echo "Time: 3-5 minutes (depending on packages and network)"
-    echo ""
-    read -p "Press Enter to start the build..." </dev/tty
-    echo ""
-fi
 
 # Build image
 if [ "$NO_BUILD" = false ]; then
@@ -478,54 +344,13 @@ $([ -n "$ADDITIONAL_PACKAGES" ] && echo "- Additional: $ADDITIONAL_PACKAGES")
 $([ -n "$SYSTEM_PACKAGES" ] && echo "- System: $SYSTEM_PACKAGES")
 INFOEOF
 
-        if [ "$GUIDED" = true ]; then
-            echo ""
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${BOLD}Image Created Successfully!${NC}"
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo ""
-            echo -e "${BOLD}What Just Happened?${NC}"
-            echo ""
-            echo "  ✓ Downloaded base image with $FRAMEWORK"
-            echo "  ✓ Installed all requested packages"
-            echo "  ✓ Configured Jupyter Lab"
-            echo "  ✓ Set up Python environment"
-            echo "  ✓ Saved image: ${CYAN}$FULL_IMAGE_NAME${NC}"
-            echo ""
-            echo -e "${BOLD}What Can You Do Now?${NC}"
-            echo ""
-            echo "  ${BOLD}1) View your images:${NC}"
-            echo -e "     ${GREEN}image-list${NC}"
-            echo "     See all available Docker images"
-            echo ""
-            echo "  ${BOLD}2) Create a container from this image:${NC}"
-            echo -e "     ${GREEN}container-create $IMAGE_NAME${NC}"
-            echo "     This creates a running environment from your image"
-            echo ""
-            echo "  ${BOLD}3) Start and enter the container:${NC}"
-            echo -e "     ${GREEN}container-run $IMAGE_NAME${NC}"
-            echo "     Opens a shell inside the container"
-            echo ""
-            echo -e "${BOLD}Remember:${NC}"
-            echo "  • ${CYAN}Image${NC} = Blueprint (what you just created)"
-            echo "  • ${CYAN}Container${NC} = Running instance (what you'll work in)"
-            echo "  • One image can create many containers"
-            echo ""
-            echo -e "${BOLD}Updating the Image Later:${NC}"
-            echo ""
-            echo "  If you need to add more packages:"
-            echo -e "  1. Edit Dockerfile: ${GREEN}vim $DOCKERFILE${NC}"
-            echo -e "  2. Rebuild image: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
-            echo ""
-        else
-            echo -e "${BOLD}Next Steps:${NC}"
-            echo -e "  1. List images:       ${GREEN}image-list${NC}"
-            echo -e "  2. Create container:  ${GREEN}container-create $IMAGE_NAME${NC}"
-            echo -e "  3. Start container:   ${GREEN}container-run $IMAGE_NAME${NC}"
-            echo ""
-            echo -e "${YELLOW}💡 Update packages: Edit ${BLUE}$DOCKERFILE${NC}"
-            echo -e "   ${YELLOW}Then rebuild: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
-        fi
+        echo -e "${BOLD}Next Steps:${NC}"
+        echo -e "  1. List images:       ${GREEN}image-list${NC}"
+        echo -e "  2. Create container:  ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo -e "  3. Start container:   ${GREEN}container-run $IMAGE_NAME${NC}"
+        echo ""
+        echo -e "${YELLOW}💡 Update packages: Edit ${BLUE}$DOCKERFILE${NC}"
+        echo -e "   ${YELLOW}Then rebuild: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
     else
         echo -e "\n${RED}✗ Build failed${NC}"
         echo "Check Dockerfile: $DOCKERFILE"

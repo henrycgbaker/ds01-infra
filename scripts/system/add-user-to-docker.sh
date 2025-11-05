@@ -24,23 +24,23 @@ if ! id "$USERNAME" &>/dev/null; then
     exit 1
 fi
 
-# Check if docker-users group exists
-if ! getent group docker-users &>/dev/null; then
-    echo "Creating docker-users group..."
-    groupadd docker-users
+# Check if docker group exists
+if ! getent group docker &>/dev/null; then
+    echo "Error: docker group does not exist. Docker may not be installed."
+    exit 1
 fi
 
-# Add user to docker-users group
-echo "Adding $USERNAME to docker-users group..."
-usermod -aG docker-users "$USERNAME"
+# Add user to docker group
+echo "Adding $USERNAME to docker group..."
+usermod -aG docker "$USERNAME"
 
 echo ""
-echo "✓ $USERNAME has been added to the docker-users group"
+echo "✓ $USERNAME has been added to the docker group"
 echo ""
 echo "IMPORTANT: The user must log out and log back in for this to take effect."
 echo ""
 echo "To verify after logging back in, the user can run:"
 echo "  groups"
 echo ""
-echo "They should see 'docker-users' in the list of groups."
+echo "They should see 'docker' in the list of groups."
 echo ""

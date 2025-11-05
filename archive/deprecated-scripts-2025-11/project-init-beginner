@@ -3,6 +3,20 @@
 # Complete interactive setup for first-time users with detailed explanations
 # Includes project structure, Git, Docker image, and container setup with GPU access
 # File: /opt/ds01-infra/scripts/user/project-init-beginner
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# ⚠️  DEPRECATED: This script is superseded by project-init --guided
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# Please use instead:
+#   project-init --guided  # Educational mode with detailed explanations
+#   user-setup            # Complete onboarding wizard (includes project setup)
+#
+# This file is kept for compatibility but may be removed in the future.
+# The new project-init uses modular Tier 2 components (dir-create,
+# git-init, readme-create, image-create) for better maintainability.
+#
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 set -e
 

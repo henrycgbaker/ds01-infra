@@ -1,6 +1,10 @@
 #!/bin/bash
-# Start and attach to a container
+# DS01 Container Run - Starts and attaches to containers via mlc-open
+# Tier 2 Command - Can be used standalone or called by orchestrators
 
+set -e
+
+# Colors
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -13,86 +17,49 @@ NC='\033[0m'
 USERNAME=$(whoami)
 USER_ID=$(id -u)
 
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+MLC_OPEN="/opt/aime-ml-containers/mlc-open"
+RESOURCE_PARSER="$INFRA_ROOT/docker/get_resource_limits.py"
+
 usage() {
     echo ""
-    echo -e "${BOLD}Container Runner${NC}"
+    echo -e "${BOLD}DS01 Container Run${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  container-run <name> [command]"
+    echo "  container-run <name> [options]"
     echo ""
     echo -e "${CYAN}Arguments:${NC}"
     echo "  name              Container name (required)"
-    echo "  command           Command to run (default: /bin/bash)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
-    echo "  -d, --detach      Start in background (don't attach)"
-    echo "  -p, --port PORT   Expose additional port (e.g., 8888:8888)"
-    echo "  --jupyter         Start Jupyter Lab automatically"
+    echo "  --guided          Show detailed explanations for beginners"
     echo "  -h, --help        Show this help message"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo -e "  ${DIM}# Start and enter container${NC}"
     echo "  container-run my-project"
     echo ""
-    echo -e "  ${DIM}# Start with Jupyter Lab${NC}"
-    echo "  container-run my-project --jupyter"
+    echo -e "  ${DIM}# With guided explanations${NC}"
+    echo "  container-run my-project --guided"
     echo ""
-    echo -e "  ${DIM}# Start in background${NC}"
-    echo "  container-run training --detach"
+    echo -e "${YELLOW}💡 Inside the container:${NC}"
+    echo -e "  • Your workspace: ${CYAN}/workspace${NC}"
+    echo -e "  • Start Jupyter: ${GREEN}jlab${NC}"
+    echo -e "  • Check GPU: ${GREEN}gpu${NC}"
+    echo -e "  • Exit session: ${GREEN}exit${NC} (container keeps running)"
     echo ""
-    echo -e "  ${DIM}# Run specific command${NC}"
-    echo "  container-run my-project python train.py"
-    echo ""
-    echo -e "${CYAN}Inside the container:${NC}"
-    echo -e "  • Your workspace is at ${BLUE}/workspace${NC}"
-    echo -e "  • Exit without stopping: ${GREEN}Ctrl+P, Ctrl+Q${NC}"
-    echo -e "  • Exit and stop: ${GREEN}exit${NC} or ${GREEN}Ctrl+D${NC}"
-    echo ""
-    echo -e "${YELLOW}💡 Tips:${NC}"
-    echo -e "  • View running containers: ${GREEN}container-list${NC}"
-    echo -e "  • Stop container: ${GREEN}container-stop <name>${NC}"
-    echo -e "  • Check resources: ${GREEN}container-stats${NC}"
-    echo ""
-}
-
-get_idle_timeout() {
-    local username="$1"
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local infra_root="$(dirname "$script_dir")"
-    local resource_parser="$infra_root/docker/get_resource_limits.py"
-
-    if [ -f "$resource_parser" ]; then
-        python3 "$resource_parser" "$username" --idle-timeout 2>/dev/null || echo "48h"
-    else
-        echo "48h"
-    fi
-}
-
-format_duration() {
-    local duration="$1"
-    # Just return as-is for display
-    echo "$duration"
 }
 
 # Parse arguments
 CONTAINER_NAME=""
-COMMAND=""
-DETACH=false
-JUPYTER=false
-EXTRA_PORTS=()
+GUIDED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -d|--detach)
-            DETACH=true
-            shift
-            ;;
-        -p|--port)
-            EXTRA_PORTS+=("-p" "$2")
-            shift 2
-            ;;
-        --jupyter)
-            JUPYTER=true
+        --guided)
+            GUIDED=true
             shift
             ;;
         -h|--help)
@@ -108,9 +75,9 @@ while [[ $# -gt 0 ]]; do
             if [ -z "$CONTAINER_NAME" ]; then
                 CONTAINER_NAME="$1"
             else
-                # Rest is command
-                COMMAND="$*"
-                break
+                echo -e "${RED}✗ Too many arguments${NC}\n"
+                usage
+                exit 1
             fi
             shift
             ;;
@@ -119,161 +86,105 @@ done
 
 # Validate container name
 if [ -z "$CONTAINER_NAME" ]; then
-    echo -e "${RED}✗ Container name is required${NC}\n"
+    echo -e "${RED}✗ Container name required${NC}\n"
     usage
     exit 1
 fi
 
-# Construct full container tag
-CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
-
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}${BOLD}    Starting Container${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+# Container tag (how docker sees it)
+CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
 
 # Check if container exists
-if ! docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_TAG}$"; then
-    echo -e "${RED}✗ Container '$CONTAINER_NAME' not found${NC}\n"
-    echo -e "${BOLD}Your containers:${NC}"
-    docker ps -a --format "  • {{.Names}}" --filter "name=._.$USER_ID" | sed "s/\._\.$USER_ID//" | head -5
+if ! docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+    echo -e "${RED}✗ Container '$CONTAINER_NAME' does not exist${NC}"
     echo ""
-    echo -e "${BOLD}Create container:${NC}"
+    echo -e "${YELLOW}Create it first:${NC}"
     echo -e "  ${GREEN}container-create $CONTAINER_NAME${NC}"
+    echo ""
+    echo -e "${YELLOW}Or list your containers:${NC}"
+    echo -e "  ${GREEN}container-list${NC}"
     echo ""
     exit 1
 fi
 
-# Get container status
-STATUS=$(docker inspect --format "{{.State.Status}}" "$CONTAINER_TAG" 2>/dev/null)
-
-echo -e "${BOLD}Container:${NC} ${CYAN}$CONTAINER_NAME${NC}"
-echo -e "${BOLD}Status:${NC}    "
-
-case $STATUS in
-    running)
-        echo -e "${GREEN}Running${NC}"
-        ALREADY_RUNNING=true
-        ;;
-    exited|stopped)
-        echo -e "${YELLOW}Stopped${NC}"
-        ALREADY_RUNNING=false
-        ;;
-    created)
-        echo -e "${BLUE}Created (not started yet)${NC}"
-        ALREADY_RUNNING=false
-        ;;
-    *)
-        echo -e "${DIM}$STATUS${NC}"
-        ALREADY_RUNNING=false
-        ;;
-esac
-
-# Get workspace info
-WORKSPACE=$(docker inspect --format "{{range .Mounts}}{{if eq .Destination \"/workspace\"}}{{.Source}}{{end}}{{end}}" "$CONTAINER_TAG" 2>/dev/null)
-if [ -n "$WORKSPACE" ]; then
-    echo -e "${BOLD}Workspace:${NC} ${BLUE}$WORKSPACE${NC}"
-fi
-
-# Get GPU info
-GPU_DEVICES=$(docker inspect --format "{{.HostConfig.DeviceRequests}}" "$CONTAINER_TAG" 2>/dev/null)
-if [[ "$GPU_DEVICES" != "[]" ]] && [[ "$GPU_DEVICES" != "<no value>" ]]; then
-    echo -e "${BOLD}GPU:${NC}       ${GREEN}Enabled${NC}"
-else
-    echo -e "${BOLD}GPU:${NC}       ${DIM}CPU-only${NC}"
-fi
-
-echo ""
-
-# Start container if not running
-if [ "$ALREADY_RUNNING" = false ]; then
-    echo -e "${CYAN}Starting container...${NC}"
-
-    # Add jupyter port if requested
-    if [ "$JUPYTER" = true ]; then
-        EXTRA_PORTS+=("-p" "8888:8888")
-    fi
-
-    # Start container
-    if [ ${#EXTRA_PORTS[@]} -gt 0 ]; then
-        # Need to remove and recreate with port mapping
-        # Get image
-        IMAGE=$(docker inspect --format "{{.Config.Image}}" "$CONTAINER_TAG")
-        echo -e "${YELLOW}⚠${NC} Adding port mappings (will recreate container)"
-
-        # Stop and remove
-        docker stop "$CONTAINER_TAG" 2>/dev/null || true
-        docker rm "$CONTAINER_TAG" 2>/dev/null || true
-
-        # Recreate with ports
-        # This is simplified - in production would preserve all settings
-        docker create --name "$CONTAINER_TAG" "${EXTRA_PORTS[@]}" "$IMAGE" > /dev/null
-    fi
-
-    if docker start "$CONTAINER_TAG" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Container started"
-    else
-        echo -e "${RED}✗${NC} Failed to start container"
-        exit 1
-    fi
-else
-    echo -e "${GREEN}✓${NC} Container already running"
-fi
-
-# Show idle timeout info
-IDLE_TIMEOUT=$(get_idle_timeout "$USERNAME")
-echo ""
-echo -e "${BOLD}Auto-stop:${NC} ${YELLOW}$IDLE_TIMEOUT${NC} of idle GPU time"
-
-# Start Jupyter if requested
-if [ "$JUPYTER" = true ]; then
+# Show guided introduction
+if [ "$GUIDED" = true ]; then
     echo ""
-    echo -e "${CYAN}Starting Jupyter Lab...${NC}"
-    docker exec -d "$CONTAINER_TAG" jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
-    sleep 2
-    echo -e "${GREEN}✓${NC} Jupyter Lab started"
-    echo -e "  ${BOLD}URL:${NC} ${BLUE}http://localhost:8888${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Entering Container${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What's About to Happen:${NC}"
+    echo ""
+    echo "  You're about to enter your container's bash shell."
+    echo "  This is like SSH-ing into your computing environment."
+    echo ""
+    echo -e "${BOLD}Inside the Container:${NC}"
+    echo ""
+    echo "  • Your workspace is at: ${CYAN}/workspace${NC}"
+    echo "  • All your project files are there"
+    echo "  • You have Python, PyTorch/TensorFlow, and GPU access"
+    echo "  • You can run scripts, start Jupyter, train models, etc."
+    echo ""
+    echo -e "${BOLD}Helpful Commands Inside:${NC}"
+    echo ""
+    echo -e "  ${GREEN}gpu${NC}          Check GPU status (nvidia-smi)"
+    echo -e "  ${GREEN}jlab${NC}         Start Jupyter Lab"
+    echo -e "  ${GREEN}ws${NC}           Go to /workspace"
+    echo -e "  ${GREEN}ll${NC}           List files"
+    echo -e "  ${GREEN}exit-help${NC}    Show exit options"
+    echo ""
+    echo -e "${BOLD}How to Exit:${NC}"
+    echo ""
+    echo -e "  ${YELLOW}Important: There are different ways to exit!${NC}"
+    echo ""
+    echo "  ${BOLD}Option 1: Exit Session (Container Keeps Running)${NC}"
+    echo -e "    • Type ${GREEN}exit${NC} or press ${GREEN}Ctrl+D${NC}"
+    echo "    • Your bash session ends"
+    echo "    • ${CYAN}Container keeps running in background${NC}"
+    echo "    • You can re-enter anytime with: container-run $CONTAINER_NAME"
+    echo "    • ${BOLD}Use this most of the time!${NC}"
+    echo ""
+    echo "  ${BOLD}Option 2: Stop Container (Free Resources)${NC}"
+    echo "    • Exit first (type 'exit')"
+    echo -e "    • Then run on host: ${GREEN}container-stop $CONTAINER_NAME${NC}"
+    echo "    • Frees GPU and resources for others"
+    echo "    • ${BOLD}Use this when you're done for the day${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Remember:${NC} Your files in /workspace are ${BOLD}always safe${NC}"
+    echo "   Stopping a container doesn't delete your files!"
+    echo ""
+    read -p "Press Enter to enter the container..." </dev/tty
+    echo ""
 fi
 
-echo ""
-
-# Detach mode
-if [ "$DETACH" = true ]; then
-    echo -e "${GREEN}✓${NC} Container running in background"
-    echo ""
-    echo -e "${BOLD}Attach later:${NC}"
-    echo -e "  ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo ""
-    exit 0
-fi
-
-# Attach to container
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}${BOLD}    Entering Container${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-
-echo -e "${BOLD}Quick Reference:${NC}"
-echo -e "  • Exit without stopping: ${GREEN}Ctrl+P, Ctrl+Q${NC} ${DIM}(or type '${NC}${YELLOW}detach${NC}${DIM}' for reminder)${NC}"
-echo -e "  • Exit and stop:         ${GREEN}exit${NC} or ${GREEN}Ctrl+D${NC} ${DIM}(or type '${NC}${YELLOW}exit-stop${NC}${DIM}')${NC}"
-echo -e "  • Help anytime:          ${YELLOW}exit-help${NC}"
-echo -e "  • Your workspace:        ${BLUE}/workspace${NC}"
-echo ""
-echo -e "${DIM}Connecting...${NC}"
-echo ""
-
-# Check if init script is available in container
-INIT_AVAILABLE=$(docker exec "$CONTAINER_TAG" test -f /usr/local/bin/ds01-init && echo "yes" || echo "no")
-
-# Execute command or bash
-if [ -n "$COMMAND" ]; then
-    # Run specific command
-    if [ "$INIT_AVAILABLE" = "yes" ]; then
-        docker exec -it "$CONTAINER_TAG" /usr/local/bin/ds01-init -c "$COMMAND"
-    else
-        docker exec -it "$CONTAINER_TAG" bash -c "$COMMAND"
+# Check if mlc-open exists (base system)
+if [ -f "$MLC_OPEN" ] && [ -x "$MLC_OPEN" ]; then
+    # Use base system mlc-open
+    if [ "$GUIDED" = false ]; then
+        echo -e "${CYAN}Opening container '${CONTAINER_NAME}'...${NC}"
+        echo ""
     fi
+
+    # Call mlc-open
+    bash "$MLC_OPEN" "$CONTAINER_NAME"
     EXIT_CODE=$?
+
 else
-    # Interactive bash session
+    # Fallback to direct docker exec (if base system not available)
+    if [ "$GUIDED" = false ]; then
+        echo -e "${CYAN}Opening container '${CONTAINER_NAME}'...${NC}"
+        echo ""
+    fi
+
+    # Start container if not running
+    if ! docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+        docker start "$CONTAINER_TAG" >/dev/null 2>&1 || true
+    fi
+
+    # Check if ds01-init script is available
+    INIT_AVAILABLE=$(docker exec "$CONTAINER_TAG" test -f /usr/local/bin/ds01-init 2>/dev/null && echo "yes" || echo "no")
+
     if [ "$INIT_AVAILABLE" = "yes" ]; then
         docker exec -it "$CONTAINER_TAG" /usr/local/bin/ds01-init
     else
@@ -282,24 +193,89 @@ else
     EXIT_CODE=$?
 fi
 
-# Check exit status
+# Post-exit handling
 echo ""
-if [ $EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}✓${NC} Session ended"
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${YELLOW}${BOLD}You've Exited the Container${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What Just Happened?${NC}"
+    echo ""
+    echo "  • Your bash session inside the container ended"
+    echo "  • The container is ${GREEN}still running${NC} in the background"
+    echo "  • All your files in /workspace are ${BOLD}safe${NC}"
+    echo "  • GPU is still allocated to this container"
+    echo ""
+    echo -e "${BOLD}What You Can Do Now:${NC}"
+    echo ""
+    echo -e "  ${BOLD}1) Re-enter the Container${NC}"
+    echo -e "     ${GREEN}container-run $CONTAINER_NAME${NC}"
+    echo "     Continue working where you left off"
+    echo "     Your Python environment, processes, everything is still there"
+    echo ""
+    echo -e "  ${BOLD}2) Stop the Container (Free Resources)${NC}"
+    echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
+    echo "     Frees up GPU and resources for others"
+    echo "     ${DIM}Do this when you're done for the day${NC}"
+    echo ""
+    echo -e "  ${BOLD}3) Check Container Status${NC}"
+    echo -e "     ${GREEN}container-list${NC}"
+    echo "     See all your containers and their status"
+    echo ""
+    echo -e "  ${BOLD}4) Check Resource Usage${NC}"
+    echo -e "     ${GREEN}container-stats${NC}"
+    echo "     See GPU and CPU usage"
+    echo ""
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Important Reminders:${NC}"
+    echo ""
+    echo "  • ${CYAN}Container running${NC} = GPU is allocated (even if idle)"
+    echo "  • ${CYAN}Stopping container${NC} = Frees GPU for others"
+    echo "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
+    echo "  • ${GREEN}You can restart${NC} anytime without losing work"
+    echo ""
+    echo -e "${DIM}Be a good citizen: Stop containers when not actively using them!${NC}"
+    echo ""
+
 else
-    echo -e "${YELLOW}⚠${NC} Session ended with code $EXIT_CODE"
+    # Non-guided: brief status
+    # Check if container is still running
+    if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+        echo -e "${GREEN}✓${NC} Container still running"
+        echo ""
+        echo -e "${BOLD}Reconnect:${NC}      ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo -e "${BOLD}Stop:${NC}          ${GREEN}container-stop $CONTAINER_NAME${NC}"
+        echo -e "${BOLD}View status:${NC}   ${GREEN}container-list${NC}"
+        echo ""
+    else
+        echo -e "${DIM}Container stopped${NC}"
+        echo ""
+        echo -e "${BOLD}Restart:${NC}       ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo ""
+    fi
 fi
 
-# Check if container is still running
-if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_TAG}$"; then
-    echo -e "${GREEN}✓${NC} Container still running"
-    echo ""
-    echo -e "${BOLD}Reconnect:${NC} ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "${BOLD}Stop:${NC}      ${GREEN}container-stop $CONTAINER_NAME${NC}"
-else
-    echo -e "${DIM}Container stopped${NC}"
-    echo ""
-    echo -e "${BOLD}Restart:${NC} ${GREEN}container-run $CONTAINER_NAME${NC}"
+# Get idle timeout info
+get_idle_timeout() {
+    local username="$1"
+    if [ -f "$RESOURCE_PARSER" ]; then
+        python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "48h"
+    else
+        echo "48h"
+    fi
+}
+
+# Show idle timeout reminder
+if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+    IDLE_TIMEOUT=$(get_idle_timeout "$USERNAME")
+    if [ "$IDLE_TIMEOUT" != "null" ] && [ "$IDLE_TIMEOUT" != "None" ]; then
+        if [ "$GUIDED" = false ]; then
+            echo -e "${DIM}Auto-stop after ${IDLE_TIMEOUT} of idle GPU time${NC}"
+            echo ""
+        fi
+    fi
 fi
 
-echo ""
+exit $EXIT_CODE
