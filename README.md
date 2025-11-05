@@ -1,149 +1,290 @@
 # DS01 Infrastructure - Container Management System
 
-NEED TO UPDATE
+Multi-user GPU-enabled container infrastructure for data science workloads with resource quotas, automated lifecycle management, and user-friendly onboarding.
+
+## 📋 Table of Contents
+
+- [Quick Start](#quick-start)
+- [User Onboarding Workflows](#user-onboarding-workflows)
+- [System Architecture](#system-architecture)
+- [Directory Structure](#directory-structure)
+- [Command Reference](#command-reference)
+- [Configuration](#configuration)
+- [User Management](#user-management)
+- [Docker Permissions](#docker-permissions)
+- [Deployment](#deployment)
+- [Monitoring](#monitoring)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## 🚀 Quick Start
+
+### For New Users
+
+```bash
+# First-time setup with detailed explanations (recommended)
+new-user
+
+# Or streamlined setup for experienced users
+new-project
+
+# Alternative commands (all equivalent):
+user setup
+user new
+user-setup
+```
+
+### For Administrators
+
+```bash
+# Add user to Docker group
+sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh <username>
+
+# Update system symlinks after changes
+sudo bash /opt/ds01-infra/scripts/system/update-symlinks.sh
+
+# View all available commands
+alias-list
+```
+
+---
+
+## 👥 User Onboarding Workflows
+
+DS01 provides two complementary onboarding experiences:
+
+### `new-user` - Educational Onboarding
+
+**Target audience**: First-time users, students new to Docker/containers
+**Style**: Comprehensive with detailed explanations
+
+**Features**:
+- Step-by-step wizard with explanations of Docker concepts
+- SSH key setup with educational context
+- Git repository initialization and LFS setup
+- Project structure options (data science layout vs blank)
+- Custom Docker image creation with use case templates
+- Container setup and VS Code integration instructions
+- Comprehensive README generation with workflow documentation
+
+**Use when**:
+- Onboarding new students or researchers
+- Users unfamiliar with container workflows
+- Setting up first project on the system
+
+```bash
+new-user
+# Also accessible via: user-setup, user setup, user new
+```
+
+### `new-project` - Streamlined Setup
+
+**Target audience**: Experienced users familiar with the system
+**Style**: Concise, minimal explanations
+
+**Features**:
+- Quick project setup wizard
+- Same technical capabilities as `new-user`
+- Assumes familiarity with Docker/containers
+- Minimal prompts, efficient workflow
+
+**Use when**:
+- Creating additional projects
+- User already completed `new-user` onboarding
+- Fast project initialization needed
+
+```bash
+new-project
+# Also accessible via: project init
+```
+
+### Workflow Comparison
+
+| Feature | new-user | new-project |
+|---------|----------|-------------|
+| SSH Setup | ✓ with explanations | ✓ streamlined |
+| Git Integration | ✓ with LFS education | ✓ quick setup |
+| Docker Concepts | ✓ explained | assumed knowledge |
+| Use Case Templates | 5 options (General ML default) | 5 options (General ML default) |
+| Image Naming | `{project}-image` | `{project}-image` |
+| README Generation | ✓ comprehensive | ✓ concise |
+| Container Creation | ✓ guided | ✓ efficient |
+
+---
 
 ## 🏗️ System Architecture
 
-### Overview
+### Three-Layer Design
 
-The container management system consists of:
+1. **Base System**: `aime-ml-containers` (external dependency)
+   - Core `mlc-*` CLI commands
+   - Container image repository
+   - User isolation via UID/GID mapping
 
-1. **Base System**: `aime-ml-containers`
-   - Provides core container lifecycle management
-   - Image repository with versioned ML frameworks
-   - User-specific container isolation
+2. **Enhancement Layer**: `ds01-infra` (this repository)
+   - Resource limits and GPU allocation
+   - Systemd cgroup integration
+   - Lifecycle automation
+   - User-friendly command wrappers
 
-2. **Enhancement Layer**: `ds01-infra` 
-   - Resource limits and quotas
-   - GPU allocation management  
-   - Auto-cleanup of idle containers
-   - Monitoring and metrics
+3. **User Interface**: Simplified commands
+   - `new-user` / `new-project` - Onboarding wizards
+   - `container-*` commands - Container management
+   - `image-*` commands - Image management
+   - Dispatcher scripts for flexible command syntax
 
-3. **User Interface**: Enhanced `mlc-*` CLI commands
-   - Student-friendly wrapper scripts
-   - Config-driven resource allocation
-   - Automatic defaults
+### Key Components
 
-### Directory Structure
+**User Onboarding**:
+- `scripts/user/user-setup` - Educational onboarding wizard (`new-user`)
+- `scripts/user/new-project` - Streamlined project setup
+- `scripts/user/user-dispatcher.sh` - Routes `user setup`, `user new` to user-setup
+- `scripts/user/project-init` - Wrapper for `new-project`
 
-UPDATE THIS
+**Container Management**:
+- `scripts/user/container-*` - User-facing container commands
+- `scripts/docker/mlc-create-wrapper.sh` - Enhanced container creation
+- `scripts/docker/gpu_allocator.py` - MIG-aware GPU allocation
+
+**System Administration**:
+- `scripts/system/add-user-to-docker.sh` - Add users to docker-users group
+- `scripts/system/update-symlinks.sh` - Update command symlinks
+- `scripts/system/setup-resource-slices.sh` - Configure systemd slices
+
+**Resource Management**:
+- `config/resource-limits.yaml` - Central resource configuration
+- `scripts/docker/get_resource_limits.py` - YAML parser for user limits
+
+---
+
+## 📁 Directory Structure
 
 ```
 ds01-infra/
 ├── config/
 │   ├── resource-limits.yaml          # Central resource configuration
-│   └── container-templates/          # Docker Compose templates (future)
+│   ├── etc-mirrors/                  # System config mirrors
+│   └── usr-mirrors/                  # User config templates
 │
 ├── scripts/
-│   ├── docker/
-│   │   ├── mlc-create-enhanced       # Main wrapper script
-│   │   ├── get_resource_limits.py    # Config parser
-│   │   ├── gpu-user-allocation.sh    # GPU tracking
-│   │   └── docker-launch.sh          # Low-level launcher
+│   ├── user/                         # User-facing commands
+│   │   ├── user-setup                # Educational onboarding wizard
+│   │   ├── new-project               # Streamlined project setup
+│   │   ├── user-dispatcher.sh        # Routes user subcommands
+│   │   ├── project-init              # Wrapper for new-project
+│   │   ├── container-*               # Container management commands
+│   │   └── image-*                   # Image management commands
 │   │
-│   ├── maintenance/
-│   │   ├── cleanup-idle-containers.sh
-│   │   └── setup-scratch-dirs.sh
+│   ├── system/                       # System administration
+│   │   ├── add-user-to-docker.sh     # Add user to docker-users group
+│   │   ├── update-symlinks.sh        # Update command symlinks
+│   │   └── setup-resource-slices.sh  # Configure systemd slices
 │   │
-│   └── monitoring/
-│       ├── gpu-monitor.sh
-│       └── log-metrics-5min.sh
+│   ├── admin/                        # Admin utilities
+│   │   ├── alias-list                # Display all commands
+│   │   └── ...
+│   │
+│   ├── docker/                       # Container creation & GPU allocation
+│   │   ├── mlc-create-wrapper.sh     # Enhanced container creation
+│   │   ├── get_resource_limits.py    # YAML parser
+│   │   └── gpu_allocator.py          # GPU allocation manager
+│   │
+│   ├── monitoring/                   # Metrics & auditing
+│   │   ├── gpu-status-dashboard.py
+│   │   └── collect-*-metrics.sh
+│   │
+│   └── maintenance/                  # Cleanup & housekeeping
+│       └── cleanup-idle-containers.sh
 │
-└── docs-admin/
-    ├── architecture.md
-    ├── installation.md
-    └── maintenance.md
+├── README.md                         # This file
+├── CLAUDE.md                         # AI assistant guidance
+└── docs/                             # Additional documentation
 ```
+
+See subdirectory READMEs for detailed documentation:
+- [scripts/user/README.md](scripts/user/README.md) - User command reference
+- [scripts/system/README.md](scripts/system/README.md) - System administration guide
 
 ---
 
-## 🔧 Configuration Management
+## 🎯 Command Reference
 
-### Resource Limits Config (`config/resource-limits.yaml`)
+### User Setup Commands
 
-The central configuration file controlling all resource allocations.
+| Command | Description |
+|---------|-------------|
+| `new-user` | First-time onboarding with detailed explanations (recommended) |
+| `user-setup` | Same as `new-user` |
+| `user setup` | Same as `new-user` (via dispatcher) |
+| `user new` | Same as `new-user` (via dispatcher) |
+| `new-project` | Streamlined project setup for experienced users |
+| `project init` | Same as `new-project` |
 
-**Key sections**:
+### Container Commands
 
-1. **defaults**: Base limits for all users
-2. **groups**: Define user groups (students, researchers, admins)
-3. **user_overrides**: Per-user exceptions
-4. **policies**: Behavioral settings (idle timeout, max containers, etc.)
+All container commands support both forms: `container <subcommand>` or `container-<subcommand>`
 
-**Example config structure**:
+| Command | Description |
+|---------|-------------|
+| `container create` | Create new container |
+| `container run` | Start and attach to container |
+| `container stop` | Stop running container |
+| `container list` | List all containers |
+| `container stats` | Resource usage statistics |
+| `container cleanup` | Remove stopped containers |
+
+### Image Commands
+
+| Command | Description |
+|---------|-------------|
+| `image create` | Create custom Docker image |
+| `image list` | List available images |
+| `image update` | Rebuild/update an image |
+| `image delete` | Remove unused images |
+
+### Admin Commands
+
+| Command | Description |
+|---------|-------------|
+| `alias-list` | Display all available commands |
+| `ds01-dashboard` | System overview dashboard |
+| `ds01-status` | Resource usage status |
+
+Run any command with `--help` for detailed usage.
+
+---
+
+## ⚙️ Configuration
+
+### Resource Limits (`config/resource-limits.yaml`)
+
+Central configuration file controlling all resource allocations.
+
+**Priority order** (highest to lowest):
+1. `user_overrides.<username>` - Per-user exceptions (priority 100)
+2. `groups.<group>` - Group-based limits (priority varies)
+3. `defaults` - Fallback for unspecified fields
+
+**Key fields**:
 ```yaml
 defaults:
-  gpus: 1
-  cpus: 8
-  memory: 32g
-  
-groups:
-  students:
-    members: [alice, bob, charlie]
-    gpus: 1
-    cpus: 8
-    
-  researchers:
-    members: [prof_smith]
-    gpus: 2
-    cpus: 16
+  max_mig_instances: 1           # Max GPUs per user
+  max_cpus: 8                    # CPU cores per container
+  memory: "32g"                  # RAM per container
+  shm_size: "8g"                 # Shared memory
+  max_containers_per_user: 3     # Max simultaneous containers
+  idle_timeout: "48h"            # Auto-stop after idle time
+  priority: 10                   # Allocation priority (1-100)
 ```
 
-**Modifying limits**:
-
+**Testing changes**:
 ```bash
-# Edit config
-vim /opt/ds01-infra/config/resource-limits.yaml
-
 # Test for specific user
-python3 /opt/ds01-infra/scripts/docker/get_resource_limits.py alice
+python3 scripts/docker/get_resource_limits.py <username>
 
-# Changes take effect on next container creation
+# Changes take effect on next container creation (no restart needed)
 ```
-
----
-
-## 🚀 Deployment
-
-### Installation
-
-1. **Install base system** (if not already):
-   ```bash
-   cd /opt
-   git clone https://github.com/aime-team/aime-ml-containers
-   cd aime-ml-containers
-   # Follow installation instructions
-   ```
-
-2. **Deploy ds01-infra**:
-   ```bash
-   cd /opt
-   git clone hertie-data-science-lab/ds01-infra.git
-   cd ds01-infra
-   chmod +x scripts/**/*.sh
-   chmod +x scripts/docker/*.py
-   ```
-
-3. **Create symlinks** (make enhanced scripts available to users):
-   ```bash
-   ln -sf /opt/ds01-infra/scripts/docker/mlc-create-enhanced /usr/local/bin/mlc-create
-   # Alternatively: alias in /etc/bash.bashrc
-   ```
-
-4. **Configure resource limits**:
-   ```bash
-   vim /opt/ds01-infra/config/resource-limits.yaml
-   # Add your users to appropriate groups
-   ```
-
-5. **Set up monitoring** (cron jobs):
-   ```bash
-   crontab -e
-   
-   # Add:
-   */5 * * * * /opt/ds01-infra/scripts/monitoring/log-metrics-5min.sh
-   0 2 * * * /opt/ds01-infra/scripts/maintenance/cleanup-idle-containers.sh
-   ```
 
 ---
 
@@ -151,37 +292,35 @@ python3 /opt/ds01-infra/scripts/docker/get_resource_limits.py alice
 
 ### Adding New Users
 
-1. **Add to server** (standard Linux user creation):
-   ```bash
-   sudo adduser newstudent
-   sudo usermod -aG docker newstudent
-   sudo usermod -aG video newstudent  # For GPU access
-   ```
+1. **Create Linux user**:
+```bash
+sudo adduser newstudent
+sudo usermod -aG video newstudent  # GPU access
+```
 
-2. **Add to resource config**:
-   ```bash
-   vim /opt/ds01-infra/config/resource-limits.yaml
-   
-   # Add to appropriate group:
-   groups:
-     students:
-       members: [alice, bob, newstudent]  # Add here
-   ```
+2. **Add to docker-users group**:
+```bash
+sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh newstudent
+```
 
-3. **Create workspace**:
-   ```bash
-   sudo mkdir -p /home/newstudent/workspace
-   sudo chown newstudent:newstudent /home/newstudent/workspace
-   ```
+3. **Add to resource config**:
+```bash
+vim /opt/ds01-infra/config/resource-limits.yaml
 
-4. **Notify user**:
-   - Send them `getting-started.md`
-   - Show them office hours
-   - Walk through first container creation
+# Add to appropriate group:
+groups:
+  students:
+    members: [alice, bob, newstudent]
+```
+
+4. **User logs out and back in** (for group membership to take effect)
+
+5. **User runs onboarding**:
+```bash
+new-user  # First-time setup wizard
+```
 
 ### Granting Additional Resources
-
-**Scenario**: Student needs 2 GPUs for thesis work
 
 ```bash
 vim /opt/ds01-infra/config/resource-limits.yaml
@@ -189,244 +328,301 @@ vim /opt/ds01-infra/config/resource-limits.yaml
 # Add user override:
 user_overrides:
   thesis_student:
-    gpus: 2
-    memory: 64g
-    idle_timeout: 168h  # 1 week
-    reason: "Thesis - approved by Prof. Smith"
+    max_mig_instances: 2
+    memory: "64g"
+    idle_timeout: "168h"  # 1 week
+    priority: 100
+    reason: "Thesis work - approved by Prof. Smith"
 ```
+
+---
+
+## 🔐 Docker Permissions
+
+### Docker Group Configuration
+
+DS01 uses the **`docker-users`** group (not `docker`) for Docker permissions.
+
+**Why `docker-users` instead of `docker`?**
+- Aligns with security best practices
+- Separate from system docker group
+- Easier to manage multi-user environments
+
+### Adding Users to Docker Group
+
+**Automated (recommended)**:
+```bash
+sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh <username>
+```
+
+**Manual**:
+```bash
+# Create group if needed
+sudo groupadd docker-users
+
+# Add user
+sudo usermod -aG docker-users <username>
+
+# User must log out and back in
+```
+
+**Verify**:
+```bash
+groups | grep docker-users  # Should show docker-users
+docker info                 # Should work without sudo
+```
+
+### Troubleshooting Permission Errors
+
+If users see "Docker permission error" during image build:
+
+1. **Check group membership**:
+```bash
+groups  # Should include docker-users
+```
+
+2. **If not in group, admin adds them**:
+```bash
+sudo usermod -aG docker-users $USER
+```
+
+3. **User logs out and back in** (group membership requires new session)
+
+4. **Verify Docker access**:
+```bash
+docker info  # Should work without errors
+```
+
+---
+
+## 🚀 Deployment
+
+### Initial Setup
+
+1. **Clone repository**:
+```bash
+cd /opt
+sudo git clone <repository-url> ds01-infra
+sudo chown -R root:ds-admin ds01-infra
+sudo chmod -R g+rwX ds01-infra
+```
+
+2. **Install dependencies**:
+```bash
+sudo apt install python3-yaml
+```
+
+3. **Make scripts executable**:
+```bash
+cd /opt/ds01-infra
+find scripts -type f -name "*.sh" -exec chmod +x {} \;
+find scripts -type f -name "*.py" -exec chmod +x {} \;
+```
+
+4. **Create docker-users group**:
+```bash
+sudo groupadd docker-users
+```
+
+5. **Set up systemd slices**:
+```bash
+sudo scripts/system/setup-resource-slices.sh
+sudo systemctl daemon-reload
+```
+
+6. **Create command symlinks**:
+```bash
+sudo scripts/system/update-symlinks.sh
+```
+
+7. **Configure resource limits**:
+```bash
+vim config/resource-limits.yaml
+# Add your users and groups
+```
+
+### Updating Symlinks
+
+After adding new commands or changing script locations:
+
+```bash
+sudo bash /opt/ds01-infra/scripts/system/update-symlinks.sh
+```
+
+This creates/updates symlinks in `/usr/local/bin/` for:
+- `new-user` → `user-setup`
+- `user-setup` → `user-setup`
+- `user` → `user-dispatcher.sh`
+- `new-project` → `new-project`
+- `project-init` → `new-project`
 
 ---
 
 ## 📊 Monitoring
 
-### Real-time GPU Status
+### Real-time Status
 
 ```bash
-# Check GPU usage
+# GPU usage
+nvidia-smi
 nvitop
 
-# Check which containers are using GPUs
-/opt/ds01-infra/scripts/monitoring/check-container-gpu-allocation.sh
-
-# Container resource usage
+# Container status
+container-list
 docker stats
 
-# Enhanced container list
-mlc-stats
+# System-wide resources
+ds01-status
 ```
 
-### Log Files (currently auto'd as cron jobs)
+### Log Files
 
 ```bash
-# GPU allocation log
-cat ~/server_infra/logs/gpu/gpu_allocations.log
+# GPU allocations
+tail -f /var/logs/ds01/gpu-allocations.log
 
-# Metrics logs
-cat ~/server_infra/logs/metrics/
+# Container metadata
+ls /var/lib/ds01/container-metadata/
 
-# Docker logs for specific container
-docker logs <container_name>
+# GPU state
+cat /var/lib/ds01/gpu-state.json
 ```
 
-### Setting Up Prometheus + Grafana (Future)
-
-See Medium Priority tasks in work plan. For now, use:
-- `log-metrics-5min.sh` → CSV logs
-- `report-metrics-daily.sh` → Email digest
-
----
-
-## 🔧 Maintenance Tasks
-
-### Daily
-
-- Check `mlc-stats` for resource hogs
-- Review `nvidia-smi` for GPU utilization
-- Check for orphaned containers
-
-### Weekly
-
-- Review idle containers (auto-cleanup should handle this)
-- Check disk space usage
-- Update resource limits based on usage patterns
-
-### Monthly
-
-- Review user feedback
-- Update container templates
-- Check for framework updates
-- Backup configuration files
-
-### Cleanup Tasks
+### Health Checks
 
 ```bash
-# Remove stopped containers (manual)
-docker container prune
+# Check systemd slices
+systemctl status ds01.slice
+systemd-cgtop | grep ds01
 
-# Remove unused images
-docker image prune -a
+# Verify Docker permissions
+groups | grep docker-users
+docker info
 
-# Remove idle containers (automated via cron)
-/opt/ds01-infra/scripts/maintenance/cleanup-idle-containers.sh
+# Test resource parser
+python3 scripts/docker/get_resource_limits.py <username>
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Container Won't Start
+### Common Issues
 
+#### Docker Permission Errors
+
+**Symptom**: "You don't have permission to use Docker"
+
+**Solution**:
 ```bash
-# Check logs
-docker logs <container_name>
+# Admin adds user to group
+sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh <username>
 
-# Check resource availability
-nvidia-smi
-free -h
-df -h
+# User logs out and back in
+exit
+# SSH back in
 
-# Check if GPU is allocated
-cat ~/server_infra/configs/gpu_allocation.yaml
+# Verify
+groups | grep docker-users
+docker info
 ```
 
-### User Can't Create Container
+#### Command Not Found
+
+**Symptom**: `new-user: command not found`
+
+**Solution**:
+```bash
+# Update symlinks
+sudo bash /opt/ds01-infra/scripts/system/update-symlinks.sh
+
+# Verify
+ls -la /usr/local/bin/ | grep ds01
+```
+
+#### Image Build Fails
+
+**Symptom**: Build errors during `new-user` or `new-project`
 
 **Common causes**:
-1. Already has max containers (check policy in config)
-2. No GPUs available (check allocation)
+1. No Docker permissions (see above)
+2. Network issues downloading base images
 3. Disk space full
-4. Docker daemon issue
 
 **Debug**:
 ```bash
-# Check user's containers
-docker ps -a --filter label=aime.mlc.USER=<username>
+# Check Docker access
+docker info
 
-# Check system resources
+# Check disk space
 df -h
-docker system df
 
-# Test resource parser
-python3 /opt/ds01-infra/scripts/docker/get_resource_limits.py <username>
+# Try manual build
+cd ~/docker-images
+docker build -t test-image -f <project>-image.Dockerfile .
 ```
 
-### Out of Disk Space
+#### Color Codes Not Rendering
 
-```bash
-# Find large directories
-du -h /home | sort -rh | head -20
+**Symptom**: Seeing `\033[1m` in output instead of colors
 
-# Clean Docker
-docker system prune -a --volumes
+**Cause**: Scripts must use `echo -e` to render ANSI color codes
 
-# Clean old logs
-find ~/server_infra/logs -mtime +30 -delete
-```
+**Fixed in**: All user-facing scripts now use `echo -e` for color output
 
 ---
 
-## 🔒 Security Considerations
+## 🔄 Recent Changes
 
-1. **Container Isolation**: Users run containers with their own UID/GID
-2. **GPU Pinning**: Enforced via `--gpus=device=X` flag
-3. **Resource Limits**: Prevent resource exhaustion attacks
-4. **Workspace Permissions**: Each user's workspace is private by default
+### November 2025 - User Onboarding Overhaul
 
-**Best practices**:
-- Regular security updates on host system
-- Keep Docker engine updated
-- Audit container images for vulnerabilities
-- Monitor for suspicious activity
+**New Features**:
+- Dual onboarding workflows: `new-user` (educational) and `new-project` (streamlined)
+- Command dispatcher pattern: `user setup`, `user new` route to `user-setup`
+- Flexible command syntax: both `container list` and `container-list` work
+- Docker group standardization: all scripts use `docker-users` group
+- Image naming convention: `{project}-image` (not `{username}-{project}`)
+- General ML as default use case (option 1)
+- Fixed color code rendering throughout all scripts
 
----
+**Scripts Added**:
+- `scripts/user/user-dispatcher.sh` - Routes user subcommands
+- `scripts/system/add-user-to-docker.sh` - Helper for Docker permissions
+- `scripts/system/update-symlinks.sh` - Automates symlink management
 
-## 📝 Configuration Examples
+**Scripts Renamed**:
+- `new-user-setup.sh` → `user-setup` (simpler name)
+- `new-project-setup` → `new-project` (consistent naming)
 
-### Example 1: Small Lab (10 students)
-
-```yaml
-defaults:
-  gpus: 1
-  cpus: 8
-  memory: 32g
-
-groups:
-  students:
-    members: [alice, bob, charlie, diana, eric, frank, grace, helen, ivan, judy]
-    gpus: 1
-    cpus: 8
-    memory: 32g
-    idle_timeout: 48h
-    
-policies:
-  max_containers_per_user: 2
-```
-
-### Example 2: Mixed Use (Students + Researchers)
-
-```yaml
-defaults:
-  gpus: 1
-  cpus: 8
-  memory: 32g
-
-groups:
-  undergrads:
-    members: [student1, student2, student3]
-    gpus: 1
-    cpus: 6
-    memory: 24g
-    idle_timeout: 24h
-    
-  grad_students:
-    members: [phd1, phd2, masters1]
-    gpus: 1
-    cpus: 8
-    memory: 32g
-    idle_timeout: 72h
-    
-  faculty:
-    members: [prof_smith, prof_jones]
-    gpus: 2
-    cpus: 16
-    memory: 64g
-    idle_timeout: null  # No timeout
-```
+**Bug Fixes**:
+- Fixed shebang line in `user-setup` (must be line 1)
+- Fixed color codes requiring `echo -e` throughout
+- Fixed Docker permission error handling
+- Fixed success messages appearing on build failures
 
 ---
 
-## 🚀 Future Enhancements
+## 📚 Additional Documentation
 
-See `TODO/_TODO.md` for full list. Key items:
-
-1. **Slurm Integration**: Job scheduling for fair-share
-2. **Web Dashboard**: Real-time monitoring UI
-3. **Automated Backups**: Workspace snapshots
-4. **Usage Analytics**: Per-user/per-project reports
-5. **Cloud Bursting**: Overflow to cloud during peak usage
+- **User Documentation**: See onboarding wizards (`new-user` or `new-project`)
+- **CLAUDE.md**: Guidance for AI assistants working with this codebase
+- **Subdirectory READMEs**:
+  - [scripts/user/README.md](scripts/user/README.md)
+  - [scripts/system/README.md](scripts/system/README.md)
 
 ---
 
-## 📚 Related Documentation
+## 📝 Contributing
 
-- **For Users**: `../ds01-user-docs/getting-started.md`
-- **Troubleshooting**: `../ds01-user-docs/troubleshooting.md`
-- **GPU Guide**: `../ds01-user-docs/gpu-usage-guide.md`
-- **Original MLC**: `/opt/aime-ml-containers/README.md`
+When adding new features:
 
----
-
-## 📞 Support
-
-**Internal**:
-- Research Engineer: henry@university.edu
-- Lab Slack: #ds01-server-support
-
-**External**:
-- AIME MLC Issues: https://github.com/aime-team/aime-mlc/issues
-- Docker Docs: https://docs.docker.com/
+1. Update relevant README files
+2. Update CLAUDE.md if changing architecture
+3. Add `--help` output to new commands
+4. Test with multiple user types (students, researchers, admins)
+5. Update `scripts/system/update-symlinks.sh` if adding commands
 
 ---
 
-**Last Updated**: 2025-01-28  
-**Maintained by**: Data Science Lab Research Engineering Team
+**Last Updated**: November 2025
+**Maintained by**: Data Science Lab Infrastructure Team
