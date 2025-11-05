@@ -212,8 +212,12 @@ python -c "import torch; print(torch.cuda.is_available())"
 - **Fix:** Use Dev Containers or manually enter container first
 
 ### "Permission denied accessing /var/run/docker.sock"
-- **Cause:** User not in docker group
-- **Fix:** `sudo usermod -aG docker $USER` then logout/login
+- **Cause:** Container doesn't have docker socket mounted
+- **Fix:** Recreate container with `container-create` (new containers have it)
+
+### "Command not found inside container"
+- **Cause:** Old container created before DS01 updates
+- **Fix:** Create new container - all host commands now work inside containers too
 
 ---
 
@@ -224,10 +228,13 @@ python -c "import torch; print(torch.cuda.is_available())"
 ✅ Attach to running container
 ✅ Verify with `hostname` and `which python`
 ✅ All code runs in container with GPU access
+✅ All DS01 commands work inside containers (container-list, image-list, etc.)
 
 **Quick editing across projects:**
 ✅ Use **Remote SSH**
 ✅ Enter containers manually when running code
-✅ Remember: IDE is on host, execution is manual
+✅ Can still manage containers from inside with `container-list`, `container-run`
+
+**Note:** As of latest updates, ALL host commands are available inside containers through docker socket mounting. This means you can manage containers from within containers, list images, etc. - providing a consistent command experience regardless of context.
 
 Choose based on your needs!
