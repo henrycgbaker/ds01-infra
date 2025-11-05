@@ -409,6 +409,15 @@ if [ -f "$ALIAS_CONFIG" ]; then
     DOCKER_CMD+=(-v "$ALIAS_CONFIG:/etc/ds01/container-aliases.sh:ro")
 fi
 
+# Mount docker socket for container management from inside containers
+DOCKER_CMD+=(-v "/var/run/docker.sock:/var/run/docker.sock")
+
+# Mount DS01 scripts so host commands work inside containers
+DOCKER_CMD+=(-v "/opt/ds01-infra:/opt/ds01-infra:ro")
+
+# Mount /usr/local/bin for symlinks (so host commands are available)
+DOCKER_CMD+=(-v "/usr/local/bin:/usr/local/bin:ro")
+
 # Add labels
 DOCKER_CMD+=(--label "ds01.user=$USERNAME")
 DOCKER_CMD+=(--label "ds01.container=$CONTAINER_NAME")
