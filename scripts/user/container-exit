@@ -1,5 +1,6 @@
 #!/bin/bash
-# Information about exiting containers without stopping them
+# Information about exiting containers - accurate for docker exec behavior
+# DS01 uses docker exec, not docker attach, so Ctrl+P, Ctrl+Q does NOT work
 
 BLUE='\033[94m'
 GREEN='\033[0;32m'
@@ -12,11 +13,47 @@ NC='\033[0m'
 
 USERNAME=$(whoami)
 
+# Parse arguments
+GUIDED=false
+
+for arg in "$@"; do
+    case $arg in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        --info)
+            # --info is the default behavior, just show info
+            shift
+            ;;
+        -h|--help)
+            echo ""
+            echo -e "${BOLD}DS01 Container Exit Info${NC}"
+            echo ""
+            echo -e "${CYAN}Usage:${NC}"
+            echo "  container-exit [options]"
+            echo ""
+            echo -e "${CYAN}Options:${NC}"
+            echo "  --guided    Show detailed explanations"
+            echo "  --info      Show exit information (default)"
+            echo "  -h, --help  Show this help message"
+            echo ""
+            echo -e "${CYAN}Description:${NC}"
+            echo "  Displays information about how to exit containers"
+            echo "  and the difference between exiting and stopping."
+            echo ""
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
+
 get_idle_timeout() {
     local username="$1"
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local infra_root="$(dirname "$script_dir")"
-    local resource_parser="$infra_root/docker/get_resource_limits.py"
+    local infra_root="$(dirname "$(dirname "$script_dir")")"
+    local resource_parser="$infra_root/scripts/docker/get_resource_limits.py"
 
     if [ -f "$resource_parser" ]; then
         python3 "$resource_parser" "$username" --idle-timeout 2>/dev/null || echo "48h"
@@ -25,76 +62,155 @@ get_idle_timeout() {
     fi
 }
 
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Understanding Container Exit Behavior${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}How DS01 Containers Work:${NC}"
+    echo ""
+    echo "  DS01 uses ${CYAN}docker exec${NC} to enter containers."
+    echo "  This means when you type ${GREEN}exit${NC}, the container"
+    echo "  ${BOLD}keeps running${NC} in the background!"
+    echo ""
+    echo -e "${BOLD}Key Difference from Docker Attach:${NC}"
+    echo ""
+    echo "  • ${YELLOW}docker attach${NC}: Ctrl+P, Ctrl+Q works to detach"
+    echo "  • ${CYAN}docker exec${NC} (DS01): Just type ${GREEN}exit${NC} - container keeps running"
+    echo ""
+    echo "  ${DIM}Note: Ctrl+P, Ctrl+Q does NOT work with docker exec${NC}"
+    echo ""
+    read -p "Press Enter to see exit options..." </dev/tty
+fi
+
+echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}${BOLD}    Exit Container (Without Stopping)${NC}"
+echo -e "${CYAN}${BOLD}    How to Exit Containers${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "${BOLD}When attached to a container, use:${NC}"
+
+echo -e "${BOLD}When inside a container:${NC}"
 echo ""
-echo -e "  ${GREEN}${BOLD}Ctrl+P, Ctrl+Q${NC}  →  Detach and leave container running"
+echo -e "  ${GREEN}${BOLD}exit${NC} or ${GREEN}${BOLD}Ctrl+D${NC}"
+echo "  → Exit your session"
+echo "  → Container ${BOLD}keeps running${NC} in the background"
+echo "  → All processes continue (training, Jupyter, etc.)"
 echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${BOLD}What Actually Happens:${NC}"
+    echo ""
+    echo "  1. Your shell session inside the container ends"
+    echo "  2. The container itself continues running"
+    echo "  3. Any background processes (Python scripts, Jupyter) keep going"
+    echo "  4. You can reconnect anytime with ${GREEN}container-run <name>${NC}"
+    echo ""
+fi
+
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
 echo ""
-echo -e "${BOLD}What happens:${NC}"
-echo -e "  ${GREEN}✓${NC} Container keeps running in background"
-echo -e "  ${GREEN}✓${NC} All processes continue (training, Jupyter, etc.)"
+echo -e "${BOLD}Container Status After Exit:${NC}"
+echo ""
+echo -e "  ${GREEN}✓${NC} Container keeps running"
+echo -e "  ${GREEN}✓${NC} All processes continue"
+echo -e "  ${GREEN}✓${NC} GPU allocation remains"
 echo -e "  ${GREEN}✓${NC} You can reconnect anytime"
 echo ""
-echo -e "${BOLD}Auto-stop timeout:${NC}"
+
+echo -e "${BOLD}Auto-Stop Policy:${NC}"
 echo -e "  ${YELLOW}$(get_idle_timeout "$USERNAME")${NC} of idle GPU time"
-echo -e "  ${DIM}(After this period of no GPU activity, container auto-stops)${NC}"
+echo -e "  ${DIM}(Container auto-stops after this period of no GPU activity)${NC}"
 echo ""
+
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
 echo ""
-echo -e "${BOLD}Reconnect later:${NC}"
-echo -e "  ${GREEN}container-run <name>${NC}"
+echo -e "${BOLD}Essential Commands:${NC}"
 echo ""
-echo -e "${BOLD}Stop manually:${NC}"
-echo -e "  ${GREEN}container-stop <name>${NC}"
+echo -e "  ${GREEN}container-run <name>${NC}      Reconnect to running container"
+echo -e "  ${GREEN}container-stop <name>${NC}     Stop a running container"
+echo -e "  ${GREEN}container-list${NC}            See all your containers"
+echo -e "  ${GREEN}container-stats${NC}           Check resource usage"
 echo ""
-echo -e "${BOLD}Check status:${NC}"
-echo -e "  ${GREEN}container-list${NC}"
-echo ""
-echo -e "${DIM}────────────────────────────────────────────────${NC}"
-echo ""
-echo -e "${BOLD}Comparison:${NC}"
-echo ""
-echo -e "  ${GREEN}Ctrl+P, Ctrl+Q${NC}  →  Exit without stopping"
-echo -e "                      ${DIM}(Container keeps running)${NC}"
-echo ""
-echo -e "  ${YELLOW}exit${NC} or ${YELLOW}Ctrl+D${NC}  →  Exit and stop container"
-echo -e "                      ${DIM}(Container terminates)${NC}"
-echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${DIM}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Exit vs. Stop - What's the Difference?${NC}"
+    echo ""
+    echo -e "  ${CYAN}exit${NC} (from inside container):"
+    echo "    • Ends your shell session"
+    echo "    • Container keeps running"
+    echo "    • Background processes continue"
+    echo "    • Use for: Long training jobs, Jupyter servers"
+    echo ""
+    echo -e "  ${CYAN}container-stop <name>${NC} (from host):"
+    echo "    • Stops the entire container"
+    echo "    • All processes terminate"
+    echo "    • Releases GPU resources"
+    echo "    • Use for: When completely done, freeing resources"
+    echo ""
+fi
+
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
 echo ""
 echo -e "${YELLOW}💡 Best Practices:${NC}"
 echo ""
-echo -e "  • ${BOLD}For long training:${NC} Use ${GREEN}Ctrl+P, Ctrl+Q${NC} to detach"
-echo "    Your job continues running"
+echo -e "  • ${BOLD}Long training jobs:${NC} Just ${GREEN}exit${NC} - job continues running"
+echo "    Reconnect later to check progress"
 echo ""
-echo -e "  • ${BOLD}Quick tasks:${NC} Just ${YELLOW}exit${NC} when done"
-echo "    Saves resources for others"
+echo -e "  • ${BOLD}Quick tasks:${NC} Use ${GREEN}container-stop${NC} when done"
+echo "    Frees resources for others"
 echo ""
-echo -e "  • ${BOLD}Check before closing:${NC} Use ${GREEN}container-list${NC}"
-echo "    See what's still running"
+echo -e "  • ${BOLD}Before logging off:${NC} Check ${GREEN}container-list${NC}"
+echo "    See what's still running and consuming resources"
 echo ""
+
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
 echo ""
-echo -e "${BOLD}Examples:${NC}"
+echo -e "${BOLD}Example Workflows:${NC}"
 echo ""
-echo -e "  ${DIM}# Start long training${NC}"
+echo -e "  ${DIM}# Scenario 1: Long training job${NC}"
 echo "  container-run my-project"
-echo -e "  ${DIM}(in container)${NC} python train.py --epochs 100"
-echo -e "  ${GREEN}Ctrl+P, Ctrl+Q${NC}  ${DIM}# Detach, training continues${NC}"
+echo -e "  ${DIM}(inside container)${NC} python train.py --epochs 100 &  ${DIM}# Run in background${NC}"
+echo -e "  ${GREEN}exit${NC}  ${DIM}# Leave container, training continues${NC}"
 echo ""
-echo -e "  ${DIM}# Check on it later${NC}"
-echo -e "  container-list  ${DIM}# See it's still running${NC}"
-echo -e "  container-run my-project  ${DIM}# Reconnect${NC}"
+echo -e "  ${DIM}# Later: Check on it${NC}"
+echo "  container-run my-project  ${DIM}# Reconnect${NC}"
+echo "  tail -f outputs/logs/training.log  ${DIM}# Check progress${NC}"
 echo ""
+echo -e "  ${DIM}# Scenario 2: Quick debugging${NC}"
+echo "  container-run my-project"
+echo -e "  ${DIM}(test some code, fix bugs)${NC}"
+echo -e "  ${GREEN}exit${NC}"
+echo -e "  container-stop my-project  ${DIM}# Stop to free resources${NC}"
+echo ""
+
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
 echo ""
-echo -e "${RED}⚠ Important:${NC}"
-echo -e "  Containers are ${BOLD}not${NC} VMs - they share server resources"
-echo "  Please stop containers when not in use:"
-echo -e "    ${GREEN}container-stop <name>${NC}"
+echo -e "${RED}⚠ Important Reminders:${NC}"
+echo ""
+echo "  • Containers share server GPU resources"
+echo "  • Idle containers will auto-stop to free resources"
+echo "  • Please stop containers when not actively using them"
+echo -e "  • Use ${GREEN}container-stats${NC} to monitor your resource usage"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Common Misconceptions${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "  ${RED}✗${NC} Ctrl+P, Ctrl+Q ${BOLD}does NOT work${NC} on DS01"
+    echo "    (This only works with 'docker attach', not 'docker exec')"
+    echo ""
+    echo -e "  ${RED}✗${NC} Typing 'exit' ${BOLD}does NOT stop${NC} the container"
+    echo "    (It only ends your session, container keeps running)"
+    echo ""
+    echo -e "  ${GREEN}✓${NC} Use ${GREEN}exit${NC} to leave but keep running"
+    echo -e "  ${GREEN}✓${NC} Use ${GREEN}container-stop${NC} to actually stop"
+    echo ""
+fi
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""

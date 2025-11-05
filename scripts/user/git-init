@@ -1,0 +1,444 @@
+#!/bin/bash
+# DS01 Git Init - Initialize Git repository with ML/DS best practices
+# Tier 2 Command - Can be used standalone or called by orchestrators
+
+set -e
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+WORKSPACE_DIR="$HOME/workspace"
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 Git Init${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  git-init <project-name> [options]"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  project-name       Project directory to initialize Git in"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --user=NAME        Git user name (prompts if not set)"
+    echo "  --email=EMAIL      Git user email (prompts if not set)"
+    echo "  --remote=URL       Add remote repository URL"
+    echo "  --no-lfs           Skip Git LFS setup"
+    echo "  --guided           Show detailed explanations for beginners"
+    echo "  -h, --help         Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Initialize Git in project${NC}"
+    echo "  git-init my-project"
+    echo ""
+    echo -e "  ${DIM}# With Git user config${NC}"
+    echo "  git-init my-project --user=\"John Doe\" --email=\"john@example.com\""
+    echo ""
+    echo -e "  ${DIM}# Add remote repository${NC}"
+    echo "  git-init my-project --remote=git@github.com:user/repo.git"
+    echo ""
+    echo -e "  ${DIM}# With guided explanations${NC}"
+    echo "  git-init my-project --guided"
+    echo ""
+    echo -e "${YELLOW}Features:${NC}"
+    echo "  • Comprehensive ML/DS .gitignore"
+    echo "  • Git LFS for large model files"
+    echo "  • Tracks .pth, .pt, .h5, .ckpt, .bin with LFS"
+    echo "  • User config setup"
+    echo "  • Optional remote repository"
+    echo ""
+}
+
+# Parse arguments
+PROJECT_NAME=""
+GIT_NAME=""
+GIT_EMAIL=""
+GIT_REMOTE=""
+SETUP_LFS=true
+GUIDED=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --user=*)
+            GIT_NAME="${1#*=}"
+            shift
+            ;;
+        --email=*)
+            GIT_EMAIL="${1#*=}"
+            shift
+            ;;
+        --remote=*)
+            GIT_REMOTE="${1#*=}"
+            shift
+            ;;
+        --no-lfs)
+            SETUP_LFS=false
+            shift
+            ;;
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$PROJECT_NAME" ]; then
+                PROJECT_NAME="$1"
+            else
+                echo -e "${RED}✗ Too many arguments${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Validate project name
+if [ -z "$PROJECT_NAME" ]; then
+    echo -e "${RED}✗ Project name required${NC}\n"
+    usage
+    exit 1
+fi
+
+PROJECT_DIR="$WORKSPACE_DIR/$PROJECT_NAME"
+
+# Validate project directory exists
+if [ ! -d "$PROJECT_DIR" ]; then
+    echo -e "${RED}✗ Project directory does not exist: $PROJECT_DIR${NC}"
+    echo ""
+    echo "Create it first:"
+    echo -e "  ${GREEN}dir-create $PROJECT_NAME${NC}"
+    echo ""
+    exit 1
+fi
+
+# Check if already initialized
+if [ -d "$PROJECT_DIR/.git" ]; then
+    echo -e "${YELLOW}✓ Git already initialized in $PROJECT_NAME${NC}"
+    echo ""
+    echo "Repository info:"
+    cd "$PROJECT_DIR"
+    git status --short 2>/dev/null || true
+    echo ""
+    exit 0
+fi
+
+# Show guided introduction
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Git Version Control Setup${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What is Git?${NC}"
+    echo ""
+    echo "  Git is version control software that tracks changes to your code:"
+    echo "  • Saves history of all changes (like time travel for code)"
+    echo "  • Allows experimentation without breaking working code"
+    echo "  • Enables collaboration with others"
+    echo "  • Syncs with GitHub/GitLab for backup and sharing"
+    echo ""
+    echo -e "${BOLD}What We'll Set Up:${NC}"
+    echo ""
+    echo "  1. ${CYAN}.gitignore${NC} - Tells Git what NOT to track"
+    echo "     (large data files, model weights, temporary files)"
+    echo ""
+    echo "  2. ${CYAN}Git LFS${NC} - Tracks large files efficiently"
+    echo "     (model checkpoints, weights - .pth, .h5, .ckpt)"
+    echo ""
+    echo "  3. ${CYAN}User config${NC} - Your name/email for commits"
+    echo ""
+    echo "  4. ${CYAN}Remote repository${NC} (optional) - Link to GitHub/GitLab"
+    echo ""
+    echo -e "${YELLOW}💡 Pro Tip:${NC} Commit code and configs, NOT raw data or large models!"
+    echo "   Use Git LFS for model weights, store datasets separately."
+    echo ""
+    read -p "Press Enter to initialize Git..." </dev/tty
+    echo ""
+fi
+
+# Navigate to project directory
+cd "$PROJECT_DIR"
+
+echo ""
+echo -e "${BOLD}Initializing Git Repository${NC}"
+echo ""
+
+# Create comprehensive .gitignore for ML projects
+echo -e "${BLUE}Creating .gitignore...${NC}"
+
+cat > .gitignore << 'GITIGNOREEOF'
+# DS01 ML Project .gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ML Data & Models
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+
+# Logs & Outputs
+logs/
+*.log
+outputs/
+runs/
+wandb/
+mlruns/
+.tensorboard/
+
+# Large files
+*.tar
+*.tar.gz
+*.zip
+*.7z
+*.rar
+*.bin
+*.npy
+*.npz
+
+# Temporary files
+tmp/
+temp/
+.cache/
+.DS_Store
+Thumbs.db
+
+# Environment & Config
+.env
+.env.local
+*.env
+config/secrets.yaml
+credentials.json
+
+# Container-specific
+.jupyter.log
+.idle-warning.txt
+.ds01-*
+GITIGNOREEOF
+
+echo -e "${GREEN}✓${NC} .gitignore created"
+
+# Initialize Git
+echo -e "${BLUE}Initializing Git repository...${NC}"
+git init -q
+echo -e "${GREEN}✓${NC} Git initialized"
+
+# Git user config
+echo -e "${BLUE}Configuring Git user...${NC}"
+
+# Check if user config is already set globally
+GLOBAL_NAME=$(git config --global user.name 2>/dev/null || echo "")
+GLOBAL_EMAIL=$(git config --global user.email 2>/dev/null || echo "")
+
+if [ -n "$GIT_NAME" ] && [ -n "$GIT_EMAIL" ]; then
+    # Use provided arguments
+    git config user.name "$GIT_NAME"
+    git config user.email "$GIT_EMAIL"
+    echo -e "${GREEN}✓${NC} User config set: $GIT_NAME <$GIT_EMAIL>"
+elif [ -n "$GLOBAL_NAME" ] && [ -n "$GLOBAL_EMAIL" ]; then
+    # Use global config
+    echo -e "${GREEN}✓${NC} Using global config: $GLOBAL_NAME <$GLOBAL_EMAIL>"
+else
+    # Prompt for user input
+    if [ "$GUIDED" = true ]; then
+        echo ""
+        echo -e "${BOLD}Git User Configuration${NC}"
+        echo ""
+        echo "Your name and email appear in Git commits."
+        echo "This helps collaborators know who made changes."
+        echo ""
+    fi
+
+    echo -n "Git user name: "
+    read -r GIT_NAME </dev/tty
+    echo -n "Git user email: "
+    read -r GIT_EMAIL </dev/tty
+
+    if [ -n "$GIT_NAME" ] && [ -n "$GIT_EMAIL" ]; then
+        git config user.name "$GIT_NAME"
+        git config user.email "$GIT_EMAIL"
+        echo -e "${GREEN}✓${NC} User config set: $GIT_NAME <$GIT_EMAIL>"
+    else
+        echo -e "${YELLOW}⚠${NC} Skipped user config (can set later with: git config user.name/email)"
+    fi
+fi
+
+# Git LFS setup
+if [ "$SETUP_LFS" = true ]; then
+    if command -v git-lfs &> /dev/null; then
+        echo -e "${BLUE}Configuring Git LFS...${NC}"
+        git lfs install 2>/dev/null || true
+
+        # Track large ML file types
+        git lfs track "*.pth" 2>/dev/null || true
+        git lfs track "*.pt" 2>/dev/null || true
+        git lfs track "*.h5" 2>/dev/null || true
+        git lfs track "*.ckpt" 2>/dev/null || true
+        git lfs track "*.bin" 2>/dev/null || true
+
+        echo -e "${GREEN}✓${NC} Git LFS configured (tracking: .pth, .pt, .h5, .ckpt, .bin)"
+
+        if [ "$GUIDED" = true ]; then
+            echo ""
+            echo -e "${YELLOW}💡 Git LFS Info:${NC}"
+            echo "  Large model files (.pth, .h5, etc.) will be tracked efficiently."
+            echo "  They won't bloat your repository - Git stores pointers instead."
+            echo ""
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} Git LFS not installed (skipping)"
+        if [ "$GUIDED" = true ]; then
+            echo "  Install it with: sudo apt install git-lfs"
+        fi
+    fi
+fi
+
+# Remote repository setup
+if [ -n "$GIT_REMOTE" ]; then
+    echo -e "${BLUE}Adding remote repository...${NC}"
+    if git remote add origin "$GIT_REMOTE" 2>/dev/null; then
+        echo -e "${GREEN}✓${NC} Remote added: $GIT_REMOTE"
+    else
+        echo -e "${YELLOW}⚠${NC} Failed to add remote (may already exist)"
+    fi
+elif [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${BOLD}Remote Repository (Optional)${NC}"
+    echo ""
+    echo "A remote repository (like GitHub or GitLab) lets you:"
+    echo "  • Back up your code to the cloud"
+    echo "  • Share and collaborate with others"
+    echo "  • Access your code from anywhere"
+    echo ""
+    echo -n "Add remote repository? [y/N]: "
+    read -r ADD_REMOTE </dev/tty
+
+    if [[ "$ADD_REMOTE" =~ ^[Yy] ]]; then
+        echo ""
+        echo "Examples:"
+        echo "  • GitHub: git@github.com:username/repo.git"
+        echo "  • GitLab: git@gitlab.com:username/repo.git"
+        echo "  • HTTPS: https://github.com/username/repo.git"
+        echo ""
+        echo -n "Remote URL: "
+        read -r GIT_REMOTE </dev/tty
+
+        if [ -n "$GIT_REMOTE" ]; then
+            if git remote add origin "$GIT_REMOTE" 2>/dev/null; then
+                echo -e "${GREEN}✓${NC} Remote added: $GIT_REMOTE"
+                echo ""
+                echo "To push your code later:"
+                echo -e "  ${GREEN}git add .${NC}"
+                echo -e "  ${GREEN}git commit -m \"Initial commit\"${NC}"
+                echo -e "  ${GREEN}git push -u origin main${NC}"
+            else
+                echo -e "${YELLOW}⚠${NC} Failed to add remote"
+            fi
+        fi
+    fi
+fi
+
+echo ""
+echo -e "${GREEN}✓ Git setup complete${NC}"
+
+# Summary
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Git Repository Ready${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What's Set Up:${NC}"
+    echo "  ✓ Git repository initialized"
+    echo "  ✓ ML/DS .gitignore created"
+    if command -v git-lfs &> /dev/null && [ "$SETUP_LFS" = true ]; then
+        echo "  ✓ Git LFS configured for large files"
+    fi
+    if [ -n "$GIT_NAME" ]; then
+        echo "  ✓ User config: $GIT_NAME <$GIT_EMAIL>"
+    fi
+    if git remote get-url origin &>/dev/null; then
+        REMOTE_URL=$(git remote get-url origin)
+        echo "  ✓ Remote: $REMOTE_URL"
+    fi
+    echo ""
+    echo -e "${BOLD}Basic Git Commands:${NC}"
+    echo ""
+    echo -e "  ${GREEN}git status${NC}              Check what's changed"
+    echo -e "  ${GREEN}git add <file>${NC}          Stage file for commit"
+    echo -e "  ${GREEN}git add .${NC}               Stage all changes"
+    echo -e "  ${GREEN}git commit -m \"msg\"${NC}    Save changes with message"
+    echo -e "  ${GREEN}git push${NC}                Upload to remote (GitHub/GitLab)"
+    echo -e "  ${GREEN}git pull${NC}                Download changes from remote"
+    echo -e "  ${GREEN}git log${NC}                 View commit history"
+    echo ""
+    echo -e "${BOLD}Next Steps:${NC}"
+    echo ""
+    echo "  1) Create your first commit:"
+    echo -e "     ${GREEN}cd $PROJECT_DIR${NC}"
+    echo -e "     ${GREEN}git add .${NC}"
+    echo -e "     ${GREEN}git commit -m \"Initial commit\"${NC}"
+    echo ""
+    if git remote get-url origin &>/dev/null; then
+        echo "  2) Push to remote:"
+        echo -e "     ${GREEN}git push -u origin main${NC}"
+        echo ""
+    fi
+else
+    # Non-guided: brief output
+    echo ""
+    echo -e "${BOLD}Repository info:${NC}"
+    git status --short 2>/dev/null || echo "  Clean working directory"
+    echo ""
+    echo -e "${BOLD}Next:${NC} ${GREEN}cd $PROJECT_DIR && git add . && git commit -m \"Initial commit\"${NC}"
+    echo ""
+fi
+
+exit 0

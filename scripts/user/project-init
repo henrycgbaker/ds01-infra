@@ -167,29 +167,19 @@ if [ "$EXISTING_PROJECT" = false ]; then
         STRUCTURE_CHOICE="1"
     fi
 
-    mkdir -p "$PROJECT_DIR"
-
     if [ "$STRUCTURE_CHOICE" = "2" ]; then
-        # Blank directory
         STRUCTURE_TYPE="blank"
-        echo -e "${GREEN}✓ Blank directory created${NC}"
     else
-        # Data science structure (default)
         STRUCTURE_TYPE="data-science"
-        mkdir -p "$PROJECT_DIR"/{data/{raw,processed,external},models/checkpoints,notebooks,scripts,configs,outputs/{logs,figures},tests}
-
-        # Create .gitkeep files
-        touch "$PROJECT_DIR/data/raw/.gitkeep"
-        touch "$PROJECT_DIR/data/processed/.gitkeep"
-        touch "$PROJECT_DIR/data/external/.gitkeep"
-        touch "$PROJECT_DIR/models/checkpoints/.gitkeep"
-        touch "$PROJECT_DIR/outputs/logs/.gitkeep"
-        touch "$PROJECT_DIR/outputs/figures/.gitkeep"
-
-        echo -e "${GREEN}✓ Data science structure created${NC}"
     fi
 
-    echo -e "  Location: ${BLUE}$PROJECT_DIR${NC}"
+    # Call Tier 2 module: dir-create
+    GUIDED_FLAG=""
+    if [ "$GUIDED" = true ]; then
+        GUIDED_FLAG="--guided"
+    fi
+
+    dir-create "$PROJECT_NAME" --type="$STRUCTURE_TYPE" $GUIDED_FLAG
 else
     echo ""
     echo -e "${BOLD}Step 2: Using Existing Project${NC}"
@@ -202,152 +192,25 @@ echo ""
 echo -e "${BOLD}Step 3: Git Version Control${NC}"
 echo ""
 
-if [ -d "$PROJECT_DIR/.git" ]; then
-    echo -e "${GREEN}✓ Git already initialized${NC}"
-    SKIP_GIT=true
+SKIP_GIT=false
+
+if [ "$INTERACTIVE" = true ]; then
+    read -p "Initialize Git repository? [Y/n]: " INIT_GIT
+    INIT_GIT=${INIT_GIT:-Y}
 else
-    SKIP_GIT=false
+    INIT_GIT="Y"
+fi
 
-    if [ "$INTERACTIVE" = true ]; then
-        read -p "Initialize Git repository? [Y/n]: " INIT_GIT
-        INIT_GIT=${INIT_GIT:-Y}
-    else
-        INIT_GIT="Y"
+if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
+    # Call Tier 2 module: git-init
+    GUIDED_FLAG=""
+    if [ "$GUIDED" = true ]; then
+        GUIDED_FLAG="--guided"
     fi
 
-    if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
-        cd "$PROJECT_DIR"
-
-        # Create comprehensive .gitignore for ML projects
-        echo -e "${BLUE}Creating .gitignore...${NC}"
-
-        cat > .gitignore << 'GITIGNOREEOF'
-# DS01 ML Project .gitignore
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.venv
-
-# Jupyter Notebooks
-.ipynb_checkpoints/
-*.ipynb
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# ML Data & Models
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-*.h5
-*.hdf5
-*.pkl
-*.pickle
-*.pt
-*.pth
-*.ckpt
-*.safetensors
-models/checkpoints/*
-!models/checkpoints/.gitkeep
-
-# Logs & Outputs
-logs/
-*.log
-outputs/
-runs/
-wandb/
-mlruns/
-.tensorboard/
-
-# Large files
-*.tar
-*.tar.gz
-*.zip
-*.7z
-*.rar
-*.bin
-*.npy
-*.npz
-
-# Temporary files
-tmp/
-temp/
-.cache/
-.DS_Store
-Thumbs.db
-
-# Environment & Config
-.env
-.env.local
-*.env
-config/secrets.yaml
-credentials.json
-
-# Container-specific
-.jupyter.log
-.idle-warning.txt
-.ds01-*
-GITIGNOREEOF
-
-        echo -e "${GREEN}✓${NC} .gitignore created"
-
-        # Initialize Git
-        echo -e "${BLUE}Initializing Git repository...${NC}"
-        git init -q
-        echo -e "${GREEN}✓${NC} Git initialized"
-
-        # Git user config
-        if [ -z "$(git config user.name 2>/dev/null)" ]; then
-            if [ "$INTERACTIVE" = true ]; then
-                read -p "Git user name: " GIT_NAME
-                read -p "Git user email: " GIT_EMAIL
-                git config user.name "$GIT_NAME"
-                git config user.email "$GIT_EMAIL"
-            fi
-        fi
-
-        # Git LFS setup
-        if command -v git-lfs &> /dev/null; then
-            git lfs install 2>/dev/null || true
-            git lfs track "*.pth" 2>/dev/null || true
-            git lfs track "*.pt" 2>/dev/null || true
-            git lfs track "*.h5" 2>/dev/null || true
-            git lfs track "*.ckpt" 2>/dev/null || true
-            git lfs track "*.bin" 2>/dev/null || true
-            echo -e "${GREEN}✓${NC} Git LFS configured"
-        fi
-
-        # Remote repository
-        if [ "$INTERACTIVE" = true ]; then
-            echo ""
-            read -p "Add remote repository? (e.g., GitHub) [y/N]: " ADD_REMOTE
-            if [[ "$ADD_REMOTE" =~ ^[Yy] ]]; then
-                echo ""
-                echo "Enter remote URL (e.g., git@github.com:username/repo.git)"
-                read -p "Remote URL: " GIT_REMOTE
-                if [ -n "$GIT_REMOTE" ]; then
-                    git remote add origin "$GIT_REMOTE"
-                    echo -e "${GREEN}✓${NC} Remote added: $GIT_REMOTE"
-                fi
-            fi
-        fi
-
-        echo -e "${GREEN}✓ Git setup complete${NC}"
-    else
-        SKIP_GIT=true
-    fi
+    git-init "$PROJECT_NAME" $GUIDED_FLAG
+else
+    SKIP_GIT=true
 fi
 
 # Step 4: Create README and requirements.txt
@@ -356,253 +219,22 @@ if [ "$EXISTING_PROJECT" = false ]; then
     echo -e "${BOLD}Step 4: Creating Project Files${NC}"
     echo ""
 
-    # Create README based on structure type
-    if [ "$STRUCTURE_TYPE" = "blank" ]; then
-        cat > "$PROJECT_DIR/README.md" <<READMEEOF
-# $PROJECT_NAME
-
-$([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
-
-**Author:** $USERNAME
-**Created:** $(date +"%Y-%m-%d")
-**Type:** $PROJECT_TYPE
-
-## Getting Started
-
-1. **Start your container:**
-   \`\`\`bash
-   container-run $PROJECT_NAME
-   \`\`\`
-
-2. **Navigate to your project:**
-   \`\`\`bash
-   cd /workspace/$PROJECT_NAME
-   \`\`\`
-
-3. **Set up your project structure and start working!**
-
-## Workflow
-
-- **Workspace (~/workspace):** Your files persist here - this is permanent storage
-- **Container:** Your computing environment with GPU access - can be restarted
-- Edit code in VS Code, run in container, results save to workspace
-
-## Notes
-
-- This directory persists across container restarts
-- Save all your work here
-- Use Git for version control
-
-READMEEOF
-    else
-        # Comprehensive README for data science structure
-        cat > "$PROJECT_DIR/README.md" <<READMEEOF
-# $PROJECT_NAME
-
-$([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
-
-**Author:** $USERNAME
-**Created:** $(date +"%Y-%m-%d")
-**Type:** $PROJECT_TYPE
-
-## Project Structure
-
-\`\`\`
-$PROJECT_NAME/
-├── data/
-│   ├── raw/              # Original, immutable data
-│   ├── processed/        # Cleaned, transformed data
-│   └── external/         # External datasets
-├── models/
-│   └── checkpoints/      # Model checkpoints
-├── notebooks/            # Jupyter notebooks for exploration
-├── scripts/              # Python scripts for training/inference
-├── configs/              # Configuration files (YAML, JSON)
-├── outputs/              # Training logs, plots, results
-│   ├── logs/
-│   └── figures/
-└── tests/                # Unit tests
-\`\`\`
-
-## Getting Started
-
-### On the DS01 Server
-
-1. **Start your container:**
-   \`\`\`bash
-   container-run $PROJECT_NAME
-   \`\`\`
-   This launches your Docker container with GPU access and mounts your workspace.
-
-2. **Navigate to your project:**
-   \`\`\`bash
-   cd /workspace/$PROJECT_NAME
-   \`\`\`
-
-3. **Install dependencies (if you have requirements.txt):**
-   \`\`\`bash
-   pip install -r requirements.txt
-   \`\`\`
-
-4. **Start working!**
-   - Run Jupyter: \`jupyter lab\`
-   - Train models: \`python scripts/train.py\`
-   - Run experiments in notebooks/
-
-### Understanding the Workflow
-
-**Containers vs. Workspace:**
-- Your **workspace** (~/workspace) persists - all files saved here are permanent
-- **Containers** are temporary environments - they can be stopped/restarted
-- Think of containers as "shells" you work in, workspace as your "files"
-
-**Key Commands:**
-\`\`\`bash
-# Container management
-container-list              # See all your containers
-container-run <name>        # Start and enter a container
-container-stop <name>       # Stop a running container
-container-stats             # Check resource usage
-
-# Image management
-image-list                  # See available Docker images
-image-create                # Build a new custom image
-
-# System info
-alias-list                  # See all available commands
-\`\`\`
-
-**GPU Usage:**
-- Check GPU: \`nvidia-smi\`
-- Your container has access to assigned GPUs automatically
-- Be respectful of shared resources
-
-## Working with Data
-
-- **Raw data:** Goes in \`data/raw/\` (never modify original files)
-- **Processed data:** Save cleaned/transformed data to \`data/processed/\`
-- **Large files:** Use \`.gitignore\` to exclude from Git (see below)
-
-## Saving Models
-
-\`\`\`python
-# Save checkpoints regularly
-torch.save(model.state_dict(), 'models/checkpoints/model_epoch_10.pth')
-\`\`\`
-
-## Notes
-
-- **All work in this directory persists** across container restarts
-- **Checkpoint models regularly** to avoid losing progress
-- **Document your experiments** in notebooks or logs
-- **Use Git for version control** (recommended)
-
-## Next Steps
-
-- Install your dependencies: \`pip install -r requirements.txt\`
-- Start experimenting in notebooks/
-- Move production code to scripts/
-- Commit often with Git
-
-READMEEOF
+    # Call Tier 2 module: readme-create
+    GUIDED_FLAG=""
+    COMMIT_FLAG=""
+    if [ "$GUIDED" = true ]; then
+        GUIDED_FLAG="--guided"
+    fi
+    if [ "$SKIP_GIT" = false ]; then
+        COMMIT_FLAG="--commit"
     fi
 
-    # Create requirements.txt based on project type
-    cat > "$PROJECT_DIR/requirements.txt" <<REQEOF
-# DS01 Project Requirements
-# Install with: pip install -r requirements.txt
-
-# Core
-numpy
-pandas
-matplotlib
-seaborn
-scikit-learn
-jupyter
-jupyterlab
-ipykernel
-tqdm
-tensorboard
-
-REQEOF
-
-    # Add type-specific packages
-    case $PROJECT_TYPE in
-        cv)
-            cat >> "$PROJECT_DIR/requirements.txt" <<CVEOF
-# Computer Vision
-torch
-torchvision
-opencv-python
-albumentations
-timm
-Pillow
-CVEOF
-            ;;
-        nlp)
-            cat >> "$PROJECT_DIR/requirements.txt" <<NLPEOF
-# NLP
-torch
-transformers
-datasets
-tokenizers
-accelerate
-sentencepiece
-NLPEOF
-            ;;
-        rl)
-            cat >> "$PROJECT_DIR/requirements.txt" <<RLEOF
-# Reinforcement Learning
-torch
-gymnasium
-stable-baselines3
-RLEOF
-            ;;
-        ml)
-            cat >> "$PROJECT_DIR/requirements.txt" <<MLEOF
-# Machine Learning
-torch
-scipy
-xgboost
-lightgbm
-MLEOF
-            ;;
-    esac
-
-    # Create example config
-    cat > "$PROJECT_DIR/configs/experiment.yaml" <<'YAMLEOF'
-# Experiment configuration
-experiment:
-  name: "baseline"
-  seed: 42
-
-data:
-  batch_size: 32
-  num_workers: 4
-
-training:
-  epochs: 100
-  learning_rate: 0.001
-  optimizer: "adam"
-
-logging:
-  log_dir: "outputs/logs"
-  checkpoint_dir: "models/checkpoints"
-YAMLEOF
-
-    # Initial Git commit
-    if [ "$SKIP_GIT" = false ] && [ -d "$PROJECT_DIR/.git" ]; then
-        cd "$PROJECT_DIR"
-        git add .
-        git commit -q -m "Initial project structure
-
-Created by new-project wizard
-Type: $PROJECT_TYPE
-$([ -n "$PROJECT_DESC" ] && echo "Description: $PROJECT_DESC")" 2>/dev/null || true
-        echo -e "${GREEN}✓${NC} Initial commit created"
-    fi
-
-    echo -e "${GREEN}✓ Project files created${NC}"
+    readme-create "$PROJECT_NAME" \
+        --type="$PROJECT_TYPE" \
+        --structure="$STRUCTURE_TYPE" \
+        --desc="$PROJECT_DESC" \
+        $COMMIT_FLAG \
+        $GUIDED_FLAG
 else
     echo ""
     echo -e "${BOLD}Step 4: Skipping File Creation${NC}"
@@ -614,217 +246,24 @@ echo ""
 echo -e "${BOLD}Step 5: Docker Image${NC}"
 echo ""
 
+IMAGE_NAME=""
 if [ "$INTERACTIVE" = true ]; then
     read -p "Create a custom Docker image? [Y/n]: " CREATE_IMAGE
     CREATE_IMAGE=${CREATE_IMAGE:-Y}
 else
-    # In non-interactive mode, skip image creation
     CREATE_IMAGE="n"
 fi
 
-IMAGE_NAME=""
 if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
-
-    # Image naming
     IMAGE_NAME="${PROJECT_NAME}-image"
 
-    echo ""
-    echo -e "${BOLD}Image name: ${CYAN}${IMAGE_NAME}${NC}"
-    echo ""
-
-    # Framework selection
-    echo "Select framework:"
-    echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 ${GREEN}(recommended)${NC}"
-    echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
-    echo -e "  ${BOLD}3)${NC} PyTorch 2.5.1 (CPU only)"
-    read -p "Choice [1-3, default: 1]: " FRAMEWORK_CHOICE
-
-    case $FRAMEWORK_CHOICE in
-        2)
-            BASE_IMAGE="tensorflow/tensorflow:2.14.0-gpu"
-            FRAMEWORK="tensorflow"
-            ;;
-        3)
-            BASE_IMAGE="pytorch/pytorch:2.5.1-cpu"
-            FRAMEWORK="pytorch-cpu"
-            ;;
-        *)
-            BASE_IMAGE="pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
-            FRAMEWORK="pytorch"
-            ;;
-    esac
-
-    # Use case packages (already determined by PROJECT_TYPE)
-    USECASE_PACKAGES=""
-    case $PROJECT_TYPE in
-        cv)
-            USECASE_PACKAGES="timm albumentations opencv-python-headless torchvision"
-            USECASE_NAME="Computer Vision"
-            ;;
-        nlp)
-            USECASE_PACKAGES="transformers datasets tokenizers accelerate"
-            USECASE_NAME="NLP"
-            ;;
-        rl)
-            USECASE_PACKAGES="gymnasium stable-baselines3 tensorboard"
-            USECASE_NAME="Reinforcement Learning"
-            ;;
-        custom)
-            USECASE_PACKAGES=""
-            USECASE_NAME="Custom"
-            ;;
-        *)
-            USECASE_PACKAGES=""
-            USECASE_NAME="General ML"
-            ;;
-    esac
-
-    # Additional packages
-    echo ""
-    read -p "Additional packages? (space-separated, or Enter to skip): " ADDITIONAL_PACKAGES
-
-    # System packages
-    echo ""
-    read -p "System packages (apt)? (or Enter to skip): " SYSTEM_PACKAGES
-
-    # Generate Dockerfile
-    mkdir -p ~/docker-images
-    DOCKERFILE_PATH=~/docker-images/${IMAGE_NAME}.Dockerfile
-
-    cat > "$DOCKERFILE_PATH" <<DOCKERFILEEOF
-# DS01 Custom Image: $IMAGE_NAME
-# Created: $(date)
-# Use case: $USECASE_NAME
-# Author: $USERNAME
-
-FROM $BASE_IMAGE
-
-# Docker labels for ownership tracking
-LABEL ds01.owner="$USERNAME"
-LABEL ds01.project="$PROJECT_NAME"
-LABEL ds01.framework="$FRAMEWORK"
-LABEL ds01.usecase="$USECASE_NAME"
-LABEL ds01.created="$(date -Iseconds)"
-
-WORKDIR /workspace
-
-# System packages
-RUN apt-get update && apt-get install -y --no-install-recommends \\
-    git \\
-    curl \\
-    wget \\
-    vim \\
-    ${SYSTEM_PACKAGES} \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Core Python packages
-RUN pip install --no-cache-dir \\
-    jupyter \\
-    jupyterlab \\
-    ipykernel \\
-    numpy \\
-    pandas \\
-    matplotlib \\
-    seaborn \\
-    scikit-learn \\
-    scipy \\
-    tqdm \\
-    tensorboard \\
-    Pillow
-
-# Use case specific packages
-$([ -n "$USECASE_PACKAGES" ] && echo "RUN pip install --no-cache-dir $USECASE_PACKAGES")
-
-# Additional user packages
-$([ -n "$ADDITIONAL_PACKAGES" ] && echo "RUN pip install --no-cache-dir $ADDITIONAL_PACKAGES")
-
-# Configure Jupyter
-RUN jupyter lab --generate-config && \\
-    echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \\
-    echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_lab_config.py && \\
-    echo "c.ServerApp.open_browser = False" >> /root/.jupyter/jupyter_lab_config.py
-
-# IPython kernel
-RUN python -m ipykernel install --user \\
-    --name=$IMAGE_NAME \\
-    --display-name="$PROJECT_NAME (GPU)"
-
-# Environment
-ENV PYTHONUNBUFFERED=1
-ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
-ENV HF_HOME=/workspace/.cache/huggingface
-
-CMD ["/bin/bash"]
-DOCKERFILEEOF
-
-    echo ""
-    echo -e "${GREEN}✓ Dockerfile created${NC}"
-    echo -e "  ${BLUE}$DOCKERFILE_PATH${NC}"
-    echo ""
-
-    # Build image
-    echo ""
-    read -p "Build image now? (takes 3-5 minutes) [Y/n]: " BUILD_NOW
-    BUILD_NOW=${BUILD_NOW:-Y}
-
-    if [[ "$BUILD_NOW" =~ ^[Yy] ]]; then
-        # Check Docker permissions
-        if ! docker info &>/dev/null; then
-            echo -e "${RED}✗ Docker permission error${NC}"
-            echo ""
-            echo "You don't have permission to use Docker."
-            echo "You need to be added to the 'docker' group."
-            echo ""
-            echo -e "${YELLOW}Solution:${NC}"
-            echo "  1. Ask your system administrator to run:"
-            echo -e "     ${CYAN}sudo usermod -aG docker $USERNAME${NC}"
-            echo "  2. Log out and log back in for the change to take effect"
-            echo ""
-            echo "Your Dockerfile has been saved to:"
-            echo -e "  ${BLUE}$DOCKERFILE_PATH${NC}"
-            echo ""
-            echo "You can build it later with:"
-            echo -e "  ${CYAN}image-create ${PROJECT_NAME}${NC}"
-            echo ""
-            IMAGE_NAME=""
-        else
-            echo -e "\n${CYAN}Building image...${NC}\n"
-
-            if docker build -t "$IMAGE_NAME" -f "$DOCKERFILE_PATH" ~/docker-images/; then
-                echo ""
-                echo -e "${GREEN}✓ Image built: ${IMAGE_NAME}${NC}"
-                echo ""
-
-                # Save image metadata
-                mkdir -p ~/ds01-config/images
-                cat > ~/ds01-config/images/${IMAGE_NAME}.info <<INFOEOF
-Image: $IMAGE_NAME
-Project: $PROJECT_NAME
-Owner: $USERNAME
-Framework: $FRAMEWORK
-Use Case: $USECASE_NAME
-Created: $(date)
-Dockerfile: $DOCKERFILE_PATH
-
-Commands:
-- Create container: container-create ${PROJECT_NAME} ${IMAGE_NAME}
-- Run container: container-run ${PROJECT_NAME}
-- Rebuild image: docker build -t $IMAGE_NAME -f $DOCKERFILE_PATH ~/docker-images/
-INFOEOF
-
-            else
-                echo ""
-                echo -e "${RED}✗ Build failed${NC}"
-                echo "Check: $DOCKERFILE_PATH"
-                IMAGE_NAME=""
-            fi
-        fi
-    else
-        echo ""
-        echo "Build later with:"
-        echo -e "  ${CYAN}image-create ${PROJECT_NAME}${NC}"
-        echo ""
+    # Call Tier 2 module: image-create
+    GUIDED_FLAG=""
+    if [ "$GUIDED" = true ]; then
+        GUIDED_FLAG="--guided"
     fi
+
+    image-create "$IMAGE_NAME" --type="$PROJECT_TYPE" $GUIDED_FLAG
 fi
 
 # Show Summary BEFORE entering container
@@ -902,8 +341,8 @@ echo -e "${BOLD}Inside the Container:${NC}"
 echo "  • Your workspace: ${CYAN}/workspace${NC}"
 echo "  • Start Jupyter: ${CYAN}jlab${NC}"
 echo "  • Check GPU: ${CYAN}gpu${NC}"
-echo "  • Exit without stopping: ${CYAN}Ctrl+P, Ctrl+Q${NC} (or type ${CYAN}detach${NC})"
-echo "  • Exit and stop: ${CYAN}exit${NC}"
+echo "  • Exit (container keeps running): Type ${CYAN}exit${NC}"
+echo "  • Stop container: ${CYAN}container-stop <name>${NC} (on host)"
 echo ""
 
 if [ -f "$PROJECT_DIR/README.md" ]; then
@@ -929,13 +368,13 @@ if [ -n "$IMAGE_NAME" ] && [ "$INTERACTIVE" = true ]; then
 
             if [ $? -eq 0 ]; then
                 echo ""
-                read -p "Enter container now? (you can exit anytime with Ctrl+P,Ctrl+Q) [Y/n]: " START_NOW
+                read -p "Enter container now? (type 'exit' to leave, container stays running) [Y/n]: " START_NOW
                 START_NOW=${START_NOW:-Y}
 
                 if [[ "$START_NOW" =~ ^[Yy] ]]; then
                     echo ""
                     echo -e "${GREEN}Entering container...${NC}"
-                    echo -e "${DIM}Remember: Ctrl+P, Ctrl+Q to exit without stopping${NC}"
+                    echo -e "${DIM}Remember: Type 'exit' to leave (container stays running)${NC}"
                     echo ""
                     sleep 2
 

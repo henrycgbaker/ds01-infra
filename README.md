@@ -23,22 +23,21 @@ Multi-user GPU-enabled container infrastructure for data science workloads with 
 ### For New Users
 
 ```bash
-# First-time setup with detailed explanations (recommended)
-new-user
+# First-time setup with detailed explanations (recommended for beginners)
+user-setup
 
-# Or streamlined setup for experienced users
-new-project
+# Or streamlined project setup for experienced users
+project-init
 
 # Alternative commands (all equivalent):
-user setup
-user new
-user-setup
+user setup          # Same as user-setup (via dispatcher)
+new-user           # Legacy alias
 ```
 
 ### For Administrators
 
 ```bash
-# Add user to Docker group
+# Add user to docker group (required for Docker access)
 sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh <username>
 
 # Update system symlinks after changes
@@ -52,109 +51,130 @@ alias-list
 
 ## 👥 User Onboarding Workflows
 
-DS01 provides two complementary onboarding experiences:
+DS01 provides a modular, tiered onboarding system:
 
-### `new-user` - Educational Onboarding
+### `user-setup` - Complete First-Time Onboarding
 
 **Target audience**: First-time users, students new to Docker/containers
-**Style**: Comprehensive with detailed explanations
+**Style**: Comprehensive wizard with detailed explanations
+
+**What it does**:
+- Orchestrates the complete onboarding flow:
+  1. SSH key setup (`ssh-setup`)
+  2. Project initialization (`project-init`)
+  3. VS Code connection guide (`vscode-setup`)
 
 **Features**:
-- Step-by-step wizard with explanations of Docker concepts
-- SSH key setup with educational context
-- Git repository initialization and LFS setup
-- Project structure options (data science layout vs blank)
-- Custom Docker image creation with use case templates
-- Container setup and VS Code integration instructions
-- Comprehensive README generation with workflow documentation
+- Educational mode with Docker concept explanations
+- SSH key generation with remote access instructions
+- Complete project setup with Git/LFS integration
+- Custom Docker image creation with use case templates (General ML, CV, NLP, RL, Custom)
+- Container setup and lifecycle management
+- VS Code Remote-SSH configuration guide
 
 **Use when**:
 - Onboarding new students or researchers
+- First-time system access
 - Users unfamiliar with container workflows
-- Setting up first project on the system
 
 ```bash
-new-user
-# Also accessible via: user-setup, user setup, user new
+user-setup
+# Also accessible via: user setup, new-user (legacy)
 ```
 
-### `new-project` - Streamlined Setup
+### `project-init` - Project Setup
 
-**Target audience**: Experienced users familiar with the system
-**Style**: Concise, minimal explanations
+**Target audience**: Users setting up new projects (can be first-timers with `--guided`)
+**Style**: Streamlined workflow with optional educational mode
+
+**What it does**:
+- Orchestrates project creation flow:
+  1. Directory structure creation (`dir-create`)
+  2. Git initialization (`git-init`)
+  3. README generation (`readme-create`)
+  4. Docker image creation (`image-create`)
+  5. Container creation and startup
 
 **Features**:
-- Quick project setup wizard
-- Same technical capabilities as `new-user`
-- Assumes familiarity with Docker/containers
-- Minimal prompts, efficient workflow
+- Two modes: `project-init` (streamlined) or `project-init --guided` (educational)
+- Modular architecture (58.5% reduction from previous monolithic version)
+- Reusable components that work standalone or orchestrated
+- Use case templates: General ML (default), Computer Vision, NLP, RL, Custom
+- Image naming: `{project}-image` format
 
 **Use when**:
-- Creating additional projects
-- User already completed `new-user` onboarding
-- Fast project initialization needed
+- Creating new projects
+- Setting up additional workspaces
+- Quick project initialization
 
 ```bash
-new-project
-# Also accessible via: project init
+project-init                # Streamlined mode
+project-init --guided       # Educational mode with explanations
+# Also accessible via: project init, new-project (legacy)
 ```
 
-### Workflow Comparison
+### Modular Building Blocks (Tier 2)
 
-| Feature | new-user | new-project |
-|---------|----------|-------------|
-| SSH Setup | ✓ with explanations | ✓ streamlined |
-| Git Integration | ✓ with LFS education | ✓ quick setup |
-| Docker Concepts | ✓ explained | assumed knowledge |
-| Use Case Templates | 5 options (General ML default) | 5 options (General ML default) |
-| Image Naming | `{project}-image` | `{project}-image` |
-| README Generation | ✓ comprehensive | ✓ concise |
-| Container Creation | ✓ guided | ✓ efficient |
+All orchestrators are built from reusable modules that can also be used standalone:
+
+| Module | Purpose | Supports --guided |
+|--------|---------|-------------------|
+| `ssh-setup` | SSH key generation & configuration | ✓ |
+| `vscode-setup` | VS Code Remote-SSH setup guide | ✓ |
+| `dir-create` | Create project directory structure | ✓ |
+| `git-init` | Initialize Git repository with ML .gitignore | ✓ |
+| `readme-create` | Generate project README with workflow docs | ✓ |
+| `image-create` | Build custom Docker image | ✓ |
+| `container-create` | Create container with resource limits | ✓ |
+| `container-run` | Start and enter container | ✓ |
 
 ---
 
 ## 🏗️ System Architecture
 
-### Three-Layer Design
+### Four-Tier Hierarchical Design
 
-1. **Base System**: `aime-ml-containers` (external dependency)
-   - Core `mlc-*` CLI commands
-   - Container image repository
-   - User isolation via UID/GID mapping
+DS01 uses a modular, hierarchical architecture that eliminates code duplication and enables flexible composition:
 
-2. **Enhancement Layer**: `ds01-infra` (this repository)
-   - Resource limits and GPU allocation
-   - Systemd cgroup integration
-   - Lifecycle automation
-   - User-friendly command wrappers
+**TIER 1: Base System** (`aime-ml-containers` v1)
+- 9 core `mlc-*` commands providing container lifecycle management
+- Container image repository with framework versions (PyTorch, TensorFlow, MXNet)
+- User isolation via UID/GID mapping (`$CONTAINER_NAME._.$USER_ID`)
+- **DS01 Enhancement**: Wraps `mlc-create` and `mlc-stats` with resource limits and GPU allocation
 
-3. **User Interface**: Simplified commands
-   - `new-user` / `new-project` - Onboarding wizards
-   - `container-*` commands - Container management
-   - `image-*` commands - Image management
-   - Dispatcher scripts for flexible command syntax
+**TIER 2: Modular Unit Commands** (Single-purpose, reusable)
+- **Container Management** (7 commands): `container-create`, `container-run`, `container-stop`, `container-list`, `container-stats`, `container-cleanup`, `container-exit`
+- **Image Management** (4 commands): `image-create`, `image-list`, `image-update`, `image-delete`
+- **Project Setup Modules** (5 commands): `dir-create`, `git-init`, `readme-create`, `ssh-setup`, `vscode-setup`
+- All commands support `--guided` flag for educational mode
+- Can be used standalone or orchestrated by higher tiers
+
+**TIER 3: Workflow Orchestrators** (Multi-step workflows)
+- **`project-init`**: Orchestrates complete project setup (dir-create → git-init → readme-create → image-create → container-create → container-run)
+- **Command Dispatchers**: Enable flexible syntax (`container list` or `container-list`)
+- 58.5% code reduction through modularization
+
+**TIER 4: Workflow Wizards** (Complete onboarding experiences)
+- **`user-setup`**: Full onboarding wizard (ssh-setup → project-init → vscode-setup)
+- 69.4% code reduction from original monolithic version
+- Educational focus for first-time users
 
 ### Key Components
 
-**User Onboarding**:
-- `scripts/user/user-setup` - Educational onboarding wizard (`new-user`)
-- `scripts/user/new-project` - Streamlined project setup
-- `scripts/user/user-dispatcher.sh` - Routes `user setup`, `user new` to user-setup
-- `scripts/user/project-init` - Wrapper for `new-project`
+**Resource Management**:
+- `config/resource-limits.yaml` - Central YAML configuration (defaults, groups, user overrides)
+- `scripts/docker/get_resource_limits.py` - YAML parser returning per-user limits
+- `scripts/docker/gpu_allocator.py` - MIG-aware GPU allocation with priority scheduling
 
-**Container Management**:
-- `scripts/user/container-*` - User-facing container commands
-- `scripts/docker/mlc-create-wrapper.sh` - Enhanced container creation
-- `scripts/docker/gpu_allocator.py` - MIG-aware GPU allocation
+**Container Lifecycle**:
+- `scripts/docker/mlc-create-wrapper.sh` - Enhanced `mlc-create` with resource limits
+- `scripts/monitoring/mlc-stats-wrapper.sh` - Enhanced `mlc-stats` with GPU process info
+- Lifecycle automation: idle detection, auto-cleanup based on `idle_timeout` in YAML
 
 **System Administration**:
-- `scripts/system/add-user-to-docker.sh` - Add users to docker-users group
-- `scripts/system/update-symlinks.sh` - Update command symlinks
-- `scripts/system/setup-resource-slices.sh` - Configure systemd slices
-
-**Resource Management**:
-- `config/resource-limits.yaml` - Central resource configuration
-- `scripts/docker/get_resource_limits.py` - YAML parser for user limits
+- `scripts/system/add-user-to-docker.sh` - Add users to `docker` group
+- `scripts/system/update-symlinks.sh` - Create symlinks for all 30+ commands in `/usr/local/bin/`
+- `scripts/system/setup-resource-slices.sh` - Configure systemd cgroup slices from YAML
 
 ---
 
@@ -210,48 +230,77 @@ See subdirectory READMEs for detailed documentation:
 
 ## 🎯 Command Reference
 
-### User Setup Commands
+### Tier 4: Workflow Wizards
 
-| Command | Description |
-|---------|-------------|
-| `new-user` | First-time onboarding with detailed explanations (recommended) |
-| `user-setup` | Same as `new-user` |
-| `user setup` | Same as `new-user` (via dispatcher) |
-| `user new` | Same as `new-user` (via dispatcher) |
-| `new-project` | Streamlined project setup for experienced users |
-| `project init` | Same as `new-project` |
+| Command | Description | Supports --guided |
+|---------|-------------|-------------------|
+| `user-setup` | Complete first-time onboarding (SSH + project + VS Code) | Always guided |
+| `user setup` | Same (via dispatcher) | Always guided |
 
-### Container Commands
+**Legacy aliases**: `new-user` → `user-setup`
 
-All container commands support both forms: `container <subcommand>` or `container-<subcommand>`
+### Tier 3: Workflow Orchestrators
 
-| Command | Description |
-|---------|-------------|
-| `container create` | Create new container |
-| `container run` | Start and attach to container |
-| `container stop` | Stop running container |
-| `container list` | List all containers |
-| `container stats` | Resource usage statistics |
-| `container cleanup` | Remove stopped containers |
+| Command | Description | Supports --guided |
+|---------|-------------|-------------------|
+| `project-init` | Complete project setup workflow | ✓ |
+| `project init` | Same (via dispatcher) | ✓ |
 
-### Image Commands
+**Legacy aliases**: `new-project` → `project-init`
 
-| Command | Description |
-|---------|-------------|
-| `image create` | Create custom Docker image |
-| `image list` | List available images |
-| `image update` | Rebuild/update an image |
-| `image delete` | Remove unused images |
+### Tier 2: Modular Commands
+
+**Container Management** (all support both `container <cmd>` and `container-<cmd>`):
+
+| Command | Description | Supports --guided |
+|---------|-------------|-------------------|
+| `container-create` | Create container with resource limits | ✓ |
+| `container-run` | Start and enter container | ✓ |
+| `container-stop` | Stop running container | - |
+| `container-list` | List all your containers | - |
+| `container-stats` | Resource usage statistics | - |
+| `container-cleanup` | Remove stopped containers | - |
+| `container-exit` | Show exit information | ✓ |
+
+**Image Management** (all support both `image <cmd>` and `image-<cmd>`):
+
+| Command | Description | Supports --guided |
+|---------|-------------|-------------------|
+| `image-create` | Build custom Docker image | ✓ |
+| `image-list` | List available images | - |
+| `image-update` | Rebuild/update image | - |
+| `image-delete` | Remove unused images | - |
+
+**Project Setup Modules**:
+
+| Command | Description | Supports --guided |
+|---------|-------------|-------------------|
+| `dir-create` | Create project directory structure | ✓ |
+| `git-init` | Initialize Git with ML .gitignore | ✓ |
+| `readme-create` | Generate project README | ✓ |
+| `ssh-setup` | Configure SSH keys for remote access | ✓ |
+| `vscode-setup` | VS Code Remote-SSH setup guide | ✓ |
+
+### Tier 1: Base System
+
+| Command | Description | DS01 Enhancement |
+|---------|-------------|------------------|
+| `mlc-create` | Create container (framework + version) | ✓ Adds resource limits & GPU allocation |
+| `mlc-stats` | Show container resource usage | ✓ Adds GPU process info |
+| `mlc-open` | Open shell to container | Used directly from base system |
+| `mlc-list` | List all containers | Used directly from base system |
+| `mlc-start` | Start container without shell | Used directly from base system |
+| `mlc-stop` | Stop container | Used directly from base system |
+| `mlc-remove` | Delete container | Used directly from base system |
 
 ### Admin Commands
 
 | Command | Description |
 |---------|-------------|
 | `alias-list` | Display all available commands |
-| `ds01-dashboard` | System overview dashboard |
-| `ds01-status` | Resource usage status |
+| `ds01-status` | System resource usage status |
 
-Run any command with `--help` for detailed usage.
+**💡 All commands support `--help` for detailed usage**
 
 ---
 
@@ -298,7 +347,7 @@ sudo adduser newstudent
 sudo usermod -aG video newstudent  # GPU access
 ```
 
-2. **Add to docker-users group**:
+2. **Add to docker group**:
 ```bash
 sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh newstudent
 ```
@@ -313,7 +362,7 @@ groups:
     members: [alice, bob, newstudent]
 ```
 
-4. **User logs out and back in** (for group membership to take effect)
+4. **User logs out and back in** (for docker group membership to take effect)
 
 5. **User runs onboarding**:
 ```bash
@@ -341,12 +390,12 @@ user_overrides:
 
 ### Docker Group Configuration
 
-DS01 uses the **`docker-users`** group (not `docker`) for Docker permissions.
+DS01 uses the standard **`docker`** group for Docker socket access.
 
-**Why `docker-users` instead of `docker`?**
-- Aligns with security best practices
-- Separate from system docker group
-- Easier to manage multi-user environments
+**How it works:**
+- The Docker daemon creates a Unix socket at `/var/run/docker.sock`
+- This socket is owned by `root:docker`
+- Users in the `docker` group can access it without sudo
 
 ### Adding Users to Docker Group
 
@@ -357,19 +406,16 @@ sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh <username>
 
 **Manual**:
 ```bash
-# Create group if needed
-sudo groupadd docker-users
-
-# Add user
-sudo usermod -aG docker-users <username>
+# Add user to docker group
+sudo usermod -aG docker <username>
 
 # User must log out and back in
 ```
 
 **Verify**:
 ```bash
-groups | grep docker-users  # Should show docker-users
-docker info                 # Should work without sudo
+groups | grep docker  # Should show docker
+docker info           # Should work without sudo
 ```
 
 ### Troubleshooting Permission Errors
@@ -378,12 +424,12 @@ If users see "Docker permission error" during image build:
 
 1. **Check group membership**:
 ```bash
-groups  # Should include docker-users
+groups  # Should include docker
 ```
 
 2. **If not in group, admin adds them**:
 ```bash
-sudo usermod -aG docker-users $USER
+sudo bash /opt/ds01-infra/scripts/system/add-user-to-docker.sh $USER
 ```
 
 3. **User logs out and back in** (group membership requires new session)
@@ -419,12 +465,7 @@ find scripts -type f -name "*.sh" -exec chmod +x {} \;
 find scripts -type f -name "*.py" -exec chmod +x {} \;
 ```
 
-4. **Create docker-users group**:
-```bash
-sudo groupadd docker-users
-```
-
-5. **Set up systemd slices**:
+4. **Set up systemd slices**:
 ```bash
 sudo scripts/system/setup-resource-slices.sh
 sudo systemctl daemon-reload
@@ -574,31 +615,71 @@ docker build -t test-image -f <project>-image.Dockerfile .
 
 ## 🔄 Recent Changes
 
-### November 2025 - User Onboarding Overhaul
+### November 2025 - Major Architecture Refactoring (Phases 1-6)
 
-**New Features**:
-- Dual onboarding workflows: `new-user` (educational) and `new-project` (streamlined)
-- Command dispatcher pattern: `user setup`, `user new` route to `user-setup`
-- Flexible command syntax: both `container list` and `container-list` work
-- Docker group standardization: all scripts use `docker-users` group
-- Image naming convention: `{project}-image` (not `{username}-{project}`)
-- General ML as default use case (option 1)
-- Fixed color code rendering throughout all scripts
+**Phase 1 [NEW]: Base System Integration Audit**
+- Documented all 9 mlc-* commands from AIME MLC v1 base system
+- Verified 2 wrapped commands (mlc-create, mlc-stats) with DS01 enhancements
+- Confirmed 7 commands used directly from base system
+- Established four-tier hierarchical architecture
 
-**Scripts Added**:
-- `scripts/user/user-dispatcher.sh` - Routes user subcommands
-- `scripts/system/add-user-to-docker.sh` - Helper for Docker permissions
-- `scripts/system/update-symlinks.sh` - Automates symlink management
+**Phase 2-3: Modular Command Extraction**
+- Created 5 new Tier 2 modules: `dir-create`, `git-init`, `readme-create`, `ssh-setup`, `vscode-setup`
+- Added `--guided` flag support across all commands
+- Consistent educational content for beginners
+- Each module works standalone or orchestrated
 
-**Scripts Renamed**:
-- `new-user-setup.sh` → `user-setup` (simpler name)
-- `new-project-setup` → `new-project` (consistent naming)
+**Phase 4: Orchestrator Refactoring**
+- Refactored `project-init` from 958 → 397 lines (58.5% reduction)
+- Eliminated 561 lines of duplicated code
+- Now calls Tier 2 modules instead of duplicating logic
+- Clean orchestrator pattern: prompts → delegates to modules
 
-**Bug Fixes**:
-- Fixed shebang line in `user-setup` (must be line 1)
-- Fixed color codes requiring `echo -e` throughout
-- Fixed Docker permission error handling
-- Fixed success messages appearing on build failures
+**Phase 5: Wizard Creation**
+- Refactored `user-setup` from 932 → 285 lines (69.4% reduction)
+- Orchestrates: ssh-setup → project-init → vscode-setup
+- Clean Tier 4 wizard pattern achieved
+- Total elimination of code duplication between user and project setup
+
+**Phase 6: Exit Functionality Documentation Fix**
+- Completely rewrote `container-exit` with accurate docker exec behavior
+- Removed all misleading Ctrl+P, Ctrl+Q references (doesn't work with docker exec)
+- Updated `container-aliases.sh` and `container-stop` with correct exit instructions
+- Added deprecation notices to legacy files
+
+**Phase 7: Documentation & Symlink Management**
+- Comprehensive `update-symlinks.sh` covering all 30+ commands organized by tier
+- Updated `README.md` with four-tier architecture
+- Updated `CLAUDE.md` with complete base system integration
+- Updated `REFACTORING_PLAN.md` documenting all completed phases
+
+**Overall Results**:
+- **>1,100 lines of code eliminated** through modularization
+- **Zero code duplication**: Single source of truth for each operation
+- **Enhanced user experience**: Consistent `--guided` mode across all commands
+- **Accurate documentation**: All exit behavior correctly documented (docker exec, not attach)
+- **Clean architecture**: Base System → Modules → Orchestrators → Wizards
+
+**Command Changes**:
+- `user-setup` is now the primary onboarding wizard (not just an alias)
+- `project-init` is the primary project setup command
+- `new-user` and `new-project` are legacy aliases for backwards compatibility
+- All commands support flexible dispatcher syntax (`container list` or `container-list`)
+- Docker group standardization: all scripts use standard `docker` group
+
+**New Modules (Tier 2)**:
+- `dir-create` - Project directory structure creation
+- `git-init` - Git repository initialization with ML .gitignore
+- `readme-create` - Project README generation
+- `ssh-setup` - SSH key configuration for remote access
+- `vscode-setup` - VS Code Remote-SSH setup guide
+
+**Scripts Updated**:
+- `scripts/system/update-symlinks.sh` - Now manages all 30+ commands by tier
+- `scripts/user/project-init` - Modular orchestrator (58.5% smaller)
+- `scripts/user/user-setup` - Modular wizard (69.4% smaller)
+- `scripts/user/container-exit` - Accurate docker exec documentation
+- `config/container-aliases.sh` - Fixed exit behavior documentation
 
 ---
 

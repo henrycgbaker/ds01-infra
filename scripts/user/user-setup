@@ -1,21 +1,58 @@
 #!/bin/bash
-# DS01 Complete Setup Wizard - One script to rule them all
-# Handles: SSH keys, project setup, image creation, VS Code integration
+# DS01 User Setup Wizard - Complete onboarding orchestrator
+# Tier 4 Wizard - Orchestrates: ssh-setup → project-init → vscode-setup
 # File: /opt/ds01-infra/scripts/user/user-setup
 
 set -e
 
-BLUE='\033[0;36m'  # Cyan (lighter and more visible)
+BLUE='\033[0;36m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
 GROUP_ID=$(id -g)
+
+# Parse command line arguments
+GUIDED=true  # Default to guided mode for user-setup
+
+for arg in "$@"; do
+    case $arg in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        --quick)
+            GUIDED=false
+            shift
+            ;;
+        -h|--help)
+            echo ""
+            echo -e "${BOLD}DS01 User Setup Wizard${NC}"
+            echo ""
+            echo -e "${CYAN}Usage:${NC}"
+            echo "  user-setup [options]"
+            echo ""
+            echo -e "${CYAN}Options:${NC}"
+            echo "  --guided    Full guided mode with explanations (default)"
+            echo "  --quick     Quick mode without detailed explanations"
+            echo "  -h, --help  Show this help message"
+            echo ""
+            echo -e "${CYAN}Description:${NC}"
+            echo "  Complete onboarding wizard for new DS01 users."
+            echo "  Sets up SSH keys, creates first project, configures VS Code."
+            echo ""
+            exit 0
+            ;;
+        *)
+            ;;
+    esac
+done
 
 # Logo
 cat << "EOF"
@@ -24,17 +61,36 @@ cat << "EOF"
   / / / /\__ \/ / / /   | |
  / /_/ /___/ / /_/ /    | |
 /_____/_____/\____/     |_/ Hertie's HPC Server
-                            
+
 EOF
 
 echo -e "${GREEN}${BOLD}Onboarding & Setup Wizard${NC}\n"
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Welcome to DS01!${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This wizard will help you set up everything you need:"
+    echo ""
+    echo "  ${GREEN}✓${NC} SSH keys for secure remote access"
+    echo "  ${GREEN}✓${NC} Your first ML/DS project with proper structure"
+    echo "  ${GREEN}✓${NC} Custom Docker image with your tools"
+    echo "  ${GREEN}✓${NC} GPU-enabled container for computing"
+    echo "  ${GREEN}✓${NC} VS Code connection for easy development"
+    echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} This takes about 10-15 minutes to complete."
+    echo ""
+    read -p "Press Enter to begin..." </dev/tty
+    echo ""
+fi
 
 # Step 1: Check setup status
 echo -e "${CYAN}━━━ Step 1: Checking Your Setup ━━━${NC}\n"
 
 NEEDS_SSH=false
 NEEDS_PROJECT=false
-NEEDS_IMAGE=false
+HAS_DOCKER_ACCESS=false
 
 # Check SSH keys
 if [ ! -f ~/.ssh/id_ed25519.pub ]; then
@@ -49,885 +105,181 @@ if [ ! -d ~/workspace ] || [ -z "$(ls -A ~/workspace 2>/dev/null)" ]; then
     NEEDS_PROJECT=true
     echo -e "${YELLOW}✗${NC} No projects found"
 else
-    echo -e "${GREEN}✓${NC} Workspace exists: ~/workspace"
+    PROJECT_COUNT=$(ls -1 ~/workspace 2>/dev/null | wc -l)
+    echo -e "${GREEN}✓${NC} Workspace exists: ~/workspace ($PROJECT_COUNT project(s))"
 fi
 
-# Check if user has any images (skip if docker access fails)
-# Suppress error output for cleaner user experience
+# Check Docker access
 if timeout 2 docker info &>/dev/null; then
+    HAS_DOCKER_ACCESS=true
     USER_IMAGES=$(docker images --format "{{.Repository}}" 2>/dev/null | grep "^${USERNAME}-" | wc -l)
     if [ "$USER_IMAGES" -eq 0 ]; then
-        NEEDS_IMAGE=true
-        echo -e "${YELLOW}○${NC} No custom images yet"
+        echo -e "${YELLOW}○${NC} No custom images yet (will create one)"
     else
         echo -e "${GREEN}✓${NC} $USER_IMAGES custom image(s) found"
     fi
 else
-    # Docker not accessible yet - this is expected on first run
-    NEEDS_IMAGE=true
-    echo -e "${YELLOW}○${NC} Docker images (will check after setup)"
+    HAS_DOCKER_ACCESS=false
+    echo -e "${YELLOW}○${NC} Docker access (will be configured during setup)"
 fi
 
 echo ""
+
+if [ "$NEEDS_SSH" = false ] && [ "$NEEDS_PROJECT" = false ] && [ "$HAS_DOCKER_ACCESS" = true ]; then
+    echo -e "${GREEN}${BOLD}✓ You're already set up!${NC}"
+    echo ""
+    echo "Everything looks good. You can:"
+    echo -e "  • Create more projects: ${GREEN}project-init --guided${NC}"
+    echo -e "  • View your containers: ${GREEN}container-list${NC}"
+    echo -e "  • See VS Code setup: ${GREEN}vscode-setup${NC}"
+    echo ""
+    read -p "Run full wizard anyway? [y/N]: " RUN_ANYWAY
+    if [[ ! "$RUN_ANYWAY" =~ ^[Yy]$ ]]; then
+        exit 0
+    fi
+    echo ""
+fi
+
 read -p "Continue with setup? [Y/n]: " CONTINUE
 CONTINUE=${CONTINUE:-Y}
-if [[ ! "$CONTINUE" =~ ^[Yy] ]]; then
+if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Step 2: SSH Key Setup (if needed)
+# Step 2: SSH Key Setup
 if [ "$NEEDS_SSH" = true ]; then
-    echo -e "\n${CYAN}━━━ Step 2: SSH Key Setup ━━━${NC}\n"
-    echo "Setting up SSH keys for VS Code Remote access..."
+    echo ""
+    echo -e "${CYAN}━━━ Step 2: SSH Key Setup ━━━${NC}\n"
 
-    ssh-keygen -t ed25519 -C "${USERNAME}@ds01-server" -f ~/.ssh/id_ed25519 -N ""
-    cat ~/.ssh/id_ed25519.pub >> ~/.ssh/authorized_keys
-    chmod 600 ~/.ssh/authorized_keys
+    # Call Tier 2 module: ssh-setup
+    GUIDED_FLAG=""
+    if [ "$GUIDED" = true ]; then
+        GUIDED_FLAG="--guided"
+    fi
 
-    echo -e "\n${GREEN}✓ SSH keys created${NC}"
-    echo -e "\n${BOLD}Your public key:${NC}"
-    echo -e "${BLUE}$(cat ~/.ssh/id_ed25519.pub)${NC}\n"
-
-    echo -e "${YELLOW}📋 Save this for VS Code Remote-SSH configuration${NC}"
-    read -p "Press Enter when ready to continue..."
+    ssh-setup $GUIDED_FLAG
 else
-    echo -e "\n${CYAN}━━━ Step 2: SSH Key Setup ━━━${NC}\n"
+    echo ""
+    echo -e "${CYAN}━━━ Step 2: SSH Key Setup ━━━${NC}\n"
     echo -e "${GREEN}✓ Skipped${NC} - SSH keys already configured"
-    echo "Your SSH keys are ready for VS Code Remote-SSH access"
     echo ""
 fi
 
 # Step 3: Project Setup
-echo -e "\n${CYAN}━━━ Step 3: Project Setup ━━━${NC}\n"
-
-echo -e "${BOLD}About Projects on DS01:${NC}"
 echo ""
-echo "Your files are organized in the workspace directory:"
-echo -e "  ${CYAN}~/workspace/${NC}"
-echo ""
-echo "Each project gets its own subdirectory:"
-echo -e "  ${CYAN}~/workspace/my-thesis/${NC}"
-echo -e "  ${CYAN}~/workspace/cv-project/${NC}"
-echo -e "  ${CYAN}~/workspace/nlp-experiments/${NC}"
-echo ""
-echo -e "${BOLD}Key Concept:${NC}"
-echo -e "  • ${BOLD}Workspace${NC} = Your files (permanent storage)"
-echo -e "  • ${BOLD}Container${NC} = Your computing environment (can be stopped/restarted)"
-echo ""
-echo "Think of it like:"
-echo "  • Workspace = Your home where all your stuff lives"
-echo "  • Container = A workshop you go to for tools (GPU access, packages)"
-echo ""
-echo -e "Your workspace ${BOLD}always persists${NC} - even if you rebuild containers!"
-echo ""
+echo -e "${CYAN}━━━ Step 3: Project Setup ━━━${NC}\n"
 
-read -p "Create your first project? [Y/n]: " CREATE_PROJECT
-CREATE_PROJECT=${CREATE_PROJECT:-Y}
+CREATE_PROJECT=true
+PROJECT_NAME=""
 
-if [[ "$CREATE_PROJECT" =~ ^[Yy] ]]; then
-    read -p "Project name (e.g., thesis, cv-experiments, nlp-project): " PROJECT_NAME
-    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+if [ "$NEEDS_PROJECT" = false ]; then
+    echo "You already have project(s) in ~/workspace"
+    echo ""
+    read -p "Create a new project anyway? [Y/n]: " CREATE_NEW
+    CREATE_NEW=${CREATE_NEW:-Y}
+    if [[ ! "$CREATE_NEW" =~ ^[Yy]$ ]]; then
+        CREATE_PROJECT=false
+        echo -e "${YELLOW}Skipped${NC} - Using existing projects"
 
-    PROJECT_DIR="$HOME/workspace/$PROJECT_NAME"
-
-    if [ -d "$PROJECT_DIR" ]; then
-        echo -e "${YELLOW}⚠  Project directory already exists: $PROJECT_DIR${NC}"
-        read -p "Use existing directory? [Y/n]: " USE_EXISTING
-        if [[ ! "$USE_EXISTING" =~ ^[Yy] ]]; then
-            exit 1
-        fi
-        EXISTING_PROJECT=true
-    else
-        EXISTING_PROJECT=false
-
-        # Directory structure choice
+        # Ask which project to use for VS Code setup
         echo ""
-        echo -e "${BOLD}Choose directory structure:${NC}"
-        echo -e "  ${BOLD}1)${NC} Data Science structure ${GREEN}(recommended)${NC}"
-        echo "     Organized folders: data/, models/, notebooks/, scripts/, outputs/"
-        echo -e "  ${BOLD}2)${NC} Blank directory"
-        echo "     Empty project folder - set up your own structure"
-        read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE
-
-        mkdir -p "$PROJECT_DIR"
-
-        if [ "$STRUCTURE_CHOICE" = "2" ]; then
-            # Blank directory
-            STRUCTURE_TYPE="blank"
-
-            # Create simple README
-            cat > "$PROJECT_DIR/README.md" << READMEEOF
-# $PROJECT_NAME
-
-Created: $(date)
-Author: $USERNAME
-
-## Getting Started
-
-1. Start your container: \`container-run $PROJECT_NAME\`
-2. Navigate to project: \`cd /workspace/$PROJECT_NAME\`
-3. Set up your project structure
-4. Start working!
-
-## Notes
-
-- This directory persists across container restarts
-- Save all your work here
-- Use Git for version control
-
-READMEEOF
-        else
-            # Data science structure (default)
-            STRUCTURE_TYPE="data-science"
-            mkdir -p "$PROJECT_DIR"/{data/{raw,processed,external},models/checkpoints,notebooks,scripts,configs,outputs/{logs,figures},tests}
-
-            # Create .gitkeep files
-            touch "$PROJECT_DIR/data/raw/.gitkeep"
-            touch "$PROJECT_DIR/data/processed/.gitkeep"
-            touch "$PROJECT_DIR/data/external/.gitkeep"
-            touch "$PROJECT_DIR/models/checkpoints/.gitkeep"
-            touch "$PROJECT_DIR/outputs/logs/.gitkeep"
-            touch "$PROJECT_DIR/outputs/figures/.gitkeep"
-
-            # Create comprehensive README
-            cat > "$PROJECT_DIR/README.md" << READMEEOF
-# $PROJECT_NAME
-
-Created: $(date)
-Author: $USERNAME
-
-## Project Structure
-
-\`\`\`
-$PROJECT_NAME/
-├── data/
-│   ├── raw/              # Original, immutable data
-│   ├── processed/        # Cleaned, transformed data
-│   └── external/         # External datasets
-├── models/
-│   └── checkpoints/      # Model checkpoints
-├── notebooks/            # Jupyter notebooks for exploration
-├── scripts/              # Python scripts for training/inference
-├── configs/              # Configuration files (YAML, JSON)
-├── outputs/              # Training logs, plots, results
-│   ├── logs/
-│   └── figures/
-└── tests/                # Unit tests
-\`\`\`
-
-## Getting Started
-
-### On the DS01 Server
-
-1. **Start your container:**
-   \`\`\`bash
-   container-run $PROJECT_NAME
-   \`\`\`
-   This launches your Docker container with GPU access and mounts your workspace.
-
-2. **Navigate to your project:**
-   \`\`\`bash
-   cd /workspace/$PROJECT_NAME
-   \`\`\`
-
-3. **Install dependencies (if you have requirements.txt):**
-   \`\`\`bash
-   pip install -r requirements.txt
-   \`\`\`
-
-4. **Start working!**
-   - Run Jupyter: \`jupyter lab\`
-   - Train models: \`python scripts/train.py\`
-   - Run experiments in notebooks/
-
-### Understanding the Workflow
-
-**Containers vs. Workspace:**
-- Your **workspace** (~/workspace) persists - all files saved here are permanent
-- **Containers** are temporary environments - they can be stopped/restarted
-- Think of containers as "shells" you work in, workspace as your "files"
-
-**Key Commands:**
-\`\`\`bash
-# Container management
-container-list              # See all your containers
-container-run <name>        # Start and enter a container
-container-stop <name>       # Stop a running container
-container-stats             # Check resource usage
-
-# Image management
-image-list                  # See available Docker images
-image-create                # Build a new custom image
-
-# System info
-alias-list                  # See all available commands
-\`\`\`
-
-**GPU Usage:**
-- Check GPU: \`nvidia-smi\`
-- Your container has access to assigned GPUs automatically
-- Be respectful of shared resources
-
-## Working with Data
-
-- **Raw data:** Goes in \`data/raw/\` (never modify original files)
-- **Processed data:** Save cleaned/transformed data to \`data/processed/\`
-- **Large files:** Use \`.gitignore\` to exclude from Git (see below)
-
-## Saving Models
-
-\`\`\`python
-# Save checkpoints regularly
-torch.save(model.state_dict(), 'models/checkpoints/model_epoch_10.pth')
-\`\`\`
-
-## Notes
-
-- **All work in this directory persists** across container restarts
-- **Checkpoint models regularly** to avoid losing progress
-- **Document your experiments** in notebooks or logs
-- **Use Git for version control** (see below for setup)
-
-## Next Steps
-
-- Set up Git version control (recommended)
-- Create a requirements.txt with your dependencies
-- Start experimenting in notebooks/
-- Move production code to scripts/
-
-READMEEOF
-        fi
-
-        echo -e "${GREEN}✓ Project structure created: $PROJECT_DIR${NC}"
-        echo -e "  Type: $STRUCTURE_TYPE"
-    fi
-else
-    PROJECT_NAME="default"
-    PROJECT_DIR="$HOME/workspace"
-    EXISTING_PROJECT=true
-fi
-
-# Step 4: Image Creation Wizard
-echo -e "\n${CYAN}━━━ Step 4: Custom Image Setup ━━━${NC}\n"
-
-echo -e "${BOLD}About Docker Images:${NC}"
-echo ""
-echo -e "A Docker image is like a ${BOLD}blueprint${NC} for your computing environment."
-echo "It contains:"
-echo "  • Python and packages (PyTorch, TensorFlow, etc.)"
-echo "  • System tools (git, vim, etc.)"
-echo "  • GPU drivers and CUDA libraries"
-echo ""
-echo -e "Once built, you create ${BOLD}containers${NC} from this image."
-echo "Think of it as: Image = Recipe, Container = Cooked meal"
-echo ""
-echo -e "${YELLOW}Note:${NC} Packages are installed ${BOLD}into the image${NC}."
-echo "You can update packages later by editing the Dockerfile and rebuilding."
-echo ""
-
-read -p "Create a custom Docker image for this project? [Y/n]: " CREATE_IMAGE
-CREATE_IMAGE=${CREATE_IMAGE:-Y}
-
-if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
-
-    # Image naming
-    IMAGE_NAME="${PROJECT_NAME}-image"
-
-    echo -e "\n${BOLD}Image will be named: ${CYAN}${IMAGE_NAME}${NC}\n"
-
-    # Framework selection
-    echo -e "${BOLD}Step 4a: Choose Base Framework${NC}"
-    echo "This determines which ML library comes pre-installed:"
-    echo ""
-    echo "Select base framework:"
-    echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
-    echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
-    echo -e "  ${BOLD}3)${NC} PyTorch 2.5.1 (CPU only)"
-    read -p "Choice [1-3, default: 1]: " FRAMEWORK_CHOICE
-    
-    case $FRAMEWORK_CHOICE in
-        2)
-            BASE_IMAGE="tensorflow/tensorflow:2.14.0-gpu"
-            FRAMEWORK="tensorflow"
-            ;;
-        3)
-            BASE_IMAGE="pytorch/pytorch:2.5.1-cpu"
-            FRAMEWORK="pytorch-cpu"
-            ;;
-        *)
-            BASE_IMAGE="pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
-            FRAMEWORK="pytorch"
-            ;;
-    esac
-    
-    # Use case packages
-    echo ""
-    echo -e "${BOLD}Step 4b: Choose Packages${NC}"
-    echo ""
-    echo "Now we'll install Python packages into your image."
-    echo "These are the libraries you'll use for your work (like installing packages"
-    echo "on your laptop, but they go into the Docker image instead)."
-    echo ""
-    echo -e "${YELLOW}💡 Tip:${NC} You can add more packages later!"
-    echo -e "   Just edit the Dockerfile and rebuild with: ${CYAN}image-update${NC}"
-    echo ""
-    echo -e "${BOLD}Select your use case (for pre-configured packages):${NC}"
-    echo -e "  ${BOLD}1)${NC} General ML (just the basics) ${GREEN}(default)${NC}"
-    echo -e "  ${BOLD}2)${NC} Computer Vision (timm, albumentations, opencv)"
-    echo -e "  ${BOLD}3)${NC} NLP (transformers, datasets, tokenizers)"
-    echo -e "  ${BOLD}4)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
-    echo -e "  ${BOLD}5)${NC} Custom (I'll specify everything)"
-    read -p "Choice [1-5, default: 1]: " USECASE_CHOICE
-
-    USECASE_PACKAGES=""
-    case $USECASE_CHOICE in
-        2)
-            USECASE_PACKAGES="timm albumentations opencv-python-headless torchvision"
-            USECASE_NAME="Computer Vision"
-            ;;
-        3)
-            USECASE_PACKAGES="transformers datasets tokenizers accelerate"
-            USECASE_NAME="NLP"
-            ;;
-        4)
-            USECASE_PACKAGES="gymnasium stable-baselines3 tensorboard"
-            USECASE_NAME="Reinforcement Learning"
-            ;;
-        5)
-            echo "Enter packages (space-separated):"
-            read -p "> " USECASE_PACKAGES
-            USECASE_NAME="Custom"
-            ;;
-        *)
-            # Default to General ML (option 1 or invalid input)
-            USECASE_PACKAGES=""
-            USECASE_NAME="General ML"
-            ;;
-    esac
-    
-    # Additional packages
-    echo -e "\n${BOLD}Additional packages?${NC} (space-separated, or press Enter to skip)"
-    echo "Examples: wandb optuna pytorch-lightning"
-    read -p "> " ADDITIONAL_PACKAGES
-    
-    # System packages
-    echo -e "\n${BOLD}System packages (apt)?${NC} (or press Enter to skip)"
-    echo "Examples: git vim htop tmux"
-    read -p "> " SYSTEM_PACKAGES
-    
-    # Generate Dockerfile
-    mkdir -p ~/docker-images
-    DOCKERFILE_PATH=~/docker-images/${IMAGE_NAME}.Dockerfile
-    
-    cat > "$DOCKERFILE_PATH" << DOCKERFILEEOF
-# DS01 Custom Image: $IMAGE_NAME
-# Created: $(date)
-# Use case: $USECASE_NAME
-# Author: $USERNAME
-
-FROM $BASE_IMAGE
-
-LABEL maintainer="$USERNAME"
-LABEL project="$PROJECT_NAME"
-LABEL created="$(date -Iseconds)"
-
-WORKDIR /workspace
-
-# System packages
-RUN apt-get update && apt-get install -y --no-install-recommends \\
-    git \\
-    curl \\
-    wget \\
-    vim \\
-    ${SYSTEM_PACKAGES} \\
-    && rm -rf /var/lib/apt/lists/*
-
-# Core Python packages
-RUN pip install --no-cache-dir \\
-    jupyter \\
-    jupyterlab \\
-    ipykernel \\
-    numpy \\
-    pandas \\
-    matplotlib \\
-    seaborn \\
-    scikit-learn \\
-    scipy \\
-    tqdm \\
-    tensorboard \\
-    Pillow
-
-# Use case specific packages
-$([ -n "$USECASE_PACKAGES" ] && echo "RUN pip install --no-cache-dir $USECASE_PACKAGES")
-
-# Additional user packages
-$([ -n "$ADDITIONAL_PACKAGES" ] && echo "RUN pip install --no-cache-dir $ADDITIONAL_PACKAGES")
-
-# Configure Jupyter
-RUN jupyter lab --generate-config && \\
-    echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \\
-    echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_lab_config.py && \\
-    echo "c.ServerApp.open_browser = False" >> /root/.jupyter/jupyter_lab_config.py
-
-# IPython kernel
-RUN python -m ipykernel install --user \\
-    --name=$IMAGE_NAME \\
-    --display-name="$PROJECT_NAME (GPU)"
-
-# Environment
-ENV PYTHONUNBUFFERED=1
-ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
-ENV HF_HOME=/workspace/.cache/huggingface
-
-# Auto-start Jupyter (optional - uncomment if desired)
-# COPY <<'BASHRC' /root/.bashrc_jupyter
-# if [[ \\\$- == *i* ]] && ! pgrep -f "jupyter-lab" > /dev/null; then
-#     nohup jupyter lab --ip=0.0.0.0 --port=8888 --no-browser \\
-#         --ServerApp.token="\\\$(hostname)-\\\$(id -u)" \\
-#         > /workspace/.jupyter.log 2>&1 &
-#     echo "🚀 Jupyter: http://localhost:8888/?token=\\\$(hostname)-\\\$(id -u)"
-# fi
-# BASHRC
-# RUN cat /root/.bashrc_jupyter >> /root/.bashrc
-
-CMD ["/bin/bash"]
-DOCKERFILEEOF
-    
-    echo -e "\n${GREEN}✓ Dockerfile created${NC}"
-    echo -e "Location: ${BLUE}$DOCKERFILE_PATH${NC}\n"
-    
-    # Build image
-    echo ""
-    echo -e "${BOLD}Step 4c: Build the Image${NC}"
-    echo ""
-    echo -e "Now we'll ${BOLD}build${NC} your Docker image."
-    echo "This process:"
-    echo "  • Downloads the base image (PyTorch/TensorFlow)"
-    echo "  • Installs all the packages you selected"
-    echo "  • Creates your custom computing environment"
-    echo ""
-    echo -e "${YELLOW}Note:${NC} This takes 3-5 minutes. It's downloading and installing everything!"
-    echo ""
-
-    read -p "Build image now? [Y/n]: " BUILD_NOW
-    BUILD_NOW=${BUILD_NOW:-Y}
-
-    if [[ "$BUILD_NOW" =~ ^[Yy] ]]; then
-        # Check Docker permissions
-        if ! docker info &>/dev/null; then
-            echo -e "${RED}✗ Docker permission error${NC}"
-            echo ""
-            echo "You don't have permission to use Docker."
-            echo "You need to be added to the 'docker-users' group."
-            echo ""
-            echo -e "${YELLOW}Solution:${NC}"
-            echo "  1. Ask your system administrator to run:"
-            echo -e "     ${CYAN}sudo usermod -aG docker-users $USERNAME${NC}"
-            echo "  2. Log out and log back in for the change to take effect"
-            echo ""
-            echo "Your Dockerfile has been saved to:"
-            echo -e "  ${BLUE}$DOCKERFILE_PATH${NC}"
-            echo ""
-            echo "You can build it later with:"
-            echo -e "  ${CYAN}image-create ${PROJECT_NAME}${NC}"
-            echo ""
-            IMAGE_NAME=""
-            CONTAINER_NAME=""
-        else
-            echo -e "\n${CYAN}Building image... (this takes a few minutes)${NC}"
-            echo "Downloading base image and installing packages..."
-            echo ""
-
-            if docker build -t "$IMAGE_NAME" -f "$DOCKERFILE_PATH" ~/docker-images/; then
-                echo -e "\n${GREEN}✓ Image built successfully: ${IMAGE_NAME}${NC}"
-
-                # Save image metadata
-                mkdir -p ~/ds01-config
-                cat > ~/ds01-config/${IMAGE_NAME}.info << INFOEOF
-Image: $IMAGE_NAME
-Project: $PROJECT_NAME
-Framework: $FRAMEWORK
-Use Case: $USECASE_NAME
-Created: $(date)
-Dockerfile: $DOCKERFILE_PATH
-
-Packages:
-$([ -n "$USECASE_PACKAGES" ] && echo "- Use case: $USECASE_PACKAGES")
-$([ -n "$ADDITIONAL_PACKAGES" ] && echo "- Additional: $ADDITIONAL_PACKAGES")
-
-Commands:
-- Create container: mlc-create-from-image ${PROJECT_NAME} ${IMAGE_NAME}
-- Rebuild image: docker build -t $IMAGE_NAME -f $DOCKERFILE_PATH ~/docker-images/
-- Update packages: Edit $DOCKERFILE_PATH, then rebuild
-INFOEOF
-            
-                CONTAINER_NAME="${PROJECT_NAME}"
-            else
-                echo -e "\n${RED}✗ Image build failed${NC}"
-                echo "Check Dockerfile: $DOCKERFILE_PATH"
-                IMAGE_NAME=""
-                CONTAINER_NAME=""
-            fi
-        fi
-    else
-        echo "Build later with:"
-        echo -e "  ${CYAN}image-create ${PROJECT_NAME}${NC}"
-        CONTAINER_NAME=""
-    fi
-else
-    CONTAINER_NAME=""
-    IMAGE_NAME=""
-fi
-
-# Step 5: Container Creation
-if [ -n "$CONTAINER_NAME" ] && [ -n "$IMAGE_NAME" ]; then
-    echo -e "\n${CYAN}━━━ Step 5: Container Creation ━━━${NC}\n"
-    
-    read -p "Create container from your image? [Y/n]: " CREATE_CONTAINER
-    CREATE_CONTAINER=${CREATE_CONTAINER:-Y}
-    
-    if [[ "$CREATE_CONTAINER" =~ ^[Yy] ]]; then
-        echo -e "\n${BLUE}Creating container with user namespace mapping...${NC}"
-        
-        # Use the mlc-create-from-image script
-        bash /opt/ds01-infra/scripts/docker/mlc-create-from-image.sh "$CONTAINER_NAME" "$IMAGE_NAME" "$PROJECT_DIR"
-        
-        if [ $? -eq 0 ]; then
-            CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
-            
-            # Add user namespace remapping
-            docker stop "$CONTAINER_TAG" 2>/dev/null || true
-            
-            # Update container with user namespace
-            docker update \
-                --label "ds01.user=$USERNAME" \
-                --label "ds01.project=$PROJECT_NAME" \
-                "$CONTAINER_TAG" 2>/dev/null
-            
-            echo -e "\n${GREEN}✓ Container created with user namespaces${NC}"
+        echo "Select a project for VS Code setup:"
+        PROJECTS=($(ls ~/workspace 2>/dev/null))
+        for i in "${!PROJECTS[@]}"; do
+            echo "  $((i+1))) ${PROJECTS[$i]}"
+        done
+        read -p "Choice [1-${#PROJECTS[@]}]: " PROJECT_CHOICE
+        if [ -n "$PROJECT_CHOICE" ] && [ "$PROJECT_CHOICE" -ge 1 ] && [ "$PROJECT_CHOICE" -le "${#PROJECTS[@]}" ]; then
+            PROJECT_NAME="${PROJECTS[$((PROJECT_CHOICE-1))]}"
         fi
     fi
 fi
 
-
-# Step 6: Git Setup
-if [ -d "$PROJECT_DIR" ] && [ ! -d "$PROJECT_DIR/.git" ] && [ "$EXISTING_PROJECT" = false ]; then
-    echo -e "\n${CYAN}━━━ Step 6: Git Version Control ━━━${NC}\n"
-
-    echo -e "${BOLD}About Git on DS01:${NC}"
-    echo "Git helps you track changes, collaborate, and back up your work."
-    echo "We'll set up:"
-    echo "  • .gitignore (prevents committing large data/model files)"
-    echo "  • Git LFS (for large file tracking, if needed)"
-    echo "  • Optional GitHub/GitLab remote repository"
+if [ "$CREATE_PROJECT" = true ]; then
+    echo "Let's create your first project!"
     echo ""
 
-    read -p "Initialize Git for this project? [Y/n]: " INIT_GIT
-    INIT_GIT=${INIT_GIT:-Y}
+    # Call Tier 3 orchestrator: project-init
+    GUIDED_FLAG=""
+    if [ "$GUIDED" = true ]; then
+        GUIDED_FLAG="--guided"
+    fi
 
-    if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
-        cd "$PROJECT_DIR"
+    project-init $GUIDED_FLAG
 
-        # Create comprehensive .gitignore for ML projects
-        echo -e "${BLUE}Creating .gitignore...${NC}"
-
-        cat > .gitignore << 'GITIGNOREEOF'
-# DS01 ML Project .gitignore
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
-venv/
-ENV/
-.venv
-
-# Jupyter Notebooks
-.ipynb_checkpoints/
-*.ipynb
-
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# ML Data & Models
-data/raw/*
-data/processed/*
-!data/raw/.gitkeep
-!data/processed/.gitkeep
-*.h5
-*.hdf5
-*.pkl
-*.pickle
-*.pt
-*.pth
-*.ckpt
-*.safetensors
-models/checkpoints/*
-!models/checkpoints/.gitkeep
-
-# Logs & Outputs
-logs/
-*.log
-outputs/
-runs/
-wandb/
-mlruns/
-.tensorboard/
-
-# Large files
-*.tar
-*.tar.gz
-*.zip
-*.7z
-*.rar
-*.bin
-*.npy
-*.npz
-
-# Temporary files
-tmp/
-temp/
-.cache/
-.DS_Store
-Thumbs.db
-
-# Environment & Config
-.env
-.env.local
-*.env
-config/secrets.yaml
-credentials.json
-
-# Container-specific
-.jupyter.log
-.idle-warning.txt
-.ds01-*
-GITIGNOREEOF
-
-        echo -e "${GREEN}✓${NC} .gitignore created"
-
-        # Initialize Git
-        echo -e "${BLUE}Initializing Git repository...${NC}"
-        git init -q
-        echo -e "${GREEN}✓${NC} Git initialized"
-
-        # Git user config
-        echo ""
-        echo -e "${BOLD}Git Configuration:${NC}"
-        if [ -z "$(git config user.name 2>/dev/null)" ]; then
-            read -p "Your name (for Git commits): " GIT_NAME
-            read -p "Your email: " GIT_EMAIL
-            git config user.name "$GIT_NAME"
-            git config user.email "$GIT_EMAIL"
-            echo -e "${GREEN}✓${NC} Git identity configured"
-        else
-            echo -e "${GREEN}✓${NC} Using existing Git identity: $(git config user.name)"
-        fi
-
-        # Git LFS setup
-        if command -v git-lfs &> /dev/null; then
-            echo ""
-            echo -e "${BLUE}Configuring Git LFS for large files...${NC}"
-            git lfs install 2>/dev/null || true
-            git lfs track "*.pth" 2>/dev/null || true
-            git lfs track "*.pt" 2>/dev/null || true
-            git lfs track "*.h5" 2>/dev/null || true
-            git lfs track "*.ckpt" 2>/dev/null || true
-            git lfs track "*.bin" 2>/dev/null || true
-            echo -e "${GREEN}✓${NC} Git LFS configured (for model checkpoints)"
-        fi
-
-        # Remote repository
-        echo ""
-        read -p "Add a remote repository? (e.g., GitHub) [y/N]: " ADD_REMOTE
-        if [[ "$ADD_REMOTE" =~ ^[Yy] ]]; then
-            echo ""
-            echo "Example: git@github.com:username/repo.git"
-            read -p "Remote URL: " GIT_REMOTE
-            if [ -n "$GIT_REMOTE" ]; then
-                git remote add origin "$GIT_REMOTE"
-                echo -e "${GREEN}✓${NC} Remote added: $GIT_REMOTE"
-                echo -e "${YELLOW}Note:${NC} Push with: ${CYAN}git push -u origin main${NC}"
-            fi
-        fi
-
-        # Initial commit
-        git add .
-        git commit -q -m "Initial project structure
-
-Created by new-user wizard
-$([ -n "$STRUCTURE_TYPE" ] && echo "Structure: $STRUCTURE_TYPE")" 2>/dev/null || true
-        echo -e "${GREEN}✓${NC} Initial commit created"
-
-        echo ""
-        echo -e "${GREEN}✓ Git setup complete${NC}"
-        echo -e "${CYAN}Tip:${NC} Commit often! Use: ${CYAN}git add . && git commit -m \"Your message\"${NC}"
+    # Capture project name from last created project
+    if [ -d ~/workspace ]; then
+        PROJECT_NAME=$(ls -t ~/workspace | head -1)
     fi
 fi
 
-# Step 7: VS Code Setup Guide
-echo -e "\n${CYAN}━━━ Step 6: VS Code Connection ━━━${NC}\n"
+# Step 4: VS Code Setup
+echo ""
+echo -e "${CYAN}━━━ Step 4: VS Code Connection ━━━${NC}\n"
 
-SERVER_IP=$(hostname -I | awk '{print $1}')
-
-cat << VSCODEEOF
-${BOLD}Connect from VS Code:${NC}
-
-${YELLOW}1. Install VS Code Extensions:${NC}
-   - Remote - SSH
-   - Docker (optional but useful)
-   - Python
-   - Jupyter
-
-${YELLOW}2. Configure SSH Connection:${NC}
-   ${CYAN}Command Palette → "Remote-SSH: Open SSH Configuration File"${NC}
-   
-   Add this entry:
-   
-   ${BLUE}Host ds01
-       HostName $SERVER_IP
-       User $USERNAME
-       ForwardAgent yes
-       ServerAliveInterval 60${NC}
-
-${YELLOW}3. Connect:${NC}
-   ${CYAN}Command Palette → "Remote-SSH: Connect to Host" → Select "ds01"${NC}
-
-${YELLOW}4. Open Your Project:${NC}
-   ${CYAN}File → Open Folder → /home/$USERNAME/workspace/$PROJECT_NAME${NC}
-
-${YELLOW}5. Work in Container (Terminal in VS Code):${NC}
-   ${GREEN}mlc-open $CONTAINER_NAME${NC}
-   ${GREEN}cd /workspace/$PROJECT_NAME${NC}
-
-VSCODEEOF
-
-# Summary file
-mkdir -p ~/ds01-config
-cat > ~/ds01-config/setup-summary.txt << SUMMARYEOF
-DS01 Server Setup Summary
-========================
-Date: $(date)
-User: $USERNAME
-User ID: $USER_ID
-
-SSH Configuration:
-- Keys: ~/.ssh/id_ed25519{,.pub}
-- Server: $SERVER_IP
-
-Project Setup:
-- Name: $PROJECT_NAME
-- Directory: $PROJECT_DIR
-
-$([ -n "$IMAGE_NAME" ] && echo "Docker Image:
-- Name: $IMAGE_NAME
-- Dockerfile: $DOCKERFILE_PATH
-- Framework: $FRAMEWORK
-- Packages: $USECASE_PACKAGES $ADDITIONAL_PACKAGES")
-
-$([ -n "$CONTAINER_NAME" ] && echo "Container:
-- Name: $CONTAINER_NAME
-- Full name: ${CONTAINER_NAME}._.$USER_ID
-- Open: mlc-open $CONTAINER_NAME
-- Stop: mlc-stop $CONTAINER_NAME")
-
-Quick Commands:
-==============
-# List containers
-mlc-list
-
-# Container lifecycle
-mlc-open $CONTAINER_NAME
-mlc-stop $CONTAINER_NAME
-mlc-stats
-
-# Add packages to image
-Edit: $DOCKERFILE_PATH
-Rebuild: docker build -t $IMAGE_NAME -f $DOCKERFILE_PATH ~/docker-images/
-Recreate: mlc-remove $CONTAINER_NAME && mlc-create-from-image $CONTAINER_NAME $IMAGE_NAME
-
-VS Code Connection:
-==================
-ssh $USERNAME@$SERVER_IP
-
-Documentation:
-=============
-/home/shared/docs/getting-started.md
-/home/shared/docs/gpu-usage-guide.md
-
-SUMMARYEOF
-
-echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Setup Complete!${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-
-echo -e "Summary saved to: ${BLUE}~/ds01-config/setup-summary.txt${NC}\n"
-
-echo -e "${YELLOW}${BOLD}━━━ Next Steps ━━━${NC}\n"
-
-echo -e "${BOLD}1. Read your project README:${NC}"
-if [ -f "$PROJECT_DIR/README.md" ]; then
-    echo -e "   ${CYAN}cat $PROJECT_DIR/README.md${NC}"
-    echo ""
-    echo "   Your README contains:"
-    echo "   • Complete workflow explanation (containers vs. workspace)"
-    echo "   • All key commands you'll need"
-    echo "   • How to use GPUs, manage data, save models"
-    echo "   • Project structure and best practices"
-else
-    echo "   No README found in project directory"
+# Call Tier 2 module: vscode-setup
+GUIDED_FLAG=""
+PROJECT_FLAG=""
+if [ "$GUIDED" = true ]; then
+    GUIDED_FLAG="--guided"
 fi
-echo ""
-
-echo -e "${BOLD}2. Connect with VS Code:${NC}"
-echo -e "   • SSH to: ${CYAN}$USERNAME@$SERVER_IP${NC}"
-echo -e "   • Open folder: ${CYAN}$PROJECT_DIR${NC}"
-echo ""
-
-if [ -n "$CONTAINER_NAME" ]; then
-    echo -e "${BOLD}3. Start working in your container:${NC}"
-    echo -e "   ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo ""
-    echo "   Inside the container:"
-    echo -e "   ${CYAN}cd /workspace/$PROJECT_NAME${NC}"
-    echo -e "   ${CYAN}jupyter lab${NC}  # Or start coding!"
-    echo ""
-else
-    echo -e "${BOLD}3. Create and start a container:${NC}"
-    echo -e "   ${GREEN}container-create $PROJECT_NAME <image-name>${NC}"
-    echo -e "   ${GREEN}container-run $PROJECT_NAME${NC}"
-    echo ""
+if [ -n "$PROJECT_NAME" ]; then
+    PROJECT_FLAG="--project=$PROJECT_NAME"
 fi
 
-echo -e "${BOLD}Understanding the Workflow:${NC}"
+vscode-setup $GUIDED_FLAG $PROJECT_FLAG
+
+# Final Summary
 echo ""
-echo -e "  ${BOLD}Workspace (Persistent):${NC}"
-echo "    ~/workspace/$PROJECT_NAME  ← All your files live here"
-echo "    This directory PERSISTS across container restarts"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ Onboarding Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "  ${BOLD}Container (Temporary):${NC}"
-echo "    Think of it as a \"computing environment\" with GPU access"
-echo "    Can be stopped/started/rebuilt without losing your work"
+
+echo -e "${BOLD}What You've Set Up:${NC}"
 echo ""
-echo -e "  ${BOLD}Workflow:${NC}"
-echo "    1. Edit code in VS Code (connected via SSH)"
-echo "    2. Run code in container (GPU-enabled environment)"
-echo "    3. Results save to ~/workspace (persistent)"
+echo -e "  ${GREEN}✓${NC} SSH keys for remote access"
+if [ -n "$PROJECT_NAME" ]; then
+    echo -e "  ${GREEN}✓${NC} Project: $PROJECT_NAME"
+fi
+echo -e "  ${GREEN}✓${NC} VS Code connection configured"
 echo ""
+
+echo -e "${YELLOW}${BOLD}━━━ Your Next Steps ━━━${NC}\n"
+
+echo -e "${BOLD}1. Connect VS Code to DS01${NC}"
+echo "   • Open VS Code on your computer"
+echo "   • Command Palette → 'Remote-SSH: Connect to Host'"
+echo "   • Select 'ds01'"
+echo ""
+
+if [ -n "$PROJECT_NAME" ]; then
+    echo -e "${BOLD}2. Open your project${NC}"
+    echo -e "   • In VS Code: File → Open Folder"
+    echo -e "   • Navigate to: ${CYAN}/home/$USERNAME/workspace/$PROJECT_NAME${NC}"
+    echo ""
+
+    echo -e "${BOLD}3. Start working in your container${NC}"
+    echo "   • Open terminal in VS Code (Ctrl+\`)"
+    echo -e "   • Enter container: ${GREEN}container-run $PROJECT_NAME${NC}"
+    echo -e "   • Navigate to project: ${GREEN}cd /workspace/$PROJECT_NAME${NC}"
+    echo ""
+fi
 
 echo -e "${CYAN}💡 Helpful Commands:${NC}"
 echo -e "   ${CYAN}alias-list${NC}           # See all available commands"
 echo -e "   ${CYAN}container-list${NC}       # See your containers"
-echo -e "   ${CYAN}container-stats${NC}      # Check resource usage"
-echo -e "   ${CYAN}image-list${NC}           # See available images"
-echo -e "   ${CYAN}new-project${NC}          # Create another project"
+echo -e "   ${CYAN}project-init${NC}         # Create another project"
+echo -e "   ${CYAN}user-setup${NC}           # Run this wizard again"
 echo ""
-echo -e "${YELLOW}📖 Run this wizard again anytime:${NC} ${CYAN}new-user${NC}"
+
+echo -e "${YELLOW}📖 Documentation:${NC}"
+echo "   /home/shared/docs/getting-started.md"
+echo "   /home/shared/docs/gpu-usage-guide.md"
+if [ -n "$PROJECT_NAME" ] && [ -f ~/workspace/$PROJECT_NAME/README.md ]; then
+    echo -e "   ${CYAN}~/workspace/$PROJECT_NAME/README.md${NC} (your project guide)"
+fi
+echo ""
+
+echo -e "${GREEN}Welcome to DS01! Happy computing! 🚀${NC}"
 echo ""
