@@ -87,17 +87,21 @@ Git Shortcuts:
   gl               git log (last 10)
   gd               git diff
 
-Management Commands (also available):
-  container-list   List all containers
-  container-run    Enter a container
-  container-stop   Stop a container
-  image-list       List Docker images
-  alias-list       See all commands (host + container)
+Need host commands? (container-list, image-list, etc.)
+  → Exit container first (Ctrl+P, Ctrl+Q)
+  → Run management commands on DS01 host
+  → Containers should focus on development, not management
 
 Your custom aliases: /workspace/.ds01_bashrc_custom
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ALIASHELP
 '
+
+# Helpful reminders for common mistakes (host-only commands)
+alias container-list='echo -e "\033[1;33m⚠ container-list is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host\n\nFor security, containers cannot manage other containers."'
+alias container-run='echo -e "\033[1;33m⚠ container-run is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host"'
+alias alias-list='echo -e "\033[1;33m⚠ alias-list is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host\n\nInside container, use: \033[1;32maliases\033[0m"'
+alias image-list='echo -e "\033[1;33m⚠ image-list is a HOST command\033[0m\nExit container (Ctrl+P, Ctrl+Q) and run on DS01 host"'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Custom PS1 Prompt (colorized, handles missing username)
