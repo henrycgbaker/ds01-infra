@@ -22,9 +22,12 @@ echo -e "${CYAN}─────────────────────�
 echo ""
 
 echo -e "${BOLD}Setup & Configuration:${NC}"
-echo -e "  ${GREEN}new-user${NC}             First-time onboarding with detailed explanations (recommended)"
-echo -e "  ${GREEN}new-project${NC}          Streamlined project setup (for experienced users)"
-echo -e "  ${GREEN}ssh-config${NC}           Configure/regenerate SSH keys"
+echo -e "  ${GREEN}project-init-beginner${NC}  Beginner-friendly setup with detailed explanations"
+echo -e "  ${GREEN}new-project${NC}            Streamlined project setup (for experienced users)"
+echo -e "  ${GREEN}project init${NC}           Same as new-project (quick setup)"
+echo ""
+echo -e "${DIM}Legacy aliases:${NC}"
+echo -e "  ${DIM}new-user, user setup, user new  →  project-init-beginner${NC}"
 echo ""
 
 echo -e "${BOLD}Container Management:${NC}"
