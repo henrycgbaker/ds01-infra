@@ -1,6 +1,6 @@
 #!/bin/bash
-# Project Management - Main dispatcher for project operations
-# Usage: project <subcommand> [args...]
+# User Management - Main dispatcher for user operations
+# Usage: user <subcommand> [args...]
 
 set -e
 
@@ -17,20 +17,20 @@ NC='\033[0m'
 show_usage() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "  ${BOLD}Project Management${NC}"
+    echo -e "  ${BOLD}User Onboarding & Setup${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${BOLD}Usage:${NC}"
-    echo "  project <subcommand> [args...]"
+    echo "  user <subcommand> [args...]"
     echo ""
     echo -e "${BOLD}Subcommands:${NC}"
-    echo -e "  ${GREEN}init${NC}        Create a new data science project (interactive setup)"
+    echo -e "  ${GREEN}setup${NC}, ${GREEN}new${NC}     First-time user onboarding wizard"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo -e "  ${CYAN}project init${NC}              # Interactive wizard"
-    echo -e "  ${CYAN}project init${NC} my-thesis   # Skip to project creation"
+    echo -e "  ${CYAN}user setup${NC}           # Run onboarding wizard"
+    echo -e "  ${CYAN}user new${NC}             # Same as above"
     echo ""
-    echo -e "${YELLOW}Tip:${NC} You can also use hyphenated form: ${CYAN}project-init${NC}"
+    echo -e "${YELLOW}Tip:${NC} You can also use: ${CYAN}new-user${NC} or ${CYAN}user-setup${NC}"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
@@ -44,17 +44,17 @@ if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" 
     exit 0
 fi
 
-# Check if subcommand script exists
-SUBCOMMAND_SCRIPT="$SCRIPT_DIR/project-$SUBCOMMAND"
-
-if [ ! -f "$SUBCOMMAND_SCRIPT" ]; then
-    echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"
-    echo ""
-    echo "Available subcommands: init"
-    echo "Run 'project help' for more information"
-    exit 1
-fi
-
-# Execute subcommand, passing all remaining arguments
-shift
-exec "$SUBCOMMAND_SCRIPT" "$@"
+# Map subcommands to user-setup
+case "$SUBCOMMAND" in
+    setup|new)
+        shift
+        exec "$SCRIPT_DIR/user-setup" "$@"
+        ;;
+    *)
+        echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"
+        echo ""
+        echo "Available subcommands: setup, new"
+        echo "Run 'user help' for more information"
+        exit 1
+        ;;
+esac

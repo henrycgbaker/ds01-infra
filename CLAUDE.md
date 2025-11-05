@@ -26,10 +26,13 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
    - Implements systemd cgroup slices per user group
 
 3. **User Interface**: Enhanced CLI commands
+   - **Onboarding wizards**: `user-setup` (educational) and `new-project` (streamlined)
+   - **Container commands**: `container-*` for simplified management
+   - **Image commands**: `image-*` for Docker image management
+   - **Command dispatchers**: Flexible syntax (e.g., `user setup` or `container list`)
    - `mlc-create-wrapper.sh`: Wraps original `mlc-create` with automatic resource limits
    - `ds01-run`: Standalone launcher with resource enforcement
    - `ds01-status`: System-wide resource usage dashboard
-   - User-facing scripts: `container-*` commands for simplified management
 
 ### Core Components
 
@@ -53,6 +56,39 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - GPU state: `/var/lib/ds01/gpu-state.json` (JSON file tracking allocations)
 - Container metadata: `/var/lib/ds01/container-metadata/{container}.json`
 - Allocation logs: `/var/logs/ds01/gpu-allocations.log`
+
+**User Onboarding:**
+- `scripts/user/user-setup` - Educational onboarding wizard (accessible via `new-user`, `user-setup`, `user setup`, `user new`)
+- `scripts/user/new-project` - Streamlined project setup (accessible via `new-project`, `project init`)
+- `scripts/user/user-dispatcher.sh` - Routes `user <subcommand>` to appropriate scripts
+- `scripts/user/project-init` - Wrapper that executes `new-project`
+
+### User Onboarding Workflows
+
+DS01 provides two onboarding experiences with distinct purposes:
+
+**`user-setup` (new-user) - Educational**:
+- Target: First-time users, students new to Docker/containers
+- Style: Comprehensive with detailed explanations of Docker concepts
+- Features: SSH setup, Git/LFS integration, project structure options, Docker image creation, container setup
+- Image naming: `{project}-image` (e.g., `my-thesis-image`)
+- Use cases: 5 options with General ML as default (option 1)
+- README generation: Comprehensive with workflow documentation
+- Command variants: `new-user`, `user-setup`, `user setup`, `user new`
+
+**`new-project` - Streamlined**:
+- Target: Experienced users familiar with the system
+- Style: Concise, minimal explanations
+- Features: Same technical capabilities, efficient prompts
+- Use when: Creating additional projects, user already onboarded
+- Command variants: `new-project`, `project init`
+
+**Key Conventions**:
+- Image naming: Always `{project}-image` (not `{username}-{project}`)
+- Docker group: Always `docker-users` (not `docker`)
+- Use case order: General ML, Computer Vision, NLP, RL, Custom
+- Color output: All scripts use `echo -e` for ANSI color codes
+- Shebang: Must be on line 1 (#!/bin/bash)
 
 ### Important Paths
 
@@ -93,17 +129,21 @@ python3 -c "import yaml; yaml.safe_load(open('config/resource-limits.yaml'))"
 # Initial setup (requires root)
 sudo scripts/system/setup-resource-slices.sh
 
+# Create docker-users group (if not exists)
+sudo groupadd docker-users
+
+# Create command symlinks (makes commands available system-wide)
+sudo scripts/system/update-symlinks.sh
+
+# Add users to docker-users group
+sudo scripts/system/add-user-to-docker.sh <username>
+
 # Deploy config file changes (no root required)
 # Edit config/resource-limits.yaml, changes take effect on next container creation
 
 # Manually update systemd slices after config changes
 sudo scripts/system/setup-resource-slices.sh
 sudo systemctl daemon-reload
-
-# Install wrapper scripts (makes enhanced commands available system-wide)
-sudo ln -sf /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh /usr/local/bin/mlc-create
-sudo ln -sf /opt/ds01-infra/scripts/user/ds01-run /usr/local/bin/ds01-run
-sudo ln -sf /opt/ds01-infra/scripts/user/ds01-status /usr/local/bin/ds01-status
 ```
 
 ### Monitoring
@@ -179,13 +219,18 @@ scripts/
 │   ├── gpu_allocator.py               # MIG-aware GPU allocation manager
 │   └── container-startup.sh           # Container initialization hooks
 ├── user/                # User-facing utilities
+│   ├── user-setup                     # Educational onboarding wizard (new-user)
+│   ├── new-project                    # Streamlined project setup
+│   ├── user-dispatcher.sh             # Routes 'user <subcommand>' to scripts
+│   ├── project-init                   # Wrapper that executes new-project
 │   ├── container-*                    # Simplified container management commands
 │   ├── image-*                        # Image management commands
 │   ├── ds01-run                       # Standalone container launcher
-│   ├── ds01-status                    # Resource usage dashboard
-│   └── student-setup.sh               # Interactive onboarding wizard
+│   └── ds01-status                    # Resource usage dashboard
 ├── system/              # System administration
-│   └── setup-resource-slices.sh       # Creates systemd cgroup slices
+│   ├── setup-resource-slices.sh       # Creates systemd cgroup slices
+│   ├── add-user-to-docker.sh          # Add users to docker-users group
+│   └── update-symlinks.sh             # Update command symlinks in /usr/local/bin
 ├── monitoring/          # Metrics and auditing
 │   ├── gpu-status-dashboard.py        # GPU allocation report generator
 │   ├── check-idle-containers.sh       # Identifies idle containers for cleanup
@@ -290,6 +335,11 @@ When modifying resource allocation logic:
 - **YAML config**: Use `null` for unlimited/disabled, include comments for complex sections
 - **Logging**: Structured logs with pipe-delimited format: `timestamp|event|user|container|gpu_id|reason`
 - **Colors in output**: Use GREEN/YELLOW/RED variables, reset with NC (No Color)
+- **Color rendering**: ALWAYS use `echo -e` for ANSI color codes (not plain `echo`)
+- **Shebang**: Must be on line 1 (#!/bin/bash) with no leading whitespace or comments
+- **Docker group**: Always use `docker-users` group (not `docker`)
+- **Image naming**: Always `{project}-image` format (e.g., `my-thesis-image`)
+- **Command dispatchers**: Support both forms: `command subcommand` and `command-subcommand`
 
 ## Dependencies
 
@@ -299,6 +349,8 @@ When modifying resource allocation logic:
 - yq (YAML parser for bash scripts)
 - systemd (for cgroup slices)
 - nvidia-smi (GPU monitoring)
+- git (for version control in projects)
+- git-lfs (optional, for large file tracking)
 
 **Base system:**
 - `aime-ml-containers` at `/opt/aime-ml-containers`
@@ -307,3 +359,35 @@ When modifying resource allocation logic:
 **Python packages:**
 - PyYAML (for config parsing)
 - Standard library only (subprocess, json, datetime, pathlib)
+
+**Groups:**
+- `docker-users` group must exist for Docker permissions
+- Users must be added to `docker-users` group (not `docker`)
+
+## Recent Changes (November 2025)
+
+**User Onboarding Overhaul:**
+- New dual onboarding workflows: `user-setup` (educational) and `new-project` (streamlined)
+- Command dispatcher pattern: `user setup`, `user new` route to appropriate scripts
+- Flexible command syntax: support both `command subcommand` and `command-subcommand`
+- Standardized Docker group: all scripts use `docker-users` (not `docker`)
+- Consistent image naming: `{project}-image` format throughout
+- General ML as default use case (option 1 in wizards)
+- Fixed color code rendering: all scripts now use `echo -e` for ANSI codes
+
+**New Scripts:**
+- `scripts/system/add-user-to-docker.sh` - Helper for adding users to docker-users group
+- `scripts/system/update-symlinks.sh` - Automates symlink management in /usr/local/bin
+- `scripts/user/user-dispatcher.sh` - Routes user subcommands to appropriate scripts
+- `scripts/user/new-project` - Streamlined project setup (renamed from new-project-setup)
+- `scripts/user/user-setup` - Educational onboarding (renamed from new-user-setup.sh)
+
+**Deleted Scripts:**
+- `scripts/user/new-user-setup.sh` - Replaced by `user-setup`
+- `scripts/user/new-project-setup` - Replaced by `new-project`
+
+**Bug Fixes:**
+- Fixed shebang placement (must be line 1, no preceding comments)
+- Fixed all heredocs to use proper color code format
+- Fixed Docker permission error handling in onboarding scripts
+- Fixed success messages appearing on failed builds

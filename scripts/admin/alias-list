@@ -22,9 +22,8 @@ echo -e "${CYAN}─────────────────────�
 echo ""
 
 echo -e "${BOLD}Setup & Configuration:${NC}"
-echo -e "  ${GREEN}new-user-setup${NC}       First-time user onboarding wizard"
-echo -e "  ${GREEN}new-project-setup${NC}    Create new project (quick workflow)"
-echo -e "  ${GREEN}git-ml-repo-setup${NC}    Initialize Git for ML project"
+echo -e "  ${GREEN}new-user${NC}             First-time onboarding with detailed explanations (recommended)"
+echo -e "  ${GREEN}new-project${NC}          Streamlined project setup (for experienced users)"
 echo -e "  ${GREEN}ssh-config${NC}           Configure/regenerate SSH keys"
 echo ""
 
@@ -48,7 +47,7 @@ echo -e "  ${GREEN}image delete${NC}         Remove unused images"
 echo ""
 
 echo -e "${BOLD}Project Management:${NC}"
-echo -e "  ${GREEN}project init${NC}         Create new project with GitHub"
+echo -e "  ${GREEN}project init${NC}         Create new data science project (same as new-project)"
 echo ""
 
 # Admin Commands
@@ -103,8 +102,8 @@ echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BOLD}Tips:${NC}"
-echo "  • All container/image commands work in both forms:"
-echo "    ${CYAN}container list${NC} or ${CYAN}container-list${NC}"
-echo "  • Run any command with ${CYAN}--help${NC} for detailed usage"
-echo "  • Admin commands require appropriate permissions"
+echo -e "  • All container/image commands work in both forms:"
+echo -e "    ${CYAN}container list${NC} or ${CYAN}container-list${NC}"
+echo -e "  • Run any command with ${CYAN}--help${NC} for detailed usage"
+echo -e "  • Admin commands require appropriate permissions"
 echo ""
