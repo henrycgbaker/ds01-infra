@@ -252,19 +252,33 @@ echo -e "${CYAN}${BOLD}    Entering Container${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 echo -e "${BOLD}Quick Reference:${NC}"
-echo -e "  • Exit without stopping: ${GREEN}Ctrl+P, Ctrl+Q${NC}"
-echo -e "  • Exit and stop:         ${GREEN}exit${NC} or ${GREEN}Ctrl+D${NC}"
+echo -e "  • Exit without stopping: ${GREEN}Ctrl+P, Ctrl+Q${NC} ${DIM}(or type '${NC}${YELLOW}detach${NC}${DIM}' for reminder)${NC}"
+echo -e "  • Exit and stop:         ${GREEN}exit${NC} or ${GREEN}Ctrl+D${NC} ${DIM}(or type '${NC}${YELLOW}exit-stop${NC}${DIM}')${NC}"
+echo -e "  • Help anytime:          ${YELLOW}exit-help${NC}"
 echo -e "  • Your workspace:        ${BLUE}/workspace${NC}"
 echo ""
 echo -e "${DIM}Connecting...${NC}"
 echo ""
 
+# Check if init script is available in container
+INIT_AVAILABLE=$(docker exec "$CONTAINER_TAG" test -f /usr/local/bin/ds01-init && echo "yes" || echo "no")
+
 # Execute command or bash
 if [ -n "$COMMAND" ]; then
-    docker exec -it "$CONTAINER_TAG" bash -c "$COMMAND"
+    # Run specific command
+    if [ "$INIT_AVAILABLE" = "yes" ]; then
+        docker exec -it "$CONTAINER_TAG" /usr/local/bin/ds01-init -c "$COMMAND"
+    else
+        docker exec -it "$CONTAINER_TAG" bash -c "$COMMAND"
+    fi
     EXIT_CODE=$?
 else
-    docker exec -it "$CONTAINER_TAG" /bin/bash
+    # Interactive bash session
+    if [ "$INIT_AVAILABLE" = "yes" ]; then
+        docker exec -it "$CONTAINER_TAG" /usr/local/bin/ds01-init
+    else
+        docker exec -it "$CONTAINER_TAG" /bin/bash
+    fi
     EXIT_CODE=$?
 fi
 

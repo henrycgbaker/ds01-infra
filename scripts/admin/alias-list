@@ -50,6 +50,43 @@ echo -e "${BOLD}Project Management:${NC}"
 echo -e "  ${GREEN}project init${NC}         Create new data science project (same as new-project)"
 echo ""
 
+# Container Internal Aliases
+echo -e "${BOLD}INSIDE CONTAINER ALIASES${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+echo ""
+echo -e "${YELLOW}These aliases are available inside containers:${NC}"
+echo ""
+
+echo -e "${BOLD}Exit & Navigation:${NC}"
+echo -e "  ${GREEN}detach${NC}               Show Ctrl+P,Ctrl+Q reminder (exit without stopping)"
+echo -e "  ${GREEN}exit-stop${NC}            Show exit/Ctrl+D reminder (exit and stop)"
+echo -e "  ${GREEN}exit-help${NC}            Show all exit options"
+echo -e "  ${GREEN}ws${NC} / ${GREEN}cdw${NC}             Go to /workspace"
+echo -e "  ${GREEN}ll${NC}                   List files (ls -lah)"
+echo ""
+
+echo -e "${BOLD}GPU & Development:${NC}"
+echo -e "  ${GREEN}gpu${NC}                  Check GPU status (nvidia-smi)"
+echo -e "  ${GREEN}gpu-watch${NC}            Watch GPU status (live)"
+echo -e "  ${GREEN}jlab${NC}                 Start Jupyter Lab"
+echo -e "  ${GREEN}jnb${NC}                  Start Jupyter Notebook"
+echo -e "  ${GREEN}tb${NC}                   Start TensorBoard"
+echo ""
+
+echo -e "${BOLD}Git Shortcuts:${NC}"
+echo -e "  ${GREEN}gs${NC}                   git status"
+echo -e "  ${GREEN}ga${NC}                   git add"
+echo -e "  ${GREEN}gc${NC}                   git commit"
+echo -e "  ${GREEN}gp${NC}                   git push"
+echo -e "  ${GREEN}gl${NC}                   git log (last 10)"
+echo -e "  ${GREEN}gd${NC}                   git diff"
+echo ""
+
+echo -e "${BOLD}Customization:${NC}"
+echo -e "  ${GREEN}alias${NC}                List all active aliases"
+echo -e "  Edit: ${CYAN}/workspace/.ds01_bashrc_custom${NC} for personal aliases"
+echo ""
+
 # Admin Commands
 echo -e "${BOLD}ADMIN COMMANDS${NC}"
 echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
