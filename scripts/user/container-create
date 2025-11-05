@@ -329,6 +329,18 @@ if [ -n "$DATA_DIR" ]; then
     DOCKER_CMD+=(-v "$DATA_DIR:/data")
 fi
 
+# Mount init script for container setup
+INIT_SCRIPT="$INFRA_ROOT/docker/container-init.sh"
+if [ -f "$INIT_SCRIPT" ]; then
+    DOCKER_CMD+=(-v "$INIT_SCRIPT:/usr/local/bin/ds01-init:ro")
+fi
+
+# Mount central alias configuration (single source of truth for all users)
+ALIAS_CONFIG="$INFRA_ROOT/../config/container-aliases.sh"
+if [ -f "$ALIAS_CONFIG" ]; then
+    DOCKER_CMD+=(-v "$ALIAS_CONFIG:/etc/ds01/container-aliases.sh:ro")
+fi
+
 # Add labels
 DOCKER_CMD+=(--label "ds01.user=$USERNAME")
 DOCKER_CMD+=(--label "ds01.container=$CONTAINER_NAME")
