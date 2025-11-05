@@ -721,11 +721,11 @@ DOCKERFILEEOF
             echo -e "${RED}✗ Docker permission error${NC}"
             echo ""
             echo "You don't have permission to use Docker."
-            echo "You need to be added to the 'docker-users' group."
+            echo "You need to be added to the 'docker' group."
             echo ""
             echo -e "${YELLOW}Solution:${NC}"
             echo "  1. Ask your system administrator to run:"
-            echo -e "     ${CYAN}sudo usermod -aG docker-users $USERNAME${NC}"
+            echo -e "     ${CYAN}sudo usermod -aG docker $USERNAME${NC}"
             echo "  2. Log out and log back in for the change to take effect"
             echo ""
             echo "Your Dockerfile has been saved to:"
@@ -775,47 +775,7 @@ INFOEOF
     fi
 fi
 
-# Step 6: Container Creation and Running
-if [ -n "$IMAGE_NAME" ] && [ "$INTERACTIVE" = true ]; then
-    echo ""
-    echo -e "${BOLD}Step 6: Container Setup${NC}"
-    echo ""
-
-    read -p "Create and start a container now? [Y/n]: " CREATE_CONTAINER
-    CREATE_CONTAINER=${CREATE_CONTAINER:-Y}
-
-    if [[ "$CREATE_CONTAINER" =~ ^[Yy] ]]; then
-        echo ""
-        echo -e "${BLUE}Creating container...${NC}"
-
-        # Create container using container-create command
-        if command -v container-create &> /dev/null; then
-            container-create "$PROJECT_NAME" "$IMAGE_NAME"
-
-            if [ $? -eq 0 ]; then
-                echo ""
-                read -p "Start container now? [Y/n]: " START_NOW
-                START_NOW=${START_NOW:-Y}
-
-                if [[ "$START_NOW" =~ ^[Yy] ]]; then
-                    echo ""
-                    echo -e "${GREEN}Starting container...${NC}"
-                    echo -e "${YELLOW}You'll be inside the container. Type 'exit' to return.${NC}"
-                    echo ""
-                    sleep 2
-
-                    # Start container
-                    container-run "$PROJECT_NAME" || true
-                fi
-            fi
-        else
-            echo -e "${YELLOW}Container creation command not found${NC}"
-            echo "Create manually with: container-create $PROJECT_NAME $IMAGE_NAME"
-        fi
-    fi
-fi
-
-# Summary
+# Show Summary BEFORE entering container
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}${BOLD}✓ Setup Complete!${NC}"
@@ -829,69 +789,116 @@ if [ -n "$IMAGE_NAME" ]; then
 fi
 echo ""
 
-echo -e "${YELLOW}${BOLD}━━━ Next Steps ━━━${NC}\n"
-
-echo -e "${BOLD}1. Read your project README:${NC}"
-if [ -f "$PROJECT_DIR/README.md" ]; then
-    echo -e "   ${CYAN}cat $PROJECT_DIR/README.md${NC}"
-    echo ""
-    echo "   Your README contains:"
-    echo "   • Complete workflow explanation (containers vs. workspace)"
-    echo "   • All key commands you'll need"
-    echo "   • How to use GPUs, manage data, save models"
-    if [ "$STRUCTURE_TYPE" = "data-science" ]; then
-        echo "   • Project structure and best practices"
-    fi
-else
-    echo "   No README found in project directory"
-fi
+echo -e "${YELLOW}${BOLD}━━━ Understanding Containers (for beginners) ━━━${NC}\n"
+echo -e "${BOLD}What is a Container?${NC}"
+echo "  Think of a container like a 'computing environment' that:"
+echo "  • Has all your tools pre-installed (Python, PyTorch, etc.)"
+echo "  • Can access GPUs for machine learning"
+echo "  • Can be started, stopped, and restarted anytime"
+echo "  • Is separate from your files (which live in workspace)"
+echo ""
+echo -e "${BOLD}Container vs. Workspace:${NC}"
+echo -e "  ${CYAN}Workspace${NC} (~/workspace/$PROJECT_NAME)"
+echo "    → Your PERMANENT storage - all files saved here persist"
+echo "    → Edit code here (in VS Code, PyCharm, or directly)"
+echo "    → This is like your 'hard drive'"
+echo ""
+echo -e "  ${CYAN}Container${NC} (your-project)"
+echo "    → Your COMPUTING environment with GPU access"
+echo "    → Can be stopped/restarted without losing workspace files"
+echo "    → This is like your 'computer' that you can turn on/off"
+echo ""
+echo -e "${BOLD}The Workflow:${NC}"
+echo "  1. Write/edit code in your workspace (via VS Code SSH or directly)"
+echo "  2. Run code inside container (which has GPUs and software)"
+echo "  3. Results save back to workspace (persistent storage)"
+echo ""
+echo -e "${BOLD}Key Concepts:${NC}"
+echo "  • ${GREEN}Enter container${NC}:  Work with GPUs, run experiments"
+echo "  • ${GREEN}Exit container${NC}:   Your files stay in workspace, container keeps running"
+echo "  • ${GREEN}Stop container${NC}:   Turn off container (saves GPU resources)"
+echo "  • ${GREEN}Restart container${NC}: Pick up where you left off"
 echo ""
 
+echo -e "${YELLOW}${BOLD}━━━ Your Next Steps ━━━${NC}\n"
+
 if [ -z "$IMAGE_NAME" ]; then
-    echo -e "${BOLD}2. Create Docker image:${NC}"
+    echo -e "${BOLD}1. Create Docker image:${NC}"
     echo -e "   ${GREEN}image-create $PROJECT_NAME${NC}"
     echo ""
-    echo -e "${BOLD}3. Create and start container:${NC}"
+    echo -e "${BOLD}2. Create and start container:${NC}"
     echo -e "   ${GREEN}container-create $PROJECT_NAME <image-name>${NC}"
     echo -e "   ${GREEN}container-run $PROJECT_NAME${NC}"
     echo ""
-elif [ "$CREATE_CONTAINER" != "Y" ] && [ "$INTERACTIVE" = true ]; then
-    echo -e "${BOLD}2. Create and start container:${NC}"
-    echo -e "   ${GREEN}container-create $PROJECT_NAME $IMAGE_NAME${NC}"
-    echo -e "   ${GREEN}container-run $PROJECT_NAME${NC}"
-    echo ""
-    echo "   Inside the container:"
-    echo -e "   ${CYAN}cd /workspace/$PROJECT_NAME${NC}"
-    echo -e "   ${CYAN}jupyter lab${NC}  # Or start coding!"
-    echo ""
 else
-    echo -e "${BOLD}2. Your container is ready!${NC}"
-    echo "   You should now be inside your container."
-    echo -e "   Navigate to: ${CYAN}cd /workspace/$PROJECT_NAME${NC}"
+    echo -e "${BOLD}1. Create a container${NC} (if you haven't already)"
+    echo -e "${BOLD}2. Enter the container${NC} to start working"
     echo ""
 fi
 
-echo -e "${BOLD}Understanding the Workflow:${NC}"
-echo ""
-echo -e "  ${BOLD}Workspace (Persistent):${NC}"
-echo "    ~/workspace/$PROJECT_NAME  ← All your files live here"
-echo "    This directory PERSISTS across container restarts"
-echo ""
-echo -e "  ${BOLD}Container (Temporary):${NC}"
-echo "    Think of it as a \"computing environment\" with GPU access"
-echo "    Can be stopped/started/rebuilt without losing your work"
-echo ""
-echo -e "  ${BOLD}Workflow:${NC}"
-echo "    1. Edit code in VS Code (connected via SSH)"
-echo "    2. Run code in container (GPU-enabled environment)"
-echo "    3. Results save to ~/workspace (persistent)"
+echo -e "${BOLD}Helpful Commands:${NC}"
+echo -e "  ${CYAN}container-list${NC}       See your containers"
+echo -e "  ${CYAN}container-run <name>${NC}  Enter a container"
+echo -e "  ${CYAN}container-stop <name>${NC} Stop a container"
+echo -e "  ${CYAN}container-stats${NC}      Check GPU/CPU usage"
+echo -e "  ${CYAN}alias-list${NC}           See all available commands"
 echo ""
 
-echo -e "${CYAN}💡 Helpful Commands:${NC}"
-echo -e "   ${CYAN}alias-list${NC}           # See all available commands"
-echo -e "   ${CYAN}container-list${NC}       # See your containers"
-echo -e "   ${CYAN}container-stats${NC}      # Check resource usage"
-echo -e "   ${CYAN}new-project${NC}          # Create another project"
+echo -e "${BOLD}Inside the Container:${NC}"
+echo "  • Your workspace: ${CYAN}/workspace${NC}"
+echo "  • Start Jupyter: ${CYAN}jlab${NC}"
+echo "  • Check GPU: ${CYAN}gpu${NC}"
+echo "  • Exit without stopping: ${CYAN}Ctrl+P, Ctrl+Q${NC} (or type ${CYAN}detach${NC})"
+echo "  • Exit and stop: ${CYAN}exit${NC}"
 echo ""
-echo -e "${YELLOW}📖 Need help?${NC} Read the README with: ${CYAN}cat $PROJECT_DIR/README.md${NC}"
-echo ""
+
+if [ -f "$PROJECT_DIR/README.md" ]; then
+    echo -e "${YELLOW}📖 Read your project README:${NC} ${CYAN}cat $PROJECT_DIR/README.md${NC}"
+    echo ""
+fi
+
+# Step 6: Container Creation and Running (AFTER showing summary)
+if [ -n "$IMAGE_NAME" ] && [ "$INTERACTIVE" = true ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    read -p "Would you like to create and enter a container now? [Y/n]: " CREATE_CONTAINER
+    CREATE_CONTAINER=${CREATE_CONTAINER:-Y}
+
+    if [[ "$CREATE_CONTAINER" =~ ^[Yy] ]]; then
+        echo ""
+        echo -e "${BLUE}Creating container...${NC}"
+        echo ""
+
+        # Create container using container-create command
+        if command -v container-create &> /dev/null; then
+            container-create "$PROJECT_NAME" "$IMAGE_NAME"
+
+            if [ $? -eq 0 ]; then
+                echo ""
+                read -p "Enter container now? (you can exit anytime with Ctrl+P,Ctrl+Q) [Y/n]: " START_NOW
+                START_NOW=${START_NOW:-Y}
+
+                if [[ "$START_NOW" =~ ^[Yy] ]]; then
+                    echo ""
+                    echo -e "${GREEN}Entering container...${NC}"
+                    echo -e "${DIM}Remember: Ctrl+P, Ctrl+Q to exit without stopping${NC}"
+                    echo ""
+                    sleep 2
+
+                    # Start container
+                    container-run "$PROJECT_NAME" || true
+
+                    # Show reminder after exiting
+                    echo ""
+                    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                    echo -e "${BOLD}Reminder: Your project is in ${CYAN}$PROJECT_DIR${NC}"
+                    echo -e "${BOLD}Re-enter container: ${GREEN}container-run $PROJECT_NAME${NC}"
+                    echo ""
+                fi
+            fi
+        else
+            echo -e "${YELLOW}Container creation command not found${NC}"
+            echo "Create manually with: container-create $PROJECT_NAME $IMAGE_NAME"
+        fi
+    fi
+fi

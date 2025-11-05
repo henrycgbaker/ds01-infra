@@ -182,13 +182,81 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 
 # Check if container already exists
 if docker ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_TAG}$"; then
-    echo -e "${RED}✗ Container '$CONTAINER_NAME' already exists${NC}\n"
-    echo -e "${BOLD}Options:${NC}"
-    echo -e "  • View status: ${GREEN}container-list${NC}"
-    echo -e "  • Start it:    ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "  • Remove it:   ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
+    # Get container status
+    EXISTING_STATUS=$(docker ps -a --format "{{.Status}}" --filter "name=^${CONTAINER_TAG}$" 2>/dev/null)
+    EXISTING_IMAGE=$(docker inspect --format "{{.Config.Image}}" "$CONTAINER_TAG" 2>/dev/null)
+
+    if [[ "$EXISTING_STATUS" == Up* ]]; then
+        STATUS_MSG="${GREEN}running${NC}"
+    else
+        STATUS_MSG="${DIM}stopped${NC}"
+    fi
+
+    echo -e "${YELLOW}⚠ Container '$CONTAINER_NAME' already exists${NC}"
     echo ""
-    exit 1
+    echo -e "${BOLD}Existing Container:${NC}"
+    echo -e "  Name:   ${CYAN}$CONTAINER_NAME${NC}"
+    echo -e "  Status: $STATUS_MSG"
+    echo -e "  Image:  ${DIM}$EXISTING_IMAGE${NC}"
+    echo ""
+    echo -e "${BOLD}What would you like to do?${NC}"
+    echo -e "  ${GREEN}1)${NC} Use existing container (recommended)"
+    echo -e "  ${GREEN}2)${NC} Remove and recreate it"
+    echo -e "  ${GREEN}3)${NC} Create with different name"
+    echo -e "  ${GREEN}4)${NC} Cancel"
+    echo ""
+    read -p "Choice [1-4, default: 1]: " RECOVERY_CHOICE
+    RECOVERY_CHOICE=${RECOVERY_CHOICE:-1}
+
+    case $RECOVERY_CHOICE in
+        1)
+            echo ""
+            echo -e "${GREEN}✓${NC} Using existing container"
+            echo ""
+            if [[ "$EXISTING_STATUS" == Up* ]]; then
+                echo -e "${BOLD}Container is running. To enter it:${NC}"
+                echo -e "  ${GREEN}container-run $CONTAINER_NAME${NC}"
+            else
+                echo -e "${BOLD}Starting container...${NC}"
+                container-run "$CONTAINER_NAME"
+            fi
+            exit 0
+            ;;
+        2)
+            echo ""
+            read -p "Are you sure? This will delete the existing container [y/N]: " CONFIRM
+            if [[ "$CONFIRM" =~ ^[Yy] ]]; then
+                echo -e "${BLUE}Removing existing container...${NC}"
+                docker stop "$CONTAINER_TAG" 2>/dev/null || true
+                docker rm "$CONTAINER_TAG" 2>/dev/null
+                echo -e "${GREEN}✓${NC} Container removed"
+                echo ""
+                echo -e "${BLUE}Creating new container...${NC}"
+                # Continue with creation
+            else
+                echo -e "${YELLOW}Cancelled${NC}"
+                exit 0
+            fi
+            ;;
+        3)
+            echo ""
+            read -p "Enter new container name: " NEW_NAME
+            if [ -z "$NEW_NAME" ]; then
+                echo -e "${RED}✗ Name cannot be empty${NC}"
+                exit 1
+            fi
+            CONTAINER_NAME="$NEW_NAME"
+            CONTAINER_NAME=$(echo "$CONTAINER_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]-_')
+            CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
+            echo -e "${GREEN}✓${NC} Using name: ${CYAN}$CONTAINER_NAME${NC}"
+            echo ""
+            # Continue with creation using new name
+            ;;
+        4|*)
+            echo -e "${YELLOW}Cancelled${NC}"
+            exit 0
+            ;;
+    esac
 fi
 
 # Auto-detect image if not specified
