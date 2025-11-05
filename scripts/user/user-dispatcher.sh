@@ -24,13 +24,13 @@ show_usage() {
     echo "  user <subcommand> [args...]"
     echo ""
     echo -e "${BOLD}Subcommands:${NC}"
-    echo -e "  ${GREEN}setup${NC}, ${GREEN}new${NC}     First-time user onboarding wizard"
+    echo -e "  ${GREEN}setup${NC}, ${GREEN}new${NC}     Beginner-friendly project setup wizard"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo -e "  ${CYAN}user setup${NC}           # Run onboarding wizard"
+    echo -e "  ${CYAN}user setup${NC}           # Run beginner wizard"
     echo -e "  ${CYAN}user new${NC}             # Same as above"
     echo ""
-    echo -e "${YELLOW}Tip:${NC} You can also use: ${CYAN}new-user${NC} or ${CYAN}user-setup${NC}"
+    echo -e "${YELLOW}Tip:${NC} You can also use: ${CYAN}project-init-beginner${NC}"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
@@ -44,11 +44,11 @@ if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" 
     exit 0
 fi
 
-# Map subcommands to user-setup
+# Map subcommands to project-init-beginner
 case "$SUBCOMMAND" in
     setup|new)
         shift
-        exec "$SCRIPT_DIR/user-setup" "$@"
+        exec "$SCRIPT_DIR/project-init-beginner" "$@"
         ;;
     *)
         echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"

@@ -56,6 +56,53 @@ alias gl='git log --oneline -10'
 alias gd='git diff'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Help Commands
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+# Show available commands inside container
+alias aliases='cat << "ALIASHELP"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Available Commands Inside Container
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Exit & Navigation:
+  detach           Show Ctrl+P,Ctrl+Q reminder
+  exit-stop        Show exit/Ctrl+D reminder
+  exit-help        Show all exit options
+  ws / cdw         Go to /workspace
+  ll               List files (ls -lah)
+
+GPU & Development:
+  gpu              Check GPU status
+  gpu-watch        Watch GPU status (live)
+  jlab             Start Jupyter Lab
+  jnb              Start Jupyter Notebook
+  tb               Start TensorBoard
+
+Git Shortcuts:
+  gs               git status
+  ga               git add
+  gc               git commit
+  gp               git push
+  gl               git log (last 10)
+  gd               git diff
+
+Need host commands? (container-list, image-list, etc.)
+  → Exit container first (Ctrl+P, Ctrl+Q)
+  → Run commands on DS01 host
+  → Host commands manage containers FROM OUTSIDE
+
+Your custom aliases: /workspace/.ds01_bashrc_custom
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ALIASHELP
+'
+
+# Helpful reminder for common mistakes
+alias container-list='echo -e "\033[1;33m⚠ container-list is a HOST command\033[0m\nExit this container first (Ctrl+P, Ctrl+Q), then run it on DS01 host"'
+alias container-run='echo -e "\033[1;33m⚠ container-run is a HOST command\033[0m\nExit this container first (Ctrl+P, Ctrl+Q), then run it on DS01 host"'
+alias alias-list='echo -e "\033[1;33m⚠ alias-list is a HOST command\033[0m\nExit this container first (Ctrl+P, Ctrl+Q), then run it on DS01 host\n\nInside container, use: \033[1;32maliases\033[0m (to see container commands)"'
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Custom PS1 Prompt (colorized, handles missing username)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

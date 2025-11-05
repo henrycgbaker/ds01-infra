@@ -6,12 +6,15 @@ set -e
 
 echo "Creating/updating DS01 command symlinks..."
 
-# User setup commands
-ln -sf /opt/ds01-infra/scripts/user/user-setup /usr/local/bin/new-user
-echo "✓ new-user → user-setup"
+# User setup commands (now pointing to project-init-beginner)
+ln -sf /opt/ds01-infra/scripts/user/project-init-beginner /usr/local/bin/project-init-beginner
+echo "✓ project-init-beginner → scripts/user/project-init-beginner"
 
-ln -sf /opt/ds01-infra/scripts/user/user-setup /usr/local/bin/user-setup
-echo "✓ user-setup → user-setup"
+ln -sf /opt/ds01-infra/scripts/user/project-init-beginner /usr/local/bin/new-user
+echo "✓ new-user → project-init-beginner (legacy)"
+
+ln -sf /opt/ds01-infra/scripts/user/project-init-beginner /usr/local/bin/user-setup
+echo "✓ user-setup → project-init-beginner (legacy)"
 
 ln -sf /opt/ds01-infra/scripts/user/user-dispatcher.sh /usr/local/bin/user
 echo "✓ user → user-dispatcher.sh"
@@ -31,13 +34,14 @@ fi
 echo ""
 echo "All symlinks updated successfully!"
 echo ""
-echo "User setup commands:"
-echo "  - new-user          First-time user onboarding"
-echo "  - user-setup        Same as above"
-echo "  - user setup        Same as above"
-echo "  - user new          Same as above"
+echo "Beginner setup commands:"
+echo "  - project-init-beginner    Beginner-friendly setup (primary)"
+echo "  - new-user                 Alias to above (legacy)"
+echo "  - user-setup               Alias to above (legacy)"
+echo "  - user setup               Alias to above (via dispatcher)"
+echo "  - user new                 Alias to above (via dispatcher)"
 echo ""
-echo "Project setup commands:"
-echo "  - new-project       Create data science project (interactive)"
-echo "  - project init      Alias to new-project"
+echo "Quick setup commands:"
+echo "  - new-project              Streamlined setup (experienced users)"
+echo "  - project init             Alias to new-project"
 echo ""
