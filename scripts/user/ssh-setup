@@ -1,0 +1,231 @@
+#!/bin/bash
+# DS01 SSH Setup - Configure SSH keys for remote access
+# Tier 2 Command - Can be used standalone or called by orchestrators
+
+set -e
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 SSH Setup${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  ssh-setup [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided       Show detailed explanations for beginners"
+    echo "  --force        Regenerate keys even if they exist"
+    echo "  -h, --help     Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Generates SSH keys for secure remote access to the DS01 server."
+    echo "  These keys enable VS Code Remote-SSH and other SSH clients."
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Generate SSH keys${NC}"
+    echo "  ssh-setup"
+    echo ""
+    echo -e "  ${DIM}# With guided explanations${NC}"
+    echo "  ssh-setup --guided"
+    echo ""
+    echo -e "  ${DIM}# Regenerate existing keys${NC}"
+    echo "  ssh-setup --force"
+    echo ""
+}
+
+# Parse arguments
+GUIDED=false
+FORCE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Show guided introduction
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Setting Up SSH Keys${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What are SSH Keys?${NC}"
+    echo ""
+    echo "  SSH keys are like a secure password that enables:"
+    echo "  • Logging into the server without typing your password"
+    echo "  • Connecting VS Code to the server remotely"
+    echo "  • Secure file transfers (scp, rsync)"
+    echo ""
+    echo -e "${BOLD}How They Work:${NC}"
+    echo ""
+    echo "  • ${CYAN}Private key${NC} - Stays on your local computer (never share!)"
+    echo "  • ${CYAN}Public key${NC} - Lives on the server (safe to share)"
+    echo "  • They're mathematically linked - one encrypts, the other decrypts"
+    echo ""
+    echo -e "${BOLD}Why You Need This:${NC}"
+    echo ""
+    echo "  To use VS Code Remote-SSH, you need SSH keys set up."
+    echo "  This wizard will create them for you automatically."
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+fi
+
+# Check if keys already exist
+SSH_DIR="$HOME/.ssh"
+PRIVATE_KEY="$SSH_DIR/id_ed25519"
+PUBLIC_KEY="$SSH_DIR/id_ed25519.pub"
+AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
+
+mkdir -p "$SSH_DIR"
+chmod 700 "$SSH_DIR"
+
+if [ -f "$PRIVATE_KEY" ] && [ "$FORCE" = false ]; then
+    echo -e "${GREEN}✓${NC} SSH keys already exist"
+    echo ""
+    echo -e "${BOLD}Your public key:${NC}"
+    echo -e "${BLUE}$(cat $PUBLIC_KEY)${NC}"
+    echo ""
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "${YELLOW}💡 Tip:${NC} Your keys are already configured!"
+        echo ""
+        echo "  If you want to regenerate them, run:"
+        echo -e "    ${GREEN}ssh-setup --force${NC}"
+        echo ""
+        echo "  Otherwise, you're all set for VS Code Remote-SSH."
+        echo ""
+    fi
+
+    exit 0
+fi
+
+if [ -f "$PRIVATE_KEY" ] && [ "$FORCE" = true ]; then
+    echo -e "${YELLOW}⚠${NC} Regenerating SSH keys (--force mode)"
+    echo ""
+    read -p "This will replace your existing keys. Continue? [y/N]: " CONFIRM </dev/tty
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+    echo ""
+fi
+
+# Generate SSH keys
+echo -e "${BLUE}Generating SSH keys...${NC}"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${DIM}Using ed25519 algorithm (modern, secure, fast)${NC}"
+    echo ""
+fi
+
+ssh-keygen -t ed25519 -C "${USERNAME}@ds01-server" -f "$PRIVATE_KEY" -N "" -q
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${GREEN}✓${NC} Keys generated"
+    echo ""
+    echo -e "${BOLD}What Was Created:${NC}"
+    echo ""
+    echo -e "  ${CYAN}$PRIVATE_KEY${NC}"
+    echo "    → Your private key (never share this!)"
+    echo ""
+    echo -e "  ${CYAN}$PUBLIC_KEY${NC}"
+    echo "    → Your public key (safe to share)"
+    echo ""
+else
+    echo -e "${GREEN}✓${NC} Keys generated"
+fi
+
+# Add public key to authorized_keys for local access
+if [ ! -f "$AUTHORIZED_KEYS" ]; then
+    touch "$AUTHORIZED_KEYS"
+    chmod 600 "$AUTHORIZED_KEYS"
+fi
+
+# Only add if not already present
+if ! grep -q "$(cat $PUBLIC_KEY)" "$AUTHORIZED_KEYS" 2>/dev/null; then
+    cat "$PUBLIC_KEY" >> "$AUTHORIZED_KEYS"
+    echo -e "${GREEN}✓${NC} Added to authorized_keys"
+else
+    echo -e "${GREEN}✓${NC} Already in authorized_keys"
+fi
+
+chmod 600 "$AUTHORIZED_KEYS"
+
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ SSH Keys Configured!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+echo -e "${BOLD}Your public key:${NC}"
+echo -e "${BLUE}$(cat $PUBLIC_KEY)${NC}"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${BOLD}Next Steps:${NC}"
+    echo ""
+    echo "  ${BOLD}1) Copy your private key to your local computer${NC}"
+    echo ""
+    echo "     On your local machine, save the following to:"
+    echo -e "       ${CYAN}~/.ssh/ds01_id_ed25519${NC}"
+    echo ""
+    echo "     Private key contents:"
+    echo -e "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    cat "$PRIVATE_KEY"
+    echo -e "${DIM}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "     Then run on your local machine:"
+    echo -e "       ${GREEN}chmod 600 ~/.ssh/ds01_id_ed25519${NC}"
+    echo ""
+    echo "  ${BOLD}2) Configure VS Code${NC}"
+    echo ""
+    echo "     Run:"
+    echo -e "       ${GREEN}vscode-setup${NC}"
+    echo ""
+    echo "     Or manually add to your SSH config (~/.ssh/config):"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    SERVER_IP=$(hostname -I | awk '{print $1}')
+    echo "Host ds01"
+    echo "    HostName $SERVER_IP"
+    echo "    User $USERNAME"
+    echo "    IdentityFile ~/.ssh/ds01_id_ed25519"
+    echo "    ForwardAgent yes"
+    echo "    ServerAliveInterval 60"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+else
+    echo -e "${YELLOW}📋 Save your private key for VS Code Remote-SSH${NC}"
+    echo ""
+    echo "Next: Run ${GREEN}vscode-setup${NC} for connection instructions"
+    echo ""
+fi
