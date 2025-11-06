@@ -90,51 +90,55 @@ class ResourceLimitParser:
     def get_docker_args(self, username):
         """Generate Docker run arguments for resource limits"""
         limits = self.get_user_limits(username)
-        
+
         args = []
-        
-        # CPU limits
-        args.append(f'--cpus={limits["cpus"]}')
-        
+
+        # CPU limits (check both 'max_cpus' and 'cpus' for backwards compatibility)
+        cpus = limits.get("max_cpus") or limits.get("cpus", 16)
+        args.append(f'--cpus={cpus}')
+
         # Memory limits
-        args.append(f'--memory={limits["memory"]}')
-        args.append(f'--memory-swap={limits.get("memory_swap", limits["memory"])}')
-        args.append(f'--shm-size={limits["shm_size"]}')
-        
+        memory = limits.get("memory", "32g")
+        args.append(f'--memory={memory}')
+        args.append(f'--memory-swap={limits.get("memory_swap", memory)}')
+        args.append(f'--shm-size={limits.get("shm_size", "16g")}')
+
         # Process limits
-        args.append(f'--pids-limit={limits["pids_limit"]}')
-        
+        args.append(f'--pids-limit={limits.get("pids_limit", 4096)}')
+
         # Storage limits (for tmpfs inside container)
         if "storage_tmp" in limits:
             args.append(f'--tmpfs=/tmp:size={limits["storage_tmp"]}')
-        
+
         # Cgroup parent (for systemd slices)
         group = limits.get('_group', 'student')
         args.append(f'--cgroup-parent=ds01-{group}.slice')
-        
+
         return args
     
     def format_for_display(self, username):
         """Format limits for human-readable display"""
         limits = self.get_user_limits(username)
         group = limits.get('_group', 'unknown')
-        
-        max_gpus = limits.get('max_gpus_per_user', 1)
+
+        max_gpus = limits.get('max_gpus_per_user') or limits.get('max_mig_instances', 1)
         if max_gpus is None:
             max_gpus_str = "unlimited"
         else:
             max_gpus_str = str(max_gpus)
-        
+
+        cpus = limits.get('max_cpus') or limits.get('cpus', 16)
+
         output = f"\nResource limits for user '{username}' (group: {group}):\n"
         output += f"\n  GPU Limits:\n"
         output += f"    Max GPUs (simultaneous):  {max_gpus_str}\n"
         output += f"    Priority level:           {limits.get('priority', 10)}\n"
         output += f"    Max containers:           {limits.get('max_containers_per_user', 3)}\n"
         output += f"\n  Compute (per container):\n"
-        output += f"    CPU cores:                {limits['cpus']}\n"
-        output += f"    RAM:                      {limits['memory']}\n"
-        output += f"    Shared memory:            {limits['shm_size']}\n"
-        output += f"    Max processes:            {limits['pids_limit']}\n"
+        output += f"    CPU cores:                {cpus}\n"
+        output += f"    RAM:                      {limits.get('memory', '32g')}\n"
+        output += f"    Shared memory:            {limits.get('shm_size', '16g')}\n"
+        output += f"    Max processes:            {limits.get('pids_limit', 4096)}\n"
         output += f"\n  Storage:\n"
         output += f"    Workspace (/workspace):   {limits.get('storage_workspace', 'N/A')}\n"
         output += f"    Data (/data):             {limits.get('storage_data', 'N/A')}\n"
@@ -144,7 +148,7 @@ class ResourceLimitParser:
         output += f"    Max runtime:              {limits.get('max_runtime', 'unlimited')}\n"
         output += f"\n  Enforcement:\n"
         output += f"    Systemd slice:            ds01-{group}.slice\n"
-        
+
         return output
 
 
