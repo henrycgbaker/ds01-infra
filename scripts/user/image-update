@@ -1,5 +1,8 @@
 #!/bin/bash
-# Rebuild/update Docker image from existing Dockerfile
+# Enhanced Docker Image Updater with Interactive Package Management
+# Supports adding/removing packages without manual Dockerfile editing
+
+set -e
 
 BLUE='\033[94m'
 GREEN='\033[0;32m'
@@ -7,6 +10,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 USERNAME=$(whoami)
@@ -18,41 +22,382 @@ usage() {
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  image-update <image-name> [options]"
+    echo "  image-update <image-name>                    # Interactive mode (default)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
-    echo "  --edit          Edit Dockerfile before rebuilding"
-    echo "  --no-cache      Build without using cache (clean rebuild)"
-    echo "  -h, --help      Show this help message"
+    echo "  --add \"pkg1 pkg2\"    Add packages directly (quick mode)"
+    echo "  --add-system \"pkg1\"  Add system packages directly"
+    echo "  --edit               Edit Dockerfile manually (advanced)"
+    echo "  --guided             Show detailed explanations (educational)"
+    echo "  --no-cache           Build without using cache (clean rebuild)"
+    echo "  -h, --help           Show this help message"
     echo ""
-    echo -e "${CYAN}Description:${NC}"
-    echo "  Rebuilds an existing Docker image from its Dockerfile."
-    echo "  Useful for updating packages or modifying configuration."
+    echo -e "${CYAN}Modes:${NC}"
+    echo -e "  ${BOLD}Interactive${NC} (default)  - User-friendly GUI for package management"
+    echo -e "  ${BOLD}Quick${NC} (--add)          - Add packages from command line"
+    echo -e "  ${BOLD}Advanced${NC} (--edit)      - Direct Dockerfile editing"
+    echo -e "  ${BOLD}Guided${NC} (--guided)      - Educational mode with explanations"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
-    echo "  image-update my-project                # Rebuild from existing Dockerfile"
-    echo "  image-update my-project --edit         # Edit Dockerfile first, then rebuild"
-    echo "  image-update my-project --no-cache     # Clean rebuild (ignores cache)"
+    echo -e "  ${DIM}# Interactive mode (shows current packages, prompts for changes)${NC}"
+    echo "  image-update my-project"
     echo ""
-    echo -e "${CYAN}Common Updates:${NC}"
-    echo "  • Add packages: Edit Dockerfile, add to RUN pip install line"
-    echo "  • Update versions: Change version numbers in FROM or RUN commands"
-    echo "  • Add system tools: Add to apt-get install line"
+    echo -e "  ${DIM}# Quick add packages without interaction${NC}"
+    echo "  image-update my-project --add \"wandb optuna pytorch-lightning\""
     echo ""
-    echo -e "${YELLOW}💡 Tip:${NC} After updating, recreate containers to use the new image:"
-    echo -e "     ${GREEN}container-cleanup my-project${NC}"
-    echo -e "     ${GREEN}container-create my-project${NC}"
+    echo -e "  ${DIM}# Add system packages${NC}"
+    echo "  image-update my-project --add-system \"tmux htop\""
     echo ""
+    echo -e "  ${DIM}# Edit Dockerfile directly (power users)${NC}"
+    echo "  image-update my-project --edit"
+    echo ""
+    echo -e "  ${DIM}# Guided mode for beginners${NC}"
+    echo "  image-update my-project --guided"
+    echo ""
+    echo -e "${YELLOW}💡 After updating:${NC}"
+    echo "   Recreate containers to use the new image:"
+    echo -e "   ${GREEN}container-stop my-project${NC}"
+    echo -e "   ${GREEN}container-cleanup${NC}"
+    echo -e "   ${GREEN}container-create my-project${NC}"
+    echo ""
+}
+
+# Parse Dockerfile to extract Python packages
+parse_python_packages() {
+    local dockerfile="$1"
+
+    # Find all RUN pip install commands and extract packages
+    # This handles multiline commands with backslashes
+    grep -E "RUN pip install|pip install --no-cache-dir" "$dockerfile" | \
+        sed 's/RUN pip install --no-cache-dir //g' | \
+        sed 's/RUN pip install //g' | \
+        sed 's/\\//g' | \
+        tr ' ' '\n' | \
+        grep -v "^$" | \
+        grep -v "^#" | \
+        sort -u
+}
+
+# Parse Dockerfile to extract system packages
+parse_system_packages() {
+    local dockerfile="$1"
+
+    # Find apt-get install commands
+    grep -E "apt-get install" "$dockerfile" | \
+        sed 's/.*apt-get install -y --no-install-recommends //g' | \
+        sed 's/&&.*//g' | \
+        sed 's/\\//g' | \
+        tr ' ' '\n' | \
+        grep -v "^$" | \
+        grep -v "^#" | \
+        grep -v "apt-get" | \
+        grep -v "update" | \
+        grep -v "rm" | \
+        sort -u
+}
+
+# Add Python packages to Dockerfile
+add_python_packages() {
+    local dockerfile="$1"
+    shift
+    local packages=("$@")
+
+    # Find the last RUN pip install line
+    local last_pip_line=$(grep -n "RUN pip install" "$dockerfile" | tail -1 | cut -d: -f1)
+
+    if [ -z "$last_pip_line" ]; then
+        echo -e "${RED}✗ Could not find pip install section in Dockerfile${NC}"
+        return 1
+    fi
+
+    # Create backup
+    cp "$dockerfile" "${dockerfile}.bak"
+
+    # Add packages to the last pip install section
+    # We'll insert them before the last package (which might have no backslash)
+    for pkg in "${packages[@]}"; do
+        # Check if package already exists
+        if grep -q "$pkg" "$dockerfile"; then
+            echo -e "${YELLOW}  ⚠ $pkg already in Dockerfile, skipping${NC}"
+            continue
+        fi
+
+        # Insert package before the last line of the pip install block
+        sed -i "${last_pip_line}i\\    $pkg \\\\" "$dockerfile"
+        echo -e "${GREEN}  ✓${NC} Added: $pkg"
+    done
+
+    return 0
+}
+
+# Add system packages to Dockerfile
+add_system_packages() {
+    local dockerfile="$1"
+    shift
+    local packages=("$@")
+
+    # Find the apt-get install line
+    local apt_line=$(grep -n "apt-get install" "$dockerfile" | head -1 | cut -d: -f1)
+
+    if [ -z "$apt_line" ]; then
+        echo -e "${RED}✗ Could not find apt-get install section in Dockerfile${NC}"
+        return 1
+    fi
+
+    # Create backup
+    cp "$dockerfile" "${dockerfile}.bak"
+
+    # Add packages to apt-get install line
+    for pkg in "${packages[@]}"; do
+        # Check if package already exists
+        if grep -q "$pkg" "$dockerfile"; then
+            echo -e "${YELLOW}  ⚠ $pkg already in Dockerfile, skipping${NC}"
+            continue
+        fi
+
+        # Insert package in apt-get install line
+        sed -i "${apt_line}s/$/ \\\\\n    $pkg/" "$dockerfile"
+        echo -e "${GREEN}  ✓${NC} Added: $pkg"
+    done
+
+    return 0
+}
+
+# Remove packages from Dockerfile
+remove_packages() {
+    local dockerfile="$1"
+    shift
+    local packages=("$@")
+
+    cp "$dockerfile" "${dockerfile}.bak"
+
+    for pkg in "${packages[@]}"; do
+        # Remove the line containing the package
+        if sed -i "/$pkg/d" "$dockerfile"; then
+            echo -e "${GREEN}  ✓${NC} Removed: $pkg"
+        else
+            echo -e "${YELLOW}  ⚠${NC} Package not found: $pkg"
+        fi
+    done
+
+    return 0
+}
+
+# Interactive mode
+interactive_mode() {
+    local dockerfile="$1"
+
+    while true; do
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Package Management${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        # Show current packages
+        echo -e "${BOLD}Current Python packages:${NC}"
+        echo ""
+        parse_python_packages "$dockerfile" | head -20 | while read pkg; do
+            echo -e "  ${CYAN}•${NC} $pkg"
+        done
+
+        local pkg_count=$(parse_python_packages "$dockerfile" | wc -l)
+        if [ "$pkg_count" -gt 20 ]; then
+            echo -e "  ${DIM}... and $((pkg_count - 20)) more${NC}"
+        fi
+        echo ""
+
+        echo -e "${BOLD}Current system packages:${NC}"
+        echo ""
+        parse_system_packages "$dockerfile" | head -10 | while read pkg; do
+            echo -e "  ${CYAN}•${NC} $pkg"
+        done
+
+        local sys_count=$(parse_system_packages "$dockerfile" | wc -l)
+        if [ "$sys_count" -gt 10 ]; then
+            echo -e "  ${DIM}... and $((sys_count - 10)) more${NC}"
+        fi
+        echo ""
+
+        echo -e "${BOLD}What would you like to do?${NC}"
+        echo ""
+        echo -e "  ${BOLD}1)${NC} Add Python packages (pip)"
+        echo -e "  ${BOLD}2)${NC} Add system packages (apt)"
+        echo -e "  ${BOLD}3)${NC} Remove packages"
+        echo -e "  ${BOLD}4)${NC} Edit Dockerfile directly ${DIM}(advanced)${NC}"
+        echo -e "  ${BOLD}5)${NC} Continue to rebuild"
+        echo -e "  ${BOLD}6)${NC} Cancel"
+        echo ""
+        read -p "Choice [1-6]: " CHOICE </dev/tty
+
+        case $CHOICE in
+            1)
+                echo ""
+                echo -e "${BOLD}Add Python Packages${NC}"
+                echo ""
+                echo "Enter package names (space-separated):"
+                echo -e "${DIM}Examples: wandb optuna pytorch-lightning transformers${NC}"
+                echo ""
+                read -p "> " NEW_PACKAGES </dev/tty
+
+                if [ -n "$NEW_PACKAGES" ]; then
+                    echo ""
+                    echo -e "${CYAN}Adding packages...${NC}"
+                    echo ""
+                    add_python_packages "$dockerfile" $NEW_PACKAGES
+                    echo ""
+                    echo -e "${GREEN}✓${NC} Packages added to Dockerfile"
+                else
+                    echo -e "${YELLOW}No packages entered${NC}"
+                fi
+                ;;
+
+            2)
+                echo ""
+                echo -e "${BOLD}Add System Packages${NC}"
+                echo ""
+                echo "Enter system package names (space-separated):"
+                echo -e "${DIM}Examples: tmux htop tree${NC}"
+                echo ""
+                read -p "> " NEW_SYS_PACKAGES </dev/tty
+
+                if [ -n "$NEW_SYS_PACKAGES" ]; then
+                    echo ""
+                    echo -e "${CYAN}Adding system packages...${NC}"
+                    echo ""
+                    add_system_packages "$dockerfile" $NEW_SYS_PACKAGES
+                    echo ""
+                    echo -e "${GREEN}✓${NC} System packages added to Dockerfile"
+                else
+                    echo -e "${YELLOW}No packages entered${NC}"
+                fi
+                ;;
+
+            3)
+                echo ""
+                echo -e "${BOLD}Remove Packages${NC}"
+                echo ""
+                echo "Enter package names to remove (space-separated):"
+                echo ""
+                read -p "> " REMOVE_PACKAGES </dev/tty
+
+                if [ -n "$REMOVE_PACKAGES" ]; then
+                    echo ""
+                    echo -e "${CYAN}Removing packages...${NC}"
+                    echo ""
+                    remove_packages "$dockerfile" $REMOVE_PACKAGES
+                    echo ""
+                    echo -e "${GREEN}✓${NC} Packages removed from Dockerfile"
+                else
+                    echo -e "${YELLOW}No packages entered${NC}"
+                fi
+                ;;
+
+            4)
+                echo ""
+                echo -e "${YELLOW}Opening Dockerfile in editor...${NC}"
+                echo ""
+                ${EDITOR:-vim} "$dockerfile"
+                echo ""
+                echo -e "${GREEN}✓${NC} Dockerfile edited"
+                ;;
+
+            5)
+                echo ""
+                return 0
+                ;;
+
+            6)
+                echo ""
+                echo "Cancelled."
+                exit 0
+                ;;
+
+            *)
+                echo -e "${RED}Invalid choice${NC}"
+                ;;
+        esac
+    done
+}
+
+# Guided mode with educational content
+guided_mode() {
+    local dockerfile="$1"
+
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Docker Image Updates - Guided Mode${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Understanding Docker Images${NC}"
+    echo ""
+    echo "A Docker image is like a ${CYAN}blueprint${NC} for your computing environment."
+    echo "It defines what software, packages, and tools are installed."
+    echo ""
+    echo -e "${BOLD}Why Can't I Just 'pip install' in My Container?${NC}"
+    echo ""
+    echo -e "${YELLOW}You can, BUT:${NC}"
+    echo ""
+    echo -e "  ${CYAN}Temporary Install${NC} (pip install in container):"
+    echo "    ✓ Fast for testing"
+    echo "    ✓ No rebuild needed"
+    echo "    ✗ Lost when container is removed"
+    echo "    ✗ Not reproducible"
+    echo "    ✗ Can't share with colleagues"
+    echo ""
+    echo -e "  ${GREEN}Permanent Install${NC} (update image):"
+    echo "    ✓ Persists across container recreations"
+    echo "    ✓ Reproducible setup"
+    echo "    ✓ Can share with team"
+    echo "    ✓ Documented in Dockerfile"
+    echo "    ✗ Takes 3-5 minutes to rebuild"
+    echo ""
+    echo -e "${BOLD}Best Practice Workflow:${NC}"
+    echo ""
+    echo "  1. ${CYAN}Test${NC} new packages: pip install in container"
+    echo "  2. ${CYAN}Confirm${NC} they work: run your code"
+    echo "  3. ${CYAN}Make permanent${NC}: image-update (this command)"
+    echo "  4. ${CYAN}Recreate${NC} container with updated image"
+    echo ""
+    echo -e "${BOLD}What This Command Does:${NC}"
+    echo ""
+    echo "  • Shows packages currently in your image"
+    echo "  • Lets you add/remove packages easily"
+    echo "  • Updates the Dockerfile automatically"
+    echo "  • Rebuilds the image with your changes"
+    echo "  • Creates a permanent, reproducible setup"
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+
+    # Now run interactive mode
+    interactive_mode "$dockerfile"
 }
 
 # Parse arguments
 IMAGE_NAME=""
 EDIT_FIRST=false
 NO_CACHE=false
+QUICK_ADD_PACKAGES=""
+QUICK_ADD_SYSTEM=""
+GUIDED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --add)
+            QUICK_ADD_PACKAGES="$2"
+            shift 2
+            ;;
+        --add-system)
+            QUICK_ADD_SYSTEM="$2"
+            shift 2
+            ;;
         --edit)
             EDIT_FIRST=true
+            shift
+            ;;
+        --guided)
+            GUIDED=true
             shift
             ;;
         --no-cache)
@@ -131,8 +476,13 @@ if [ ! -f "$DOCKERFILE" ]; then
     fi
 fi
 
-echo -e "${CYAN}━━━ Updating Image: ${BOLD}$IMAGE_NAME${NC} ${CYAN}━━━${NC}\n"
-echo -e "Dockerfile: ${BLUE}$DOCKERFILE${NC}\n"
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Updating Image: ${CYAN}$IMAGE_NAME${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "Dockerfile: ${BLUE}$DOCKERFILE${NC}"
+echo ""
 
 # Show current image info
 CURRENT_SIZE=$(docker images --format "{{.Size}}" "$IMAGE_NAME" | head -1)
@@ -141,26 +491,68 @@ CURRENT_CREATED=$(docker images --format "{{.CreatedAt}}" "$IMAGE_NAME" | head -
 echo -e "${BOLD}Current image:${NC}"
 echo "  Size:    $CURRENT_SIZE"
 echo "  Created: $CURRENT_CREATED"
-echo ""
 
-# Edit Dockerfile if requested
+# Handle different modes
 if [ "$EDIT_FIRST" = true ]; then
+    # Advanced mode: direct edit
+    echo ""
     echo -e "${YELLOW}Opening Dockerfile in editor...${NC}"
     ${EDITOR:-vim} "$DOCKERFILE"
     echo ""
+
+elif [ -n "$QUICK_ADD_PACKAGES" ]; then
+    # Quick mode: add packages from command line
+    echo ""
+    echo -e "${CYAN}Quick Add Mode${NC}"
+    echo ""
+    echo -e "${BOLD}Adding Python packages:${NC}"
+    echo ""
+    add_python_packages "$DOCKERFILE" $QUICK_ADD_PACKAGES
+    echo ""
+
+elif [ -n "$QUICK_ADD_SYSTEM" ]; then
+    # Quick mode: add system packages from command line
+    echo ""
+    echo -e "${CYAN}Quick Add Mode${NC}"
+    echo ""
+    echo -e "${BOLD}Adding system packages:${NC}"
+    echo ""
+    add_system_packages "$DOCKERFILE" $QUICK_ADD_SYSTEM
+    echo ""
+
+elif [ "$GUIDED" = true ]; then
+    # Guided mode: educational
+    guided_mode "$DOCKERFILE"
+
+else
+    # Default: interactive mode
+    interactive_mode "$DOCKERFILE"
 fi
 
 # Confirm rebuild
-echo -e "${YELLOW}⚠ This will rebuild the image from the Dockerfile${NC}"
+echo ""
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${YELLOW}Ready to Rebuild Image${NC}"
+echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo "This will rebuild the image with your changes."
 if [ "$NO_CACHE" = true ]; then
     echo -e "${YELLOW}⚠ Building without cache (clean rebuild)${NC}"
 fi
+echo ""
+echo -e "${DIM}Time estimate: 3-5 minutes${NC}"
 echo ""
 read -p "Continue? [Y/n]: " CONFIRM
 CONFIRM=${CONFIRM:-Y}
 
 if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
     echo "Cancelled."
+
+    # Restore backup if exists
+    if [ -f "${DOCKERFILE}.bak" ]; then
+        mv "${DOCKERFILE}.bak" "$DOCKERFILE"
+        echo "Dockerfile restored to original state."
+    fi
     exit 0
 fi
 
@@ -171,14 +563,20 @@ if [ "$NO_CACHE" = true ]; then
 fi
 BUILD_CMD="$BUILD_CMD $IMAGES_DIR/"
 
-echo -e "\n${CYAN}Building image...${NC}"
-echo -e "${YELLOW}This may take 3-5 minutes${NC}\n"
+echo ""
+echo -e "${CYAN}Building image...${NC}"
+echo ""
 
 # Build
 if eval "$BUILD_CMD"; then
-    echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}✓ Image updated successfully!${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    # Remove backup
+    rm -f "${DOCKERFILE}.bak"
 
     # Show new image info
     NEW_SIZE=$(docker images --format "{{.Size}}" "$IMAGE_NAME" | head -1)
@@ -195,26 +593,42 @@ if eval "$BUILD_CMD"; then
         rm -f "${INFO_FILE}.bak"
     fi
 
-    # Check for containers using old image
-    OLD_CONTAINERS=$(docker ps -a --filter "ancestor=$IMAGE_NAME" --format "{{.Names}}" | wc -l)
-    if [ "$OLD_CONTAINERS" -gt 0 ]; then
-        echo -e "${YELLOW}⚠ $OLD_CONTAINERS container(s) still use the old image${NC}\n"
-        echo "To use the updated image, recreate your containers:"
-        echo "  1. List containers: ${GREEN}container-list${NC}"
-        echo "  2. Stop old containers: ${GREEN}container-stop <name>${NC}"
-        echo "  3. Remove old containers: ${GREEN}container-cleanup${NC}"
-        echo "  4. Create new container: ${GREEN}container-create <name>${NC}"
-        echo ""
-    fi
+    # Check for containers using this image
+    CONTAINER_BASE_NAME="${IMAGE_NAME#$USERNAME-}"
+    CONTAINER_BASE_NAME="${CONTAINER_BASE_NAME%-image}"
 
-    echo -e "${YELLOW}💡 Tip:${NC} Run ${GREEN}image-list --detailed${NC} to see all your images"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Next Steps: Update Your Container${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Your image has been updated, but containers created from"
+    echo "the old image are still using the old packages."
+    echo ""
+    echo "To use the new packages, recreate your container:"
+    echo ""
+    echo -e "  ${BOLD}1.${NC} Stop the container:"
+    echo -e "     ${GREEN}container-stop $CONTAINER_BASE_NAME${NC}"
+    echo ""
+    echo -e "  ${BOLD}2.${NC} Remove the old container:"
+    echo -e "     ${GREEN}docker rm $CONTAINER_BASE_NAME._.$(id -u)${NC}"
+    echo ""
+    echo -e "  ${BOLD}3.${NC} Create new container from updated image:"
+    echo -e "     ${GREEN}container-create $CONTAINER_BASE_NAME${NC}"
+    echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} Your workspace files are safe and will be"
+    echo "   automatically mounted in the new container."
+    echo ""
+
 else
-    echo -e "\n${RED}✗ Build failed${NC}"
+    echo ""
+    echo -e "${RED}✗ Build failed${NC}"
     echo ""
     echo "Troubleshooting:"
     echo "  1. Check Dockerfile syntax: ${BLUE}cat $DOCKERFILE${NC}"
-    echo "  2. Edit Dockerfile: ${GREEN}image-update $IMAGE_NAME --edit${NC}"
-    echo "  3. Try clean rebuild: ${GREEN}image-update $IMAGE_NAME --no-cache${NC}"
+    echo "  2. View backup: ${BLUE}cat ${DOCKERFILE}.bak${NC}"
+    echo "  3. Restore backup: ${GREEN}mv ${DOCKERFILE}.bak $DOCKERFILE${NC}"
+    echo "  4. Try again: ${GREEN}image-update $IMAGE_NAME${NC}"
+    echo ""
     exit 1
 fi
 
