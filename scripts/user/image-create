@@ -58,6 +58,7 @@ usage() {
 
 get_base_image() {
     local framework="$1"
+    local custom_image="$2"
     case $framework in
         tensorflow|tf)
             echo "tensorflow/tensorflow:2.14.0-gpu"
@@ -68,10 +69,88 @@ get_base_image() {
         pytorch-cpu)
             echo "pytorch/pytorch:2.5.1-cpu"
             ;;
+        custom)
+            echo "$custom_image"
+            ;;
         *)
             echo "pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
             ;;
     esac
+}
+
+get_base_packages() {
+    # Core data science packages installed by default
+    echo "jupyter jupyterlab ipykernel ipywidgets numpy pandas matplotlib seaborn scikit-learn scipy tqdm tensorboard Pillow python-dotenv"
+}
+
+check_user_limits() {
+    # Check user's resource limits and provide helpful information
+    local limits_script="/opt/ds01-infra/scripts/docker/get_resource_limits.py"
+
+    if [ ! -f "$limits_script" ]; then
+        # Silently skip if script not available
+        return 0
+    fi
+
+    # Get user's limits
+    local limit_info=$(python3 "$limits_script" "$USERNAME" 2>/dev/null)
+
+    if [ $? -eq 0 ] && [ -n "$limit_info" ]; then
+        # Parse limits from the formatted output
+        local group=$(echo "$limit_info" | head -1 | sed -n 's/.*group: \([^)]*\).*/\1/p')
+        local max_containers=$(echo "$limit_info" | grep "Max containers:" | awk '{print $NF}')
+        local max_gpus=$(echo "$limit_info" | grep "Max GPUs (simultaneous):" | awk '{print $NF}')
+
+        # Count current containers
+        local current_containers=$(docker ps -a --filter "label=maintainer=$USERNAME" --format "{{.ID}}" 2>/dev/null | wc -l)
+
+        # Only show if we got valid data
+        if [ -n "$group" ] && [ -n "$max_containers" ]; then
+            echo ""
+            echo -e "${CYAN}━━━ Your Resource Limits ━━━${NC}"
+            echo ""
+            echo -e "${BOLD}Group:${NC} $group"
+            echo -e "${BOLD}Max Containers:${NC} $max_containers (currently have: $current_containers)"
+            echo -e "${BOLD}Max GPUs/MIGs:${NC} $max_gpus"
+            echo ""
+
+            # Warning if approaching limits
+            if [ "$max_containers" != "unlimited" ] && [ "$current_containers" -ge "$max_containers" ] 2>/dev/null; then
+                echo -e "${RED}⚠ WARNING: Container Limit Reached${NC}"
+                echo ""
+                echo "You already have $current_containers containers (limit: $max_containers)."
+                echo "You won't be able to create a new container from this image"
+                echo "until you stop/remove an existing container."
+                echo ""
+                echo -e "View containers: ${GREEN}container-list${NC}"
+                echo -e "Stop container:  ${GREEN}container-stop <name>${NC}"
+                echo -e "Remove container: ${GREEN}container-cleanup <name>${NC}"
+                echo ""
+                read -p "Continue creating image anyway? [y/N]: " CONTINUE
+                if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+                    echo "Cancelled."
+                    exit 0
+                fi
+            elif [ "$max_containers" != "unlimited" ] && [ "$current_containers" -ge $((max_containers - 1)) ] 2>/dev/null; then
+                echo -e "${YELLOW}⚠ Note: You're at $current_containers/$max_containers containers.${NC}"
+                echo "  You can create this image, but may need to stop a container"
+                echo "  before creating a new one from it."
+                echo ""
+            fi
+
+            # Info about GPU-based images
+            if [ "$FRAMEWORK" != "pytorch-cpu" ] && [ "$FRAMEWORK" != "custom" ]; then
+                echo -e "${BOLD}GPU Access:${NC}"
+                echo "  This image includes CUDA/GPU support."
+                if [ "$max_gpus" = "unlimited" ]; then
+                    echo "  You have unlimited GPU access."
+                else
+                    echo "  You can allocate up to $max_gpus GPU(s) across all containers."
+                fi
+                echo ""
+            fi
+        fi
+    fi
 }
 
 get_usecase_packages() {
@@ -135,29 +214,86 @@ interactive_mode() {
             echo ""
             echo "• ${CYAN}PyTorch CPU${NC} - No GPU, for testing or CPU-only work"
             echo ""
+            echo "• ${CYAN}Custom${NC} - Specify your own base image (advanced)"
+            echo "  Use any Docker image as base (e.g., ubuntu:22.04, python:3.11)"
+            echo ""
             echo -e "${YELLOW}💡 Recommendation:${NC} Choose PyTorch unless you have specific needs"
             echo ""
         fi
 
-        echo "Select base framework:"
+        echo "${BOLD}Select base framework:${NC}"
         echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
         echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
         echo -e "  ${BOLD}3)${NC} JAX + CUDA"
         echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
-        echo -e "  ${BOLD}4)${NC} Custom (specify everything)"
-        read -p "Choice [1-4, default: 1]: " FW_CHOICE
+        echo -e "  ${BOLD}5)${NC} Custom (specify base image)"
+        read -p "Choice [1-5, default: 1]: " FW_CHOICE
 
         case $FW_CHOICE in
             2) FRAMEWORK="tensorflow" ;;
             3) FRAMEWORK="jax" ;;
             4) FRAMEWORK="pytorch-cpu" ;;
-            5) FRAMEWORK="custom" ;;
+            5)
+                FRAMEWORK="custom"
+                echo ""
+                echo -e "${BOLD}Custom Base Image${NC}"
+                echo "Enter Docker image (e.g., ubuntu:22.04, python:3.11-slim, nvidia/cuda:12.0-runtime)"
+                read -p "> " CUSTOM_BASE_IMAGE
+                if [ -z "$CUSTOM_BASE_IMAGE" ]; then
+                    echo -e "${RED}Error: Base image cannot be empty${NC}"
+                    exit 1
+                fi
+                echo -e "${YELLOW}⚠ Custom base: No default packages will be installed${NC}"
+                SKIP_BASE_PACKAGES=true
+                ;;
             *) FRAMEWORK="pytorch" ;;
         esac
     fi
 
+    # Base packages selection (new tier)
+    if [ -z "$BASE_PACKAGES_CHOICE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
+        if [ "$GUIDED" = true ]; then
+            echo ""
+            echo -e "${BOLD}Base Data Science Packages${NC}"
+            echo ""
+            echo "These are core packages used in most data science workflows:"
+            echo ""
+            echo "  ${CYAN}Default packages:${NC}"
+            echo "  • Jupyter Lab (interactive notebooks)"
+            echo "  • NumPy, Pandas (data manipulation)"
+            echo "  • Matplotlib, Seaborn (visualization)"
+            echo "  • Scikit-learn (traditional ML)"
+            echo "  • TensorBoard (experiment tracking)"
+            echo ""
+            echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults unless you need minimal setup"
+            echo ""
+        fi
+
+        echo -e "\n${BOLD}Install base data science packages?${NC}"
+        echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended${NC})"
+        echo -e "  ${BOLD}2)${NC} No - Skip base packages"
+        echo -e "  ${BOLD}3)${NC} Custom - Specify base packages manually"
+        read -p "Choice [1-3, default: 1]: " BASE_PKG_CHOICE
+
+        case $BASE_PKG_CHOICE in
+            2)
+                BASE_PACKAGES_CHOICE="skip"
+                echo -e "${YELLOW}⚠ Skipping base packages${NC}"
+                ;;
+            3)
+                BASE_PACKAGES_CHOICE="custom"
+                echo ""
+                echo -e "${BOLD}Specify base Python packages:${NC} (space-separated)"
+                read -p "> " CUSTOM_BASE_PACKAGES
+                ;;
+            *)
+                BASE_PACKAGES_CHOICE="default"
+                ;;
+        esac
+    fi
+
     # Use case
-    if [ -z "$USECASE" ]; then
+    if [ -z "$USECASE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
         if [ "$GUIDED" = true ]; then
             echo ""
             echo -e "${BOLD}Choosing a Use Case${NC}"
@@ -176,39 +312,78 @@ interactive_mode() {
             echo "  Packages: gymnasium, stable-baselines3"
             echo "  Example: Game AI, robotics, optimization"
             echo ""
-            echo "• ${CYAN}General ML${NC} - Traditional ML, tabular data, boosting"
-            echo "  Packages: scikit-learn, xgboost, lightgbm"
-            echo "  Example: Classification, regression, feature engineering"
+            echo "• ${CYAN}General ML${NC} - Advanced ML with boosting algorithms"
+            echo "  Packages: xgboost, lightgbm, catboost, optuna"
+            echo "  Example: Classification, regression, hyperparameter tuning"
             echo ""
-            echo -e "${YELLOW}💡 Note:${NC} All options include: numpy, pandas, matplotlib, jupyter"
+            echo "• ${CYAN}Custom${NC} - Skip use case packages or specify manually"
             echo ""
         fi
 
-        echo -e "\n${BOLD}Select use case (to pre-install common pkgs):${NC}"
-        echo -e "  ${BOLD}1) Custom${NC} (specify everything)"
-        echo -e "  ${BOLD}2) General ML${NC} (scikit-learn, xgboost, lightgbm) (${GREEN}default${NC})"
-        echo -e "  ${BOLD}3) Computer Vision${NC} (timm, albumentations, opencv)"
-        echo -e "  ${BOLD}4) NLP${NC} (transformers, datasets, tokenizers)"
-        echo -e "  ${BOLD}5) Reinforcement Learning${NC} (gymnasium, stable-baselines3)"
-        
+        echo -e "\n${BOLD}Select use case (domain-specific packages):${NC}"
+        echo -e "  ${BOLD}1)${NC} None/Custom (skip or specify manually)"
+        echo -e "  ${BOLD}2)${NC} General ML (xgboost, lightgbm, catboost) (${GREEN}default${NC})"
+        echo -e "  ${BOLD}3)${NC} Computer Vision (timm, albumentations, opencv)"
+        echo -e "  ${BOLD}4)${NC} NLP (transformers, datasets, tokenizers)"
+        echo -e "  ${BOLD}5)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
+
         read -p "Choice [1-5, default: 2]: " UC_CHOICE
 
         case $UC_CHOICE in
-            1) USECASE="custom" ;;       
-            3) USECASE="cv" ;;           
-            4) USECASE="nlp" ;;          
-            5) USECASE="rl" ;;           
-            2|"") USECASE="ml" ;;       
-            *) 
+            1)
+                USECASE="custom"
+                echo ""
+                echo -e "${BOLD}Custom Use Case Packages${NC}"
+                echo "Specify packages (space-separated), or press Enter to skip:"
+                read -p "> " CUSTOM_USECASE_PACKAGES
+                ;;
+            3) USECASE="cv" ;;
+            4) USECASE="nlp" ;;
+            5) USECASE="rl" ;;
+            2|"") USECASE="ml" ;;
+            *)
                 echo "Invalid choice. Setting to default: General ML."
                 USECASE="ml"
                 ;;
         esac
     fi
 
+    # Display included packages before asking for additional
+    if [ "$SKIP_BASE_PACKAGES" != true ]; then
+        echo ""
+        echo -e "${CYAN}━━━ Packages To Be Installed ━━━${NC}"
+        echo ""
+
+        # Base packages
+        if [ "$BASE_PACKAGES_CHOICE" = "default" ] || [ -z "$BASE_PACKAGES_CHOICE" ]; then
+            echo -e "${BOLD}Base Packages:${NC}"
+            echo "  jupyter, jupyterlab, ipykernel, numpy, pandas, matplotlib,"
+            echo "  seaborn, scikit-learn, scipy, tqdm, tensorboard, Pillow"
+            echo ""
+        elif [ "$BASE_PACKAGES_CHOICE" = "custom" ]; then
+            echo -e "${BOLD}Base Packages (custom):${NC}"
+            echo "  $CUSTOM_BASE_PACKAGES"
+            echo ""
+        fi
+
+        # Use case packages
+        if [ "$USECASE" != "custom" ] && [ -n "$USECASE" ]; then
+            local uc_pkgs=$(get_usecase_packages "$USECASE")
+            if [ -n "$uc_pkgs" ]; then
+                echo -e "${BOLD}Use Case Packages ($USECASE):${NC}"
+                echo "  $uc_pkgs"
+                echo ""
+            fi
+        elif [ "$USECASE" = "custom" ] && [ -n "$CUSTOM_USECASE_PACKAGES" ]; then
+            echo -e "${BOLD}Use Case Packages (custom):${NC}"
+            echo "  $CUSTOM_USECASE_PACKAGES"
+            echo ""
+        fi
+    fi
+
     # Additional packages
     if [ -z "$ADDITIONAL_PACKAGES" ]; then
-        echo -e "\n${BOLD}Additional Python packages?${NC} (space-separated, or press Enter to skip)"
+        echo -e "${BOLD}Additional Python packages?${NC} (space-separated, or press Enter to skip)"
         echo "Examples: wandb optuna pytorch-lightning tensorboardX"
         read -p "> " ADDITIONAL_PACKAGES
     fi
@@ -227,9 +402,21 @@ create_dockerfile() {
     local usecase="$3"
     local additional="$4"
     local system_pkgs="$5"
+    local custom_base="$6"
+    local base_pkg_choice="$7"
+    local custom_base_pkgs="$8"
+    local custom_usecase_pkgs="$9"
+    local skip_base="${10}"
 
-    local base_image=$(get_base_image "$framework")
+    local base_image=$(get_base_image "$framework" "$custom_base")
     local usecase_packages=$(get_usecase_packages "$usecase")
+
+    # Handle custom use case packages
+    if [ "$usecase" = "custom" ] && [ -n "$custom_usecase_pkgs" ]; then
+        usecase_packages="$custom_usecase_pkgs"
+    elif [ "$usecase" = "custom" ]; then
+        usecase_packages=""
+    fi
 
     mkdir -p "$IMAGES_DIR"
     local dockerfile="$IMAGES_DIR/${image_name}.Dockerfile"
@@ -251,6 +438,11 @@ LABEL ds01.created="$(date -Iseconds)"
 
 WORKDIR /workspace
 
+DOCKERFILEEOF
+
+    # Only add system packages and Python packages if not using fully custom base
+    if [ "$skip_base" != true ]; then
+        cat >> "$dockerfile" << DOCKERFILEEOF
 # System packages
 RUN apt-get update && apt-get install -y --no-install-recommends \\
     git \\
@@ -261,29 +453,53 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     $([ -n "$system_pkgs" ] && echo "$system_pkgs \\")
     && rm -rf /var/lib/apt/lists/*
 
+DOCKERFILEEOF
+
+        # Base Python packages
+        if [ "$base_pkg_choice" = "skip" ]; then
+            echo "# Base packages skipped by user" >> "$dockerfile"
+        elif [ "$base_pkg_choice" = "custom" ] && [ -n "$custom_base_pkgs" ]; then
+            cat >> "$dockerfile" << DOCKERFILEEOF
+# Custom base packages
+RUN pip install --no-cache-dir $custom_base_pkgs
+
+DOCKERFILEEOF
+        else
+            # Default base packages
+            local base_packages=$(get_base_packages)
+            cat >> "$dockerfile" << DOCKERFILEEOF
 # Core Python packages
 RUN pip install --no-cache-dir \\
-    jupyter \\
-    jupyterlab \\
-    ipykernel \\
-    ipywidgets \\
-    numpy \\
-    pandas \\
-    matplotlib \\
-    seaborn \\
-    scikit-learn \\
-    scipy \\
-    tqdm \\
-    tensorboard \\
-    Pillow \\
-    python-dotenv
+    $base_packages
 
-$([ -n "$usecase_packages" ] && echo "# Use case specific packages
-RUN pip install --no-cache-dir $usecase_packages")
+DOCKERFILEEOF
+        fi
 
-$([ -n "$additional" ] && echo "# Additional user packages
-RUN pip install --no-cache-dir $additional")
+        # Use case specific packages
+        if [ -n "$usecase_packages" ]; then
+            cat >> "$dockerfile" << DOCKERFILEEOF
+# Use case specific packages
+RUN pip install --no-cache-dir $usecase_packages
 
+DOCKERFILEEOF
+        fi
+
+        # Additional user packages
+        if [ -n "$additional" ]; then
+            cat >> "$dockerfile" << DOCKERFILEEOF
+# Additional user packages
+RUN pip install --no-cache-dir $additional
+
+DOCKERFILEEOF
+        fi
+    else
+        echo "# Custom base image - no default packages installed" >> "$dockerfile"
+        echo "" >> "$dockerfile"
+    fi
+
+    # Jupyter configuration and environment (only if base packages included)
+    if [ "$skip_base" != true ] && [ "$base_pkg_choice" != "skip" ]; then
+        cat >> "$dockerfile" << DOCKERFILEEOF
 # Configure Jupyter
 RUN jupyter lab --generate-config && \\
     echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \\
@@ -297,6 +513,11 @@ RUN python -m ipykernel install --user \\
     --name=$image_name \\
     --display-name="$image_name ($framework)"
 
+DOCKERFILEEOF
+    fi
+
+    # Final environment variables and CMD
+    cat >> "$dockerfile" << DOCKERFILEEOF
 # Environment variables
 ENV PYTHONUNBUFFERED=1
 ENV CUDA_DEVICE_ORDER=PCI_BUS_ID
@@ -316,6 +537,11 @@ FRAMEWORK=""
 USECASE=""
 ADDITIONAL_PACKAGES=""
 SYSTEM_PACKAGES=""
+CUSTOM_BASE_IMAGE=""
+BASE_PACKAGES_CHOICE=""
+CUSTOM_BASE_PACKAGES=""
+CUSTOM_USECASE_PACKAGES=""
+SKIP_BASE_PACKAGES=false
 NO_BUILD=false
 GUIDED=false
 
@@ -426,9 +652,12 @@ else
     FULL_IMAGE_NAME="${IMAGE_NAME}-${USERNAME}"
 fi
 
+# Check user's resource limits and provide helpful info
+check_user_limits
+
 # Create Dockerfile
 echo -e "\n${CYAN}Creating Dockerfile...${NC}"
-DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES")
+DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$BASE_PACKAGES_CHOICE" "$CUSTOM_BASE_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES")
 echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
 
 # Guided explanation of Dockerfile
