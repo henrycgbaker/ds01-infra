@@ -137,7 +137,7 @@
 - [ ] Set up `docker image prune` automation in cron
 - [ ] once containers robustly implmented, enformce container usage and block users from running scripts bare metal
 
-### CLI Ecosystem / Aliases ✅ COMPLETED (Nov 10, 2025)
+### CLI Ecosystem / Aliases 
 - [x] for all CLIs (symlinks): rename the instructions to follow consistent convention
     - [x] e.g. rather than ds01-setup it is setup-wizard,
     - [x] rather than mlc-create --show-limits => something like containers --show-limits
@@ -153,6 +153,7 @@
 - [x] Deprecated redundant scripts (create-custom-image.sh, manage-images.sh, student-setup.sh)
 - [x] Updated symlinks - added 14 new commands
 - [x] Fixed alias-list documentation errors
+- [ ] make sure a version of alias-list available INSIDE containers
 - [ ] ds01-dashboard alias command doesn't do anything useful
     - no MIG config recognised
 
@@ -193,25 +194,38 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
         ```
 
 ### Image Create
+- [x] Add hard coded suffix "-image" to all images, move naming convention: "<project-name>-<user-id>-image"
+    - [x] is there a way to tag the user ID, if so -> "<project-name>-image", with the user id as a tag
+    - [ ] NB: this renaming convention, might upset image-list command
 - [ ] BUG: when get to ```Create a custom Docker image? [Y/n]: y -> Unknown option: --type=ml``` => it crashes out / doesn't proceed. The issue is with `--type=ml???` Maybe just remove this `type`, is it useful/used?
-- [ ] add ipykernel + pip to all image creations 
+- [ ] I added in 'custom (specify everything) option for base image --> need to omplement this
+- [ ] make initial package installation more extensive (while having custom as the first option, also the default)
+- [ ] above theh add additional python packages, get it to list out (horizontally) the already included packages (categorised by 'base' and 'use case') -> users can see what they have and what they need to add
+- [x] add ipykernel + pip to all image creations 
     - in general, work out what python libs to include as standard
-- [ ] have so that students can get up to 4 MIG instances, but setup wizard defaults to 1, but gives them the option to choose more
 - [ ] if they try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
 - [ ] maybe just have this defult to no libraries installed? I'm not really sure how this works once a container is up and running how easy/hard it is to install packages... does it need to be pre-installed, or can you dynanmically add to them. 
 - [ ] add in hugging face image (that uses hugging face rather than pytorch?)
 
+### Image list
+- [ ] update based on naming changes in image create
+
 ### Image Update
 - [ ] BUG: either the currently installed packages list is not up to date, or it's not able to add new packages correctly, or both. All my images have the same 4 "Current Python packages" listed, then whwenever you try to add more python packages, it says it's already in the dockerfile, no matter "which package.
--  [ ] also the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
+-  [ ] BUG: the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
+- [ ] BUG: when listing all images, it lists a lot of them, not just the user created ones. `image list` command gets this right, so call directly there! 
 
 ### Container Create
-- [ ] BUG: `✗ mlc-create-wrapper not found at: /usr/local/docker/mlc-create-wrapper.sh
+- [x] BUG: `✗ mlc-create-wrapper not found at: /usr/local/docker/mlc-create-wrapper.sh
     The system may not be fully configured.` 
-- [ ] (i think this already implemented:) also when just running container create, make the name optional (if not provided it opens up a full GUI, with name, ability to create custom image, or use existing template)
+- [ ] BUG: when listing all images (if using existing image), it lists a lot of them, not just the user created ones. `image list` command gets this right, so call directly there! 
+- [x]  also when just running container create, make the name optional (if not provided it opens up a full GUI, with name, ability to create custom image, or use existing template)
+- [ ] !! when chosing the `create custom image` option -> make it call to `image create` (to avoid current duplication of functionality which is bad!)
 - [ ] manually just add some initial explanation that to create a container we need an image (literally one line, add by hand)
 - [ ] make `container create` default to (1) a call to `image create` to create custom image, with possiblitlites to chose PyTorch or Tensorflow
-- [ ] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
+- Resource allocation workflow
+    - [ ] have so that students can get up to 4 MIG instances, but setup wizard defaults to 1, but gives them the option to choose more
+    - [ ] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
 - [ ] (is this under `container create` or `container run`?) currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
 
 ### Running Containers
@@ -229,7 +243,8 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
     - [ ] when using Dev Container: currently ALL images are visible -> need to set view permissions to only user's images -> can't view / start / stop / open / inspect othehr users' images!
     - [ ] if integrate this workflow into a script: automate setting of the workspace!
         - currently i just connects to /home/datasciencelab/ and if you try to connect it additionally to ...workspace/<workspace_name> it errors to it doesn't exist; I can navigate this with setting up configs in the Dev Container tools., but it seems to .... I THINK THIS GOT FIXED IF YOU CHANGE THE CONFIGURATION FILES TO BE "workspaceFolder": "/workspace" <-- they need to set `open folder` directory setup properly when running from Dev Containers directly 
-
+- [ ] sort out how venvs work in container -> can you just build directly within notebook based on workspace dependencies, or does the `image create` make a requirements file that needs to be unpacked? and do we need to use venvs, or is that self contained within the container so can use directly
+    - A Docker container already acts as the ultimate form of a virtual environment. It isolates the entire operating system, filesystem, and all installed packages from the host machine and from all other containers.
 - WHEN SELECTING KERNEL IN JUPYTER NOTEBOOK IT RECOMMENDS TO DO QUICK CREATE THAT CREATES A VENV FROM WORKSPACE DEPENDENCEIS -> IS THAT ALL THE INLCUDED PACKAGES IN THE IMAGE?
 - [ ] when ready, set up the cgroups resource allocation & accounting (see scripts/system/setup-cgroups-slices)
 
@@ -251,6 +266,11 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 ### Container Stats 
 - [ ] buggy: "unknown flag: --filter"
 - [ ] check the description is correct
+
+## Container code refactor
+- [ ] reorganise scripts dir to make more sense between admin vs user vs docker, etc scripts 
+    - admin is too broad -> it should be dissagregated by functionality
+
 
 # Resource Allocation
 - [ ] update container allocation based on UUID system (see `/docs-admin/gpu-allocation-implementation.md`)
@@ -301,7 +321,6 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 
 # User groups
 - [ ] sort out user groups (incl using docker-users in the scripts, rather than docker -> remove docker group)
-- [ ] sort out admin vs user vs docker etc scripts (admin is too broad -> it should be dissagregated by functionality)
 
 # File/Dir Clean Up of SSD
 - [ ] once identified current users -> send message out via dsl for saving important work -> begin deleting.
