@@ -51,7 +51,7 @@ usage() {
     echo -e "${CYAN}Quick Start:${NC}"
     echo -e "  1. Run: ${GREEN}image-create my-project${NC}"
     echo "  2. Answer prompts to customize"
-    echo "  3. Wait 3-5 minutes for build"
+    echo "  3. Wait a few minutes for build"
     echo -e "  4. Create container: ${GREEN}container-create my-project${NC}"
     echo ""
 }
@@ -103,7 +103,7 @@ interactive_mode() {
         read -p "Image name (e.g., my-project, thesis-cv): " IMAGE_NAME
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     fi
-    FULL_IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+    FULL_IMAGE_NAME="${IMAGE_NAME}-${USERNAME}"
 
     # Check if exists
     if docker images --format "{{.Repository}}" | grep -q "^${FULL_IMAGE_NAME}$"; then
@@ -144,12 +144,14 @@ interactive_mode() {
         echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
         echo -e "  ${BOLD}3)${NC} JAX + CUDA"
         echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
+        echo -e "  ${BOLD}4)${NC} Custom (specify everything)"
         read -p "Choice [1-4, default: 1]: " FW_CHOICE
 
         case $FW_CHOICE in
             2) FRAMEWORK="tensorflow" ;;
             3) FRAMEWORK="jax" ;;
             4) FRAMEWORK="pytorch-cpu" ;;
+            5) FRAMEWORK="custom" ;;
             *) FRAMEWORK="pytorch" ;;
         esac
     fi
@@ -182,20 +184,25 @@ interactive_mode() {
             echo ""
         fi
 
-        echo -e "\n${BOLD}Select use case:${NC}"
-        echo -e "  ${BOLD}1)${NC} Computer Vision (timm, albumentations, opencv)"
-        echo -e "  ${BOLD}2)${NC} NLP (transformers, datasets, tokenizers)"
-        echo -e "  ${BOLD}3)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
-        echo -e "  ${BOLD}4)${NC} General ML (scikit-learn, xgboost, lightgbm) (${GREEN}default${NC})"
-        echo -e "  ${BOLD}5)${NC} Custom (specify everything)"
-        read -p "Choice [1-5, default: 4]: " UC_CHOICE
+        echo -e "\n${BOLD}Select use case (to pre-install common pkgs):${NC}"
+        echo -e "  ${BOLD}1) Custom${NC} (specify everything)"
+        echo -e "  ${BOLD}2) General ML${NC} (scikit-learn, xgboost, lightgbm) (${GREEN}default${NC})"
+        echo -e "  ${BOLD}3) Computer Vision${NC} (timm, albumentations, opencv)"
+        echo -e "  ${BOLD}4) NLP${NC} (transformers, datasets, tokenizers)"
+        echo -e "  ${BOLD}5) Reinforcement Learning${NC} (gymnasium, stable-baselines3)"
+        
+        read -p "Choice [1-5, default: 2]: " UC_CHOICE
 
         case $UC_CHOICE in
-            1) USECASE="cv" ;;
-            2) USECASE="nlp" ;;
-            3) USECASE="rl" ;;
-            5) USECASE="custom" ;;
-            *) USECASE="ml" ;;
+            1) USECASE="custom" ;;       
+            3) USECASE="cv" ;;           
+            4) USECASE="nlp" ;;          
+            5) USECASE="rl" ;;           
+            2|"") USECASE="ml" ;;       
+            *) 
+                echo "Invalid choice. Setting to default: General ML."
+                USECASE="ml"
+                ;;
         esac
     fi
 
@@ -237,6 +244,7 @@ create_dockerfile() {
 FROM $base_image
 
 LABEL maintainer="$USERNAME"
+LABEL maintainer.id="$USER_ID"
 LABEL ds01.image="$image_name"
 LABEL ds01.framework="$framework"
 LABEL ds01.created="$(date -Iseconds)"
@@ -267,7 +275,8 @@ RUN pip install --no-cache-dir \\
     scipy \\
     tqdm \\
     tensorboard \\
-    Pillow
+    Pillow \\
+    python-dotenv
 
 $([ -n "$usecase_packages" ] && echo "# Use case specific packages
 RUN pip install --no-cache-dir $usecase_packages")
@@ -316,9 +325,14 @@ while [[ $# -gt 0 ]]; do
             FRAMEWORK="$2"
             shift 2
             ;;
-        -t|--type)
-            USECASE="$2"
-            shift 2
+        -t|--type|--type=*)
+            if [[ "$1" == --type=* ]]; then
+                USECASE="${1#*=}"
+                shift
+            else
+                USECASE="$2"
+                shift 2
+            fi
             ;;
         -p|--packages)
             ADDITIONAL_PACKAGES="$2"
@@ -409,7 +423,7 @@ if [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
 else
     # Non-interactive: sanitize image name
     IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-    FULL_IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+    FULL_IMAGE_NAME="${IMAGE_NAME}-${USERNAME}"
 fi
 
 # Create Dockerfile

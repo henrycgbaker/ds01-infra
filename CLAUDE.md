@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Instructions for Claude
+- be concise.
+- there's no need to produce audit.md docs, or sumary.md docs etc (unless explicitly asked).
+- check/ideate/plan with user in-chat, but once clear TODO is ready just move directly the code implementations, update CLAUDE.md if necessary (and only produce further documentation requested if requested). No need to produce multiple documents for each piece of work!
+
 ## Overview
 
 DS01 Infrastructure is a GPU-enabled container management system for multi-user data science workloads. It provides resource quotas, MIG (Multi-Instance GPU) support, priority-based allocation, and automatic lifecycle management on top of the base `aime-ml-containers` system.
