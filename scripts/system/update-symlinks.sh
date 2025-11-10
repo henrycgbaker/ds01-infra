@@ -116,11 +116,33 @@ create_symlink "$INFRA_ROOT/scripts/user/user-setup" "user-setup" && ((SUCCESS_C
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}Admin & Utility Commands${NC}"
+echo -e "${BOLD}User Utilities${NC}"
 echo ""
 
 create_symlink "$INFRA_ROOT/scripts/user/ds01-status" "ds01-status" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/alias-list" "alias-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/ds01-run" "ds01-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/ssh-config" "ssh-config" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/install-to-image.sh" "install-to-image" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+echo -e "${BOLD}Admin Commands${NC}"
+create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "alias-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/alias-create" "alias-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/ds01-dashboard" "ds01-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/ds01-logs" "ds01-logs" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/ds01-users" "ds01-users" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/help" "help" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/version" "version" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+echo -e "${BOLD}Monitoring & Audit Commands${NC}"
+create_symlink "$INFRA_ROOT/scripts/monitoring/container-dashboard.sh" "container-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-status-dashboard.py" "gpu-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/check-idle-containers.sh" "check-idle-containers" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/audit-system.sh" "audit-system" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/audit-docker.sh" "audit-docker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/audit-container.sh" "audit-container" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/who-owns-containers.sh" "ds01-who" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

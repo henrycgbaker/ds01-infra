@@ -105,7 +105,7 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;

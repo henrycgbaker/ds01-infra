@@ -1,6 +1,9 @@
 #!/bin/bash
 # Stop a running container
 
+# Source interactive library
+source /usr/local/lib/interactive-select.sh
+
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -18,9 +21,11 @@ usage() {
     echo -e "${BOLD}Container Stopper${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  container-stop <name> [options]"
+    echo "  container-stop [name] [options]"
+    echo "  container-stop                   # Prompts to select running container (if none specified)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
+    echo "  --guided        Show detailed explanations for beginners"
     echo "  -f, --force     Force stop (kill immediately)"
     echo "  -t, --timeout   Timeout in seconds (default: 10)"
     echo "  -a, --all       Stop all your containers"
@@ -82,16 +87,33 @@ stop_container() {
     echo -e "${BOLD}Image:${NC}     $image"
     echo ""
 
+    if [ "$GUIDED" = true ]; then
+        echo -e "${CYAN}ℹ ${NC}${BOLD}What does stopping mean?${NC}"
+        echo -e "  Stopping a container halts all processes inside it, but preserves:"
+        echo -e "  • All your files and data in the workspace"
+        echo -e "  • The container configuration"
+        echo -e "  • Any changes you made inside the container"
+        echo -e "  You can restart it later with ${GREEN}container-run${NC} and continue where you left off."
+        echo ""
+    fi
+
     # Warning about running processes
     local process_count=$(docker exec "$container_tag" ps aux 2>/dev/null | wc -l)
     if [ "$process_count" -gt 5 ]; then
         echo -e "${YELLOW}⚠ Warning: Container has running processes${NC}"
+        if [ "$GUIDED" = true ]; then
+            echo -e "${CYAN}ℹ ${NC}This means training jobs, Jupyter notebooks, or other programs are still running."
+            echo -e "  They will be terminated when the container stops."
+        fi
         echo ""
     fi
 
     # Stop container
     if [ "$force" = true ]; then
         echo -e "${YELLOW}Force stopping...${NC}"
+        if [ "$GUIDED" = true ]; then
+            echo -e "${CYAN}ℹ ${NC}Force stop sends SIGKILL, immediately terminating all processes without cleanup."
+        fi
         if docker kill "$container_tag" > /dev/null 2>&1; then
             echo -e "${GREEN}✓${NC} Container force stopped"
             return 0
@@ -101,6 +123,9 @@ stop_container() {
         fi
     else
         echo -e "${CYAN}Stopping gracefully (timeout: ${timeout}s)...${NC}"
+        if [ "$GUIDED" = true ]; then
+            echo -e "${CYAN}ℹ ${NC}Graceful stop sends SIGTERM, allowing processes to save state and exit cleanly."
+        fi
         if docker stop -t "$timeout" "$container_tag" > /dev/null 2>&1; then
             echo -e "${GREEN}✓${NC} Container stopped"
             return 0
@@ -113,12 +138,17 @@ stop_container() {
 
 # Parse arguments
 CONTAINER_NAME=""
+GUIDED=false
 FORCE=false
 TIMEOUT=10
 STOP_ALL=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
         -f|--force)
             FORCE=true
             shift
@@ -131,7 +161,7 @@ while [[ $# -gt 0 ]]; do
             STOP_ALL=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;
@@ -191,8 +221,18 @@ if [ "$STOP_ALL" = true ]; then
     exit 0
 fi
 
+# If no container name provided, prompt to select running containers
+if [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
+    CONTAINER_NAME=$(select_container "running")
+    if [ -z "$CONTAINER_NAME" ]; then
+        echo "No selection made. Exiting."
+        exit 0
+    fi
+    echo ""
+fi
+
 # Validate container name
-if [ -z "$CONTAINER_NAME" ]; then
+if [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
     echo -e "${RED}✗ Container name is required${NC}\n"
     usage
     exit 1

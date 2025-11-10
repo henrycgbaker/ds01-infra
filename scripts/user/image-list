@@ -18,6 +18,7 @@ usage() {
     echo "  image-list [options]"
     echo ""
     echo -e "${CYAN}Options:${NC}"
+    echo "  --guided        Show detailed explanations for beginners"
     echo "  -a, --all       Show all images (not just yours)"
     echo "  -s, --size      Show image sizes"
     echo "  -d, --detailed  Show detailed information"
@@ -91,6 +92,26 @@ show_simple() {
     local filter="$1"
     local show_size="$2"
 
+    if [ "$GUIDED" = true ]; then
+        echo ""
+        echo -e "${CYAN}ℹ ${NC}${BOLD}Understanding Docker Images:${NC}"
+        echo -e "  A Docker image is like a template or snapshot that contains:"
+        echo -e "  • Operating system (usually Ubuntu)"
+        echo -e "  • Programming languages (Python, etc.)"
+        echo -e "  • Libraries and frameworks (PyTorch, TensorFlow, etc.)"
+        echo -e "  • Your custom packages and configurations"
+        echo ""
+        echo -e "${CYAN}ℹ ${NC}${BOLD}What the columns show:${NC}"
+        echo -e "  • ${BOLD}Repository${NC} - The image name (e.g., username-project-image)"
+        echo -e "  • ${BOLD}Tag${NC} - The version (usually 'latest' for most recent)"
+        echo -e "  • ${BOLD}Size${NC} - Disk space used by the image (if --size flag used)"
+        echo -e "  • ${BOLD}Created${NC} - How long ago the image was built"
+        echo ""
+        echo -e "${CYAN}ℹ ${NC}Containers are created FROM images. One image can be used"
+        echo -e "  to create multiple containers."
+        echo ""
+    fi
+
     if [ "$filter" = "all" ]; then
         if [ "$show_size" = "true" ]; then
             docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}"
@@ -128,12 +149,17 @@ show_simple() {
 }
 
 # Parse arguments
+GUIDED=false
 FILTER="user"
 SHOW_SIZE=false
 DETAILED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
         -a|--all)
             FILTER="all"
             shift
@@ -146,7 +172,7 @@ while [[ $# -gt 0 ]]; do
             DETAILED=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;

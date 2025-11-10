@@ -86,7 +86,7 @@ while [[ $# -gt 0 ]]; do
             GUIDED=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;

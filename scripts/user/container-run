@@ -4,6 +4,15 @@
 
 set -e
 
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+MLC_OPEN="/opt/aime-ml-containers/mlc-open"
+RESOURCE_PARSER="$INFRA_ROOT/docker/get_resource_limits.py"
+
+# Source interactive library
+source /usr/local/lib/interactive-select.sh
+
 # Colors
 BLUE='\033[94m'
 GREEN='\033[0;32m'
@@ -17,21 +26,16 @@ NC='\033[0m'
 USERNAME=$(whoami)
 USER_ID=$(id -u)
 
-# Script paths
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
-MLC_OPEN="/opt/aime-ml-containers/mlc-open"
-RESOURCE_PARSER="$INFRA_ROOT/docker/get_resource_limits.py"
-
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Run${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  container-run <name> [options]"
+    echo "  container-run [name] [options]"
+    echo "  container-run                    # Prompts to select container (if none specified)"
     echo ""
     echo -e "${CYAN}Arguments:${NC}"
-    echo "  name              Container name (required)"
+    echo "  name              Container name (optional - will prompt if not provided)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
@@ -62,7 +66,7 @@ while [[ $# -gt 0 ]]; do
             GUIDED=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;
@@ -83,6 +87,16 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# If no container name provided, prompt to select
+if [ -z "$CONTAINER_NAME" ]; then
+    CONTAINER_NAME=$(select_container)
+    if [ -z "$CONTAINER_NAME" ]; then
+        echo "No selection made. Exiting."
+        exit 0
+    fi
+    echo ""
+fi
 
 # Validate container name
 if [ -z "$CONTAINER_NAME" ]; then
@@ -121,9 +135,9 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${BOLD}Inside the Container:${NC}"
     echo ""
-    echo "  • Your workspace is at: ${CYAN}/workspace${NC}"
+    echo -e "at: ${CYAN}/workspace${NC}"
     echo "  • All your project files are there"
-    echo "  • You have Python, PyTorch/TensorFlow, and GPU access"
+    echo "  • You have Python, PyTorch/TensorFlow, and exitGPU access"
     echo "  • You can run scripts, start Jupyter, train models, etc."
     echo ""
     echo -e "${BOLD}Helpful Commands Inside:${NC}"
@@ -134,6 +148,31 @@ if [ "$GUIDED" = true ]; then
     echo -e "  ${GREEN}ll${NC}           List files"
     echo -e "  ${GREEN}exit-help${NC}    Show exit options"
     echo ""
+# ... Inside your container-run script, after the container is verified as running ...
+
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}🚀 IDE ACCESS: Connect to Container (VS Code)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+    echo -e "${YELLOW}💡 Prerequisite:${NC}"
+    echo -e "   - you have the ${BOLD}Dev Containers Extension${NC} installed in your local IDE."
+    echo ""
+
+    echo -e "${BOLD}1. Connect to the Remote Server:${NC}"
+    echo -e "   NB: this needs to be done through your IDE not via terminal SSH."
+    echo ""
+    echo -e "   Once connected to ${CYAN}ds01${NC}"...
+    echo ""
+    echo -e "${BOLD}2. Attach to the Container:${NC}"
+    echo -e "   a) Open the ${BOLD}Command Pallete${NC}" 
+    echo -e "         (Ctrl+Shift+P or Cmd+Shift+P)"
+    echo -e "   b) Select: ${GREEN}Dev Containers: Attach to Running Container...${NC}"
+    echo ""
+    echo -e "(OR, use Dev Containers GUI: far left tab, looks like a cargo container)"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
     echo -e "${BOLD}How to Exit:${NC}"
     echo ""
     echo -e "  ${YELLOW}Important: There are different ways to exit!${NC}"
@@ -141,15 +180,15 @@ if [ "$GUIDED" = true ]; then
     echo "  ${BOLD}Option 1: Exit Session (Container Keeps Running)${NC}"
     echo -e "    • Type ${GREEN}exit${NC} or press ${GREEN}Ctrl+D${NC}"
     echo "    • Your bash session ends"
-    echo "    • ${CYAN}Container keeps running in background${NC}"
+    echo -e "    • ${CYAN}Container keeps running in background${NC}"
     echo "    • You can re-enter anytime with: container-run $CONTAINER_NAME"
-    echo "    • ${BOLD}Use this most of the time!${NC}"
+    echo -e "    • ${BOLD}Use this most of the time!${NC}"
     echo ""
-    echo "  ${BOLD}Option 2: Stop Container (Free Resources)${NC}"
+    echo -e "  ${BOLD}Option 2: Stop Container (Free Resources)${NC}"
     echo "    • Exit first (type 'exit')"
     echo -e "    • Then run on host: ${GREEN}container-stop $CONTAINER_NAME${NC}"
     echo "    • Frees GPU and resources for others"
-    echo "    • ${BOLD}Use this when you're done for the day${NC}"
+    echo -e "    • ${BOLD}Use this when you're done for the day${NC}"
     echo ""
     echo -e "${YELLOW}💡 Remember:${NC} Your files in /workspace are ${BOLD}always safe${NC}"
     echo "   Stopping a container doesn't delete your files!"
@@ -204,8 +243,8 @@ if [ "$GUIDED" = true ]; then
     echo -e "${BOLD}What Just Happened?${NC}"
     echo ""
     echo "  • Your bash session inside the container ended"
-    echo "  • The container is ${GREEN}still running${NC} in the background"
-    echo "  • All your files in /workspace are ${BOLD}safe${NC}"
+    echo  -e "  • The container is ${GREEN}still running${NC} in the background"
+    echo  -e "  • All your files in /workspace are ${BOLD}safe${NC}"
     echo "  • GPU is still allocated to this container"
     echo ""
     echo -e "${BOLD}What You Can Do Now:${NC}"
@@ -218,7 +257,7 @@ if [ "$GUIDED" = true ]; then
     echo -e "  ${BOLD}2) Stop the Container (Free Resources)${NC}"
     echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
     echo "     Frees up GPU and resources for others"
-    echo "     ${DIM}Do this when you're done for the day${NC}"
+    echo  -e "     ${DIM}Do this when you're done for the day${NC}"
     echo ""
     echo -e "  ${BOLD}3) Check Container Status${NC}"
     echo -e "     ${GREEN}container-list${NC}"
@@ -231,10 +270,10 @@ if [ "$GUIDED" = true ]; then
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Important Reminders:${NC}"
     echo ""
-    echo "  • ${CYAN}Container running${NC} = GPU is allocated (even if idle)"
-    echo "  • ${CYAN}Stopping container${NC} = Frees GPU for others"
-    echo "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
-    echo "  • ${GREEN}You can restart${NC} anytime without losing work"
+    echo  -e "  • ${CYAN}Container running${NC} = GPU is allocated (even if idle)"
+    echo  -e "  • ${CYAN}Stopping container${NC} = Frees GPU for others"
+    echo  -e "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
+    echo  -e "  • ${GREEN}You can restart${NC} anytime without losing work"
     echo ""
     echo -e "${DIM}Be a good citizen: Stop containers when not actively using them!${NC}"
     echo ""
@@ -243,6 +282,8 @@ else
     # Non-guided: brief status
     # Check if container is still running
     if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+        echo -e "${DIM}Be a good citizen: Stop containers when not actively using them!${NC}"
+        echo ""
         echo -e "${GREEN}✓${NC} Container still running"
         echo ""
         echo -e "${BOLD}Reconnect:${NC}      ${GREEN}container-run $CONTAINER_NAME${NC}"
@@ -261,9 +302,9 @@ fi
 get_idle_timeout() {
     local username="$1"
     if [ -f "$RESOURCE_PARSER" ]; then
-        python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "48h"
+        python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "24h"
     else
-        echo "48h"
+        echo "24h"
     fi
 }
 
