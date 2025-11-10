@@ -26,7 +26,7 @@ for arg in "$@"; do
             # --info is the default behavior, just show info
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             echo ""
             echo -e "${BOLD}DS01 Container Exit Info${NC}"
             echo ""
