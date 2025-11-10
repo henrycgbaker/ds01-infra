@@ -3,6 +3,7 @@
 ### Questions for Huy
 - [ ] how to add users to server access (incl myself & new MDS cohort) 
     - [x] does IT manage that?
+    - [x] does IT manage that?
 - [ ] understand & document how to add users to server access 
     - need to know how to access their username / user_id for downstream workflows
 - [ ] how to get a message to current users -> begin migrating their work over to container workflow -> block bare metal access & clean up old containers
@@ -50,6 +51,7 @@
 
 ### Shared directories
 - [ ] (once /readonly & /collaborative sorted) set up shared datasets & models, etc
+- [ ] (once /readonly & /collaborative sorted) set up shared datasets & models, etc
 - [ ] move collaborative/ & read_only/ into data/ into srv (see server access & security chat) (and make sure scratch is auto-purged still)
 
 ### Documentation
@@ -70,10 +72,23 @@
 
 # Save Copy of Configs in Git Repo
 - [x] have a /usr-mirror in git hub repo as well as etc-mirror, for full documentation
+- [ ] architecture described as a '4 tiered structure'. Change to a '3 layer structure' 
+    - base: `mlc-*`, 
+    - then there's modular functionality implementation (& wrappers of the base layer),
+    - then there's the orchestrators as top 'wizard' layer
+
+# Logging
+- [x] set up initial logging script
+- [x] create sym link to reports in opts
+- [ ] add Grafana & Prometheus for logging
+
+# Save Copy of Configs in Git Repo
+- [x] have a /usr-mirror in git hub repo as well as etc-mirror, for full documentation
 
 
 ### Cron
 - [x] implemented some basic scripts, but I don't want them that regular, go back to change regularity & what they are outputting (currently excess info)
+- [x] set up initial crontab
 - [x] set up initial crontab
 - [x] Set up log rotation with 1-year retention
 - [ ] identify backup items
@@ -94,6 +109,10 @@
     - this will be the basis of the intelligent resource allocation
 - [ ] set up workflow that monitors which containers have been allocated which GPUs currently
     - plan for this fully documented [here](../docs-admin/gpu-allocation-implementation.md)
+    - incl resource allocation, user ID, name, etc
+    - this will be the basis of the intelligent resource allocation
+- [ ] set up workflow that monitors which containers have been allocated which GPUs currently
+    - plan for this fully documented [here](../docs-admin/gpu-allocation-implementation.md)
 - [ ] once have worked out how users are added / recorded -> update the system audit that tracks users 
     - [ ] + add a tracking of users logging in 
     - [ ] + add tracking of which users are doing which PIDs etc
@@ -110,6 +129,8 @@
     - incl all the config files in /etc/ and others
 
 # Containers
+
+### General Containers
 
 ### General Containers
 - [x] get it set up so it's launchable from VS Code rather than jupyter
@@ -240,16 +261,24 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 ### Files Needing Updates:
 - [x] `scripts/docker/mlc-create-wrapper.sh` - Integrate GPU allocator + priority + graceful errors
 - [x] `scripts/system/setup-resource-slices.sh` - Update for new YAML structure
+### Files Needing Updates:
+- [x] `scripts/docker/mlc-create-wrapper.sh` - Integrate GPU allocator + priority + graceful errors
+- [x] `scripts/system/setup-resource-slices.sh` - Update for new YAML structure
 
 
 
 # Configs
 - [ ] when fully set up: delete the setup scripts (in the /opt/scripts/system)
+# Configs
+- [ ] when fully set up: delete the setup scripts (in the /opt/scripts/system)
 
+# Miscellaneous
 # Miscellaneous
 
 
 # Partitioning & GPU allocation
+- [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
+- [x] Set up MIG vs MPS?
 - [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
 - [x] Set up MIG vs MPS?
 - [ ] I set up so that total GPUs allocated hard limit -> change it so that the user limits apply to the containers they can spin up (but not the number of containers total)? or maybe leave it so they have total limit -> means they have to close running containers
@@ -265,10 +294,17 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 - [ ] check: idle timeout -> how do i set it so that users can run training runs in background, but that it checks when it's done and shuts it if nothing happening?
     
 # cgroups
+# cgroups
 - [ ] not sure if i optimally set up cgroups correctly -> maybe within user-group slice, each user should then get their own slice -> can see how much each user is using (in logs / reports)? It would be useful to see who is doing what....
     - [ ] make sure cgroups & user groups are integrated together / consistent
 - [ ] I don't think this is set up properly: `systemctl status ds01.slice` shows it being inactive
 
+# User groups
+- [ ] sort out user groups (incl using docker-users in the scripts, rather than docker -> remove docker group)
+- [ ] sort out admin vs user vs docker etc scripts (admin is too broad -> it should be dissagregated by functionality)
+
+# File/Dir Clean Up of SSD
+- [ ] once identified current users -> send message out via dsl for saving important work -> begin deleting.
 # User groups
 - [ ] sort out user groups (incl using docker-users in the scripts, rather than docker -> remove docker group)
 - [ ] sort out admin vs user vs docker etc scripts (admin is too broad -> it should be dissagregated by functionality)
