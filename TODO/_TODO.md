@@ -196,18 +196,18 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 ### Image Create
 - [x] Add hard coded suffix "-image" to all images, move naming convention: "<project-name>-<user-id>-image"
     - [x] is there a way to tag the user ID, if so -> "<project-name>-image", with the user id as a tag
-    - [ ] NB: this renaming convention, might upset image-list command
-- [ ] BUG: when get to ```Create a custom Docker image? [Y/n]: y -> Unknown option: --type=ml``` => it crashes out / doesn't proceed. The issue is with `--type=ml???` Maybe just remove this `type`, is it useful/used?
-- [ ] I added in 'custom (specify everything) option for base image --> need to omplement this
-- [ ] make initial package installation more extensive (while having custom as the first option, also the default)
-- [ ] above theh add additional python packages, get it to list out (horizontally) the already included packages (categorised by 'base' and 'use case') -> users can see what they have and what they need to add
+    - [x] NB: this renaming convention, might upset image-list command
+- [x] BUG: when get to ```Create a custom Docker image? [Y/n]: y -> Unknown option: --type=ml``` => it crashes out / doesn't proceed. The issue is with `--type=ml???` Maybe just remove this `type`, is it useful/used?
+- [x] I added in 'custom (specify everything) option for base image --> need to omplement this
+- [x] make initial package installation more extensive (while having custom as the first option, also the default)
+- [x] above the add additional python packages, get it to list out the already included packages (categorised by 'default' and 'use case-specific') -> users can see what they have and what they need to add
 - [x] add ipykernel + pip to all image creations 
     - in general, work out what python libs to include as standard
-- [ ] if they try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
-- [ ] maybe just have this defult to no libraries installed? I'm not really sure how this works once a container is up and running how easy/hard it is to install packages... does it need to be pre-installed, or can you dynanmically add to them. 
+- [x] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
+- [x] maybe just have this defult to no libraries installed? I'm not really sure how this works once a container is up and running how easy/hard it is to install packages... does it need to be pre-installed, or can you dynanmically add to them. 
 - [ ] add in hugging face image (that uses hugging face rather than pytorch?)
 
-### Image list
+### Image list 
 - [ ] update based on naming changes in image create
 
 ### Image Update
