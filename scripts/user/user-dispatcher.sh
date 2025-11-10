@@ -24,13 +24,13 @@ show_usage() {
     echo "  user <subcommand> [args...]"
     echo ""
     echo -e "${BOLD}Subcommands:${NC}"
-    echo -e "  ${GREEN}setup${NC}, ${GREEN}new${NC}     Beginner-friendly project setup wizard"
+    echo -e "  ${GREEN}setup${NC}, ${GREEN}new${NC}     Educational first-time user onboarding wizard"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo -e "  ${CYAN}user setup${NC}           # Run beginner wizard"
+    echo -e "  ${CYAN}user setup${NC}           # Run educational onboarding wizard"
     echo -e "  ${CYAN}user new${NC}             # Same as above"
     echo ""
-    echo -e "${YELLOW}Tip:${NC} You can also use: ${CYAN}project-init-beginner${NC}"
+    echo -e "${YELLOW}Tip:${NC} You can also use: ${CYAN}user-setup${NC} or ${CYAN}new-user${NC}"
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
@@ -39,16 +39,16 @@ show_usage() {
 # Get subcommand
 SUBCOMMAND="${1:-}"
 
-if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" ] || [ "$SUBCOMMAND" = "--help" ]; then
+if [ -z "$SUBCOMMAND" ] || [ "$SUBCOMMAND" = "help" ] || [ "$SUBCOMMAND" = "-h" ] || [ "$SUBCOMMAND" = "--help" ] || [ "$SUBCOMMAND" = "--info" ]; then
     show_usage
     exit 0
 fi
 
-# Map subcommands to project-init-beginner
+# Map subcommands to user-setup
 case "$SUBCOMMAND" in
     setup|new)
         shift
-        exec "$SCRIPT_DIR/project-init-beginner" "$@"
+        exec "$SCRIPT_DIR/user-setup" "$@"
         ;;
     *)
         echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"

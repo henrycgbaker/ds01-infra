@@ -21,6 +21,7 @@ usage() {
     echo "  container-list [options]"
     echo ""
     echo -e "${CYAN}Options:${NC}"
+    echo "  --guided        Show detailed explanations for beginners"
     echo "  -a, --all       Show all containers (not just running)"
     echo "  -d, --detailed  Show detailed information"
     echo "  --format FORMAT Output format (table, simple, json)"
@@ -71,6 +72,20 @@ show_simple() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}${BOLD}    Your Containers${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "${CYAN}ℹ ${NC}${BOLD}Understanding Container Status:${NC}"
+        echo -e "  • ${GREEN}Running${NC} - Container is active and ready for work"
+        echo -e "  • ${DIM}Stopped${NC} - Container is paused but can be restarted"
+        echo -e "  • ${BLUE}Created${NC} - Container created but never started"
+        echo ""
+        echo -e "${CYAN}ℹ ${NC}${BOLD}What the columns show:${NC}"
+        echo -e "  • Status - Whether container is running or stopped"
+        echo -e "  • Image - The Docker image used (contains software and libraries)"
+        echo -e "  • Time - How long container has been running (or when it stopped)"
+        echo -e "  • GPU - Whether a GPU is allocated to this container"
+        echo ""
+    fi
 
     # Get containers
     local containers=$(docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null)
@@ -244,12 +259,17 @@ show_detailed() {
 }
 
 # Parse arguments
+GUIDED=false
 SHOW_ALL=false
 DETAILED=false
 FORMAT="simple"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
         -a|--all)
             SHOW_ALL=true
             shift
@@ -262,7 +282,7 @@ while [[ $# -gt 0 ]]; do
             FORMAT="$2"
             shift 2
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;

@@ -4,6 +4,9 @@
 
 set -e
 
+# Source interactive library
+source /usr/local/lib/interactive-select.sh
+
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -21,7 +24,8 @@ usage() {
     echo -e "${BOLD}Docker Image Updater${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  image-update <image-name> [options]"
+    echo "  image-update [image-name] [options]"
+    echo "  image-update                                 # Prompts to select image (if none specified)"
     echo "  image-update <image-name>                    # Interactive mode (default)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
@@ -404,7 +408,7 @@ while [[ $# -gt 0 ]]; do
             NO_CACHE=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;
@@ -425,6 +429,16 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# If no image name provided, prompt to select
+if [ -z "$IMAGE_NAME" ]; then
+    IMAGE_NAME=$(select_image)
+    if [ -z "$IMAGE_NAME" ]; then
+        echo "No selection made. Exiting."
+        exit 0
+    fi
+    echo ""
+fi
 
 # Validate image name
 if [ -z "$IMAGE_NAME" ]; then

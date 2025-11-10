@@ -2,7 +2,7 @@
 
 ### Questions for Huy
 - [ ] how to add users to server access (incl myself & new MDS cohort) 
-    - does IT manage that?
+    - [x] does IT manage that?
 - [ ] understand & document how to add users to server access 
     - need to know how to access their username / user_id for downstream workflows
 - [ ] how to get a message to current users -> begin migrating their work over to container workflow -> block bare metal access & clean up old containers
@@ -49,7 +49,7 @@
 - [ ] currently: users can't see within other users dirs -> change: they can't even see other users dirs (only can see their own /home, everything outside doesn't display)
 
 ### Shared directories
-- [ ] once /readonly & /collaborative sorted: set up shared datasets & models
+- [ ] (once /readonly & /collaborative sorted) set up shared datasets & models, etc
 - [ ] move collaborative/ & read_only/ into data/ into srv (see server access & security chat) (and make sure scratch is auto-purged still)
 
 ### Documentation
@@ -58,10 +58,23 @@
 - [x] admin docs
     - Cron; backup schedule and restoration process
     - ssh
+- [ ] architecture described as a '4 tiered structure'. Change to a '3 layer structure' 
+    - base: `mlc-*`, 
+    - then there's modular functionality implementation (& wrappers of the base layer),
+    - then there's the orchestrators as top 'wizard' layer
+
+# Logging
+- [x] set up initial logging script
+- [x] create sym link to reports in opts
+- [ ] add Grafana & Prometheus for logging
+
+# Save Copy of Configs in Git Repo
+- [x] have a /usr-mirror in git hub repo as well as etc-mirror, for full documentation
 
 
 ### Cron
 - [x] implemented some basic scripts, but I don't want them that regular, go back to change regularity & what they are outputting (currently excess info)
+- [x] set up initial crontab
 - [x] Set up log rotation with 1-year retention
 - [ ] identify backup items
     - /home dirs
@@ -77,11 +90,10 @@
 - [x] pull the CPU & GPU & Memory audit stuff about processes & usage into an an improved GPU & CPU & Memory logger (which is then turned into a daily report by the log_analysis_.sh script)
     - idea would be that logger is dynamic stuff, audit tells you general state of the system (a bit more static)
 - [ ] log containers being spun up / down, 
-    - incl resource allocation 
-    - user ID
-    - name
-    - etc
-- [ ] set up workflow that monitors which containers have been allocated which GPUs currently 
+    - incl resource allocation, user ID, name, etc
+    - this will be the basis of the intelligent resource allocation
+- [ ] set up workflow that monitors which containers have been allocated which GPUs currently
+    - plan for this fully documented [here](../docs-admin/gpu-allocation-implementation.md)
 - [ ] once have worked out how users are added / recorded -> update the system audit that tracks users 
     - [ ] + add a tracking of users logging in 
     - [ ] + add tracking of which users are doing which PIDs etc
@@ -98,62 +110,148 @@
     - incl all the config files in /etc/ and others
 
 # Containers
+
+### General Containers
 - [x] get it set up so it's launchable from VS Code rather than jupyter
-- [] create a wrapper for mlc-open that prints explanation
-    - explains you're now in /workspace
-    -  prints instructions to `exit` + explains what it means for it to be open + when to use `mlc-stop my-container` (when crashed)
-    - also workflow to keep container runnint while training, and how to reaccess it later
-- [ ] Set up `docker image prune` automation"
-- [x]Containers should run with user namespaces:
-        Add to /etc/docker/daemon.json:        {"userns-remap": "default"} NB I didn't do this, complicates gpu pids -> instead: cgroups
-- [ ] ds01-dashboard doesn't recognise containers
+- [ ] Set up `docker image prune` automation in cron
+- [ ] once containers robustly implmented, enformce container usage and block users from running scripts bare metal
+
+### CLI Ecosystem / Aliases ✅ COMPLETED (Nov 10, 2025)
+- [x] for all CLIs (symlinks): rename the instructions to follow consistent convention
+    - [x] e.g. rather than ds01-setup it is setup-wizard,
+    - [x] rather than mlc-create --show-limits => something like containers --show-limits
+    - [x] convention: ds01- prefix? => ds01-setup & ds01-container --show-limit & ds01- ????? (or maybe ds01- prefix for sysadming / server infra stuff, then more intuitive user-facing command naming)
+- [x] rename ds01-1 to container -run or something like that
+- [x] create another container creation wizard, that does similar things to the de01 setup wiard, but without the ssh configs etc, it jsut creates a new container (and a project directory? or maybe gives the recommended option to set up a new project folder for each new container so that it is is a container per project -> each project gets a container and a directory?)
+- [x] make sure the commands are all reachable not just be but by all users
+- [x] sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh
+- [x] Added --info flag support to all dispatchers and Tier 2 commands
+- [x] Completed --guided flag coverage across all 16 Tier 2 commands
+- [x] Created interactive GUI library for selection menus
+- [x] Implemented interactive prompts for image-update, image-delete, container-run, container-stop, container-cleanup
+- [x] Deprecated redundant scripts (create-custom-image.sh, manage-images.sh, student-setup.sh)
+- [x] Updated symlinks - added 14 new commands
+- [x] Fixed alias-list documentation errors
+- [ ] ds01-dashboard alias command doesn't do anything useful
+    - no MIG config recognised
+
+
+### User Setup Wizard
+- [x] the colour formatting (the blue is too dark + also some of the colour formatting doesn't seem to apply)
+- [x] mlc-stats not working
+- [x] can i block them from baremetal? -> yes
+- [x] check setup / create is correctly allocating resource limits
+- [x] improve the mlc-open output text to be more useful
+- [x] ds01-git-init doesn't work
+- [ ] confirm the initial ssh config setup makes sense
+- [ ] for the container name, does it make sense to have the username before? surely easier just to call it the image/project name?
+    - naming convention: <projet><username><container/image>?
+- [ ]  currently mlc-create --show-limits => again it makes more sense to have naming convention more intuitive
+    - [ ] i think this functionality got lost, but in the image / container Wizards, have clear arg for inspecting resource allocations
+- [ ] at all decision point: add clear defaults (ie. to press enter is usually just yes (to proceed). Enter should never default to exit
+- [ ] in the user setup, move the vs code setup to be just after ssh keys setup (i.e. before the dir & image setup: when choose no at ```⚠  Project directory already exists: /home/datasciencelab/workspace/test
+Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to 1) overwrite existing dir with new dir (incl warning), 2) rename new project, 3) exit
+- [ ] similarly for ```✓ You're already set up!Everything looks good. You can:.... Run full wizard anyway? [y/N]:  ``` if choose no, have graceful failover: options 1) skip to new project init,  2) skip to specific section (e.g. ssh keys / vs code configs / dir set up / new image / container run etc etc), 3) exit
+
+
+### Project Init
+- [ ] do i need the project type at the beginning? or is this basically redundant as i do package management in image creation? or does it serve a useful/diff purpose?
+- [ ] there's an error with a lot of the image types where it crashes out after this unknown option (maybe just remove this type part?): 
+        ```
+        Step 5: Docker Image
+        Create a custom Docker image? [Y/n]: y
+        Unknown option: --type=nlp
+        ```
+- [ ] I'm not really sure what the point of the requirements.txt is in this process? surely it's important to get the packages in the image, then the requirements.txt is just all of them? But project init creates a requirements.txt BEFORE creating an image??
+        ```
+        Step 4: Creating Project Files
+        Creating Project Files
+        Creating requirements.txt...
+        ✓ README.md created
+        ✓ requirements.txt created
+        ```
+
+### Image Create
+- [ ] BUG: when get to ```Create a custom Docker image? [Y/n]: y -> Unknown option: --type=ml``` => it crashes out / doesn't proceed. The issue is with `--type=ml???` Maybe just remove this `type`, is it useful/used?
+- [ ] add ipykernel + pip to all image creations 
+    - in general, work out what python libs to include as standard
+- [ ] have so that students can get up to 4 MIG instances, but setup wizard defaults to 1, but gives them the option to choose more
+- [ ] if they try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
+- [ ] maybe just have this defult to no libraries installed? I'm not really sure how this works once a container is up and running how easy/hard it is to install packages... does it need to be pre-installed, or can you dynanmically add to them. 
+- [ ] add in hugging face image (that uses hugging face rather than pytorch?)
+
+### Image Update
+- [ ] BUG: either the currently installed packages list is not up to date, or it's not able to add new packages correctly, or both. All my images have the same 4 "Current Python packages" listed, then whwenever you try to add more python packages, it says it's already in the dockerfile, no matter "which package.
+-  [ ] also the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
+
+### Container Create
+- [ ] BUG: `✗ mlc-create-wrapper not found at: /usr/local/docker/mlc-create-wrapper.sh
+    The system may not be fully configured.` 
+- [ ] (i think this already implemented:) also when just running container create, make the name optional (if not provided it opens up a full GUI, with name, ability to create custom image, or use existing template)
+- [ ] manually just add some initial explanation that to create a container we need an image (literally one line, add by hand)
+- [ ] make `container create` default to (1) a call to `image create` to create custom image, with possiblitlites to chose PyTorch or Tensorflow
+- [ ] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
+- [ ] (is this under `container create` or `container run`?) currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
+
+### Running Containers
+- [x] develop wrapper for mlc-open that prints explanation
+    - [x] explains you're now in /workspace, what that means etc
+    - [x] prints instructions to `exit` + explains what it means for it to be open + when to use `mlc-stop my-container` (when crashed)
+    - [ ] also explains workflow to keep container running while training (vs when will be auto stopped by system, and how to ask DSL if need for longer), and how to reaccess it later, etc
+- [ ] Containers should run with user namespaces:
+        - Add to /etc/docker/daemon.json:        {"userns-remap": "default"} NB I did NOT do this, complicates gpu pids -> instead use cgroups....
+        - currently if run through Dev Containers then it all works, but if run through `container run` which calls `mlc-create` then it doesn't display properly,
+- [ ] aesthetics: remove the last part: "[pset3_delete] exists and will be opened. > [pset3_delete] container already running. > [pset3_delete] opening shell to container... > (REMOVE FROM HERE:) To run a command as administrator (user "root"), use "sudo <command>". > See "man sudo_root" for details."
+
+- [ ] when INSIDE a container, make `alias-list` list all the available commands INSIDE container (just as alias-list lists availbale host commands when OUTSIDE container)
+- [ ] TODO: INTEGRATE DEV CONTAINERS INTO SCRIPTS / WIZARDS
+    - [ ] when using Dev Container: currently ALL images are visible -> need to set view permissions to only user's images -> can't view / start / stop / open / inspect othehr users' images!
+    - [ ] if integrate this workflow into a script: automate setting of the workspace!
+        - currently i just connects to /home/datasciencelab/ and if you try to connect it additionally to ...workspace/<workspace_name> it errors to it doesn't exist; I can navigate this with setting up configs in the Dev Container tools., but it seems to .... I THINK THIS GOT FIXED IF YOU CHANGE THE CONFIGURATION FILES TO BE "workspaceFolder": "/workspace" <-- they need to set `open folder` directory setup properly when running from Dev Containers directly 
+
+- WHEN SELECTING KERNEL IN JUPYTER NOTEBOOK IT RECOMMENDS TO DO QUICK CREATE THAT CREATES A VENV FROM WORKSPACE DEPENDENCEIS -> IS THAT ALL THE INLCUDED PACKAGES IN THE IMAGE?
 - [ ] when ready, set up the cgroups resource allocation & accounting (see scripts/system/setup-cgroups-slices)
-- SETUP WIZRD
-    - [ ] the colour formatting (the blue is too dark + also some of the colour formatting doesn't seem to apply)
-    - [ ] for the container name, does it make sense to have the username before? surely easier just to call it the image/project name?
-    - [ ]  currently mlc-create --show-limits => again it makes more sense to have naming convention more intuitive
-    - [ ] mlc-stats not working
-    - [x] can i block them from baremetal? -> yes: do once containers robustly implmented
-    - [ ] check setup / create is correctly allocating resource limits
-    - [ ] improve the mlc-open output text to be more useful
-    - [ ] exit currently auto closes the container (make it so it can run?) exit > [datasciencelab-test-4] detached from container, container keeps running > [datasciencelab-test-4] container is inactive, stopping container ... same even if do touch /workspace/.keep-alive.. currently there's no way to run containers after exit
-    - [ ] ds01-git-init doesn't work
-    - [ ] confirm the initial ssh config setup makes sense
-    - [ ] if they try to run a container beyond their limits, within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
-  - [ ] when robust -> enforce container usage
-  - [ ] have so that students can get up to 4 MIG instances, but setup wizard defaults to 1, but gives them the option to choose more
-  - [ ] update container allocation based on UUID 
 
-- [ ] for all CLIs (symlinks): rename the instructions to follow consistent convention 
-    - e.g. rather than ds01-setup it is setup-wizard, 
-    - rather than mlc-create --show-limits => something like containers --show-limits
-    - convention: ds01- prefix? => ds01-setup & ds01-container --show-limit & ds01- ????? (or maybe ds01- prefix for sysadming / server infra stuff, then more intuitive user-facing command naming)
+### Exiting Containers
+- [x] exit currently auto closes the container (make it so it can run?) exit > [datasciencelab-test-4] detached from container, container keeps running > [datasciencelab-test-4] container is inactive, stopping container ... same even if do touch /workspace/.keep-alive.. currently there's no way to run containers after exit
+- [ ] clarify the exit / detatch system 
+    - should be auto-stopped after 12(?) hrs, but with the option to request overrides 
+    - actually: the info IS there if you do --guided => add a miniumal amount of info there in the default (non guided)          
 
-- [ ] rename ds01-1 to container -run or something like that
-- [ ] create another container creation wizard, that does similar things to the de01 setup wiard, but without the ssh configs etc, it jsut creates a new container (and a project directory? or maybe gives the recommended option to set up a new project folder for each new container so that it is is a container per project -> each project gets a container and a directory?)
+- [ ] include explanation in --guided wizards for running / exiting / detatching containers
+    - [ ] when enter a container with container run -> have better print out for available commands / how to use it / how long it will run for / how to exit it (detatch/exit/stop) (I thought I had this, where has it gone???)
+- related: CONTAINER STOP
+    - [ ] increase timeout >10s?
+    - [ ] add default Yes to ```⚠ This will STOP the container...Continue? [y/N]: ```
 
-- [ ] currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
-    - [ ] or at the very least get ds01-setup wizard to call ds01-run
+### Container Cleanup
+- [ ] buggy
 
-    ### Files Needing Updates:
-- [ ] `scripts/docker/mlc-create-wrapper.sh` - Integrate GPU allocator + priority + graceful errors
-- [ ] `scripts/system/setup-resource-slices.sh` - Update for new YAML structure
+### Container Stats 
+- [ ] buggy: "unknown flag: --filter"
+- [ ] check the description is correct
 
+# Resource Allocation
+- [ ] update container allocation based on UUID system (see `/docs-admin/gpu-allocation-implementation.md`)
 
-# Wizards 
-- [x] make sure the commands are all reachable not just be but by all users 
-- [x] sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh 
+# Robustness Checks
+- [ ] test for local / admin / student / researcher users
+
+### Files Needing Updates:
+- [x] `scripts/docker/mlc-create-wrapper.sh` - Integrate GPU allocator + priority + graceful errors
+- [x] `scripts/system/setup-resource-slices.sh` - Update for new YAML structure
 
 
-- [ ] use .link files for all the other mirrors?? what are they?
 
-- [ ] delete all setup scripts (in the scripts/system
-)
+# Configs
+- [ ] when fully set up: delete the setup scripts (in the /opt/scripts/system)
+
+# Miscellaneous
 
 
 # Partitioning & GPU allocation
-- [ ] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
-- [ ] Set up MIG vs MPS?
+- [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
+- [x] Set up MIG vs MPS?
 - [ ] I set up so that total GPUs allocated hard limit -> change it so that the user limits apply to the containers they can spin up (but not the number of containers total)? or maybe leave it so they have total limit -> means they have to close running containers
 - [ ] currently my resource allocation is by GPU -> instead, it should be by MIG partition (?) -> rename in the resource-limits.yaml to max_mig
 - [ ] scripts/docker/mlc-create-wrapper.sh - Needs GPU allocator integration!!!!
@@ -166,32 +264,16 @@
 - [ ] check, is max_mig_per_user
 - [ ] check: idle timeout -> how do i set it so that users can run training runs in background, but that it checks when it's done and shuts it if nothing happening?
     
-
+# cgroups
 - [ ] not sure if i optimally set up cgroups correctly -> maybe within user-group slice, each user should then get their own slice -> can see how much each user is using (in logs / reports)? It would be useful to see who is doing what....
     - [ ] make sure cgroups & user groups are integrated together / consistent
-
-
-# cgroups
 - [ ] I don't think this is set up properly: `systemctl status ds01.slice` shows it being inactive
 
-# clean up
-- [ ] once identified currnet users -> send message out via dsl for saving important work -> begin deleting.
+# User groups
+- [ ] sort out user groups (incl using docker-users in the scripts, rather than docker -> remove docker group)
+- [ ] sort out admin vs user vs docker etc scripts (admin is too broad -> it should be dissagregated by functionality)
+
+# File/Dir Clean Up of SSD
+- [ ] once identified current users -> send message out via dsl for saving important work -> begin deleting.
 - [ ] many remaining images to clean up (`sudo docker images`) -> `sudo docker image prune -a`
 
-# logging
-- [ ] create sym link to reports in opts
-- [ ] add grafana & prometheus
-
-# /usr-mirror & etc-mirror/
-- [ ] have a /usr-mirror in git hub repo as well as etc-mirror, for full documentation
-- [ ] 
-
-
-
-
-# Done
-- [x] set up git repo
-- [x] set system groups and encrpytd group passwords immutable & protected
-- [x] set up audit script
-- [x] set up logging script
-- [x] set up initial crontab

@@ -24,6 +24,7 @@ usage() {
     echo "  name              Specific container to show (optional)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
+    echo "  --guided          Show detailed explanations for beginners"
     echo "  -w, --watch       Continuous monitoring (refresh every 2s)"
     echo "  -g, --gpu         Show GPU stats (if available)"
     echo "  --no-trunc        Don't truncate output"
@@ -124,6 +125,22 @@ show_container_stats() {
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${CYAN}${BOLD}    Container Resource Usage${NC}"
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+        if [ "$GUIDED" = true ]; then
+            echo -e "${CYAN}ℹ ${NC}${BOLD}Understanding Resource Metrics:${NC}"
+            echo -e "  • ${BOLD}CPU %${NC} - Percentage of CPU cores being used (can exceed 100% on multi-core)"
+            echo -e "  • ${BOLD}MEM USAGE${NC} - Current memory consumption / allocated limit"
+            echo -e "  • ${BOLD}MEM %${NC} - Percentage of allocated memory being used"
+            echo -e "  • ${BOLD}NET I/O${NC} - Network data received / sent"
+            echo -e "  • ${BOLD}BLOCK I/O${NC} - Disk data read / written"
+            echo -e "  • ${BOLD}PIDS${NC} - Number of processes running in the container"
+            echo ""
+            echo -e "${CYAN}ℹ ${NC}${BOLD}Color Coding:${NC}"
+            echo -e "  • ${GREEN}Green${NC} - Healthy usage (<70%)"
+            echo -e "  • ${YELLOW}Yellow${NC} - Moderate usage (70-90%)"
+            echo -e "  • ${RED}Red${NC} - High usage (>90%) - may need more resources"
+            echo ""
+        fi
     else
         clear
         echo -e "${CYAN}${BOLD}Live Container Stats${NC} ${DIM}(Ctrl+C to exit)${NC}\n"
@@ -211,11 +228,16 @@ show_container_stats() {
 
 # Parse arguments
 CONTAINER_NAME=""
+GUIDED=false
 WATCH_MODE=false
 SHOW_GPU=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
         -w|--watch)
             WATCH_MODE=true
             shift
@@ -228,7 +250,7 @@ while [[ $# -gt 0 ]]; do
             # Docker stats option, pass through
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;

@@ -22,14 +22,9 @@ echo -e "${CYAN}─────────────────────�
 echo ""
 
 echo -e "${BOLD}Setup & Configuration:${NC}"
-echo -e "  ${GREEN}project-init${NC}           Create new project (quick mode)"
-echo -e "  ${GREEN}project init${NC}           Same as above"
-echo -e "  ${GREEN}project-init --guided${NC}  Beginner mode with detailed explanations"
-echo -e "  ${GREEN}project init --guided${NC}  Same as above"
-echo ""
-echo -e "${DIM}Legacy aliases (still work):${NC}"
-echo -e "  ${DIM}new-project  →  project-init${NC}"
-echo -e "  ${DIM}new-user     →  project-init --guided${NC}"
+echo -e "  ${GREEN}user setup${NC}             Educational first-time user onboarding wizard"
+echo -e "       ${GREEN}also: user new${NC} "          
+echo -e "  ${GREEN}project init${NC}           Create new project"
 echo ""
 
 echo -e "${BOLD}Container Management:${NC}"
@@ -41,8 +36,6 @@ echo -e "  ${GREEN}container list${NC}       List your containers"
 echo -e "  ${GREEN}container stats${NC}      Resource usage statistics"
 echo -e "  ${GREEN}container cleanup${NC}    Remove stopped containers"
 echo ""
-echo -e "  ${YELLOW}Hyphenated forms also work:${NC} container-create, container-list, etc."
-echo ""
 
 echo -e "${BOLD}Image Management:${NC}"
 echo -e "  ${GREEN}image create${NC}         Create custom Docker image"
@@ -51,8 +44,22 @@ echo -e "  ${GREEN}image update${NC}         Rebuild/update an image"
 echo -e "  ${GREEN}image delete${NC}         Remove unused images"
 echo ""
 
-echo -e "${BOLD}Project Management:${NC}"
-echo -e "  ${GREEN}project init${NC}         Create new data science project (same as new-project)"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e " ${YELLOW}Hyphenated forms also work:${NC} container-create, container-list, etc."
+echo ""
+echo ""
+echo -e " ${YELLOW}Command Flag Conventions:${NC}"
+echo ""
+echo -e "  ${BOLD}All commands support:${NC}"
+echo -e "    ${CYAN}-h, --help, --info${NC}       Show help/usage information"
+echo -e "    ${CYAN}--guided${NC}                 Beginner mode with detailed explanations"
+echo ""
+echo ""
+echo -e "${BOLD}Tips:${NC}"
+echo -e "  • All container/image commands work in both forms"
+echo -e "  • Use ${CYAN}--guided${NC} flag on any Tier 2 command for explanations"
+echo -e "  • Use ${CYAN}--info${NC} on dispatchers for subcommand list"
+echo -e "  • Admin commands require appropriate permissions"
 echo ""
 
 # Container Internal Aliases
@@ -63,8 +70,7 @@ echo -e "${YELLOW}These aliases are available inside containers:${NC}"
 echo ""
 
 echo -e "${BOLD}Exit & Navigation:${NC}"
-echo -e "  ${GREEN}detach${NC}               Show Ctrl+P,Ctrl+Q reminder (exit without stopping)"
-echo -e "  ${GREEN}exit-stop${NC}            Show exit/Ctrl+D reminder (exit and stop)"
+echo -e "  ${GREEN}exit${NC}                 Exit container (docker exec sessions exit immediately)"
 echo -e "  ${GREEN}exit-help${NC}            Show all exit options"
 echo -e "  ${GREEN}ws${NC} / ${GREEN}cdw${NC}             Go to /workspace"
 echo -e "  ${GREEN}ll${NC}                   List files (ls -lah)"
@@ -104,6 +110,21 @@ echo -e "  ${GREEN}alias-list${NC}           List all commands (this screen)"
 echo -e "  ${GREEN}alias-create${NC}         Create custom command alias"
 echo ""
 
+# Custom Aliases
+echo -e "${BOLD}CUSTOM USER ALIASES${NC}"
+echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+
+if [ -f ~/.bash_aliases ] && grep -q "ds01" ~/.bash_aliases 2>/dev/null; then
+    echo ""
+    grep "ds01\|container\|image\|project" ~/.bash_aliases | while read -r line; do
+        echo -e "  $line"
+    done
+else
+    echo -e "${YELLOW}  No custom aliases found${NC}"
+    echo -e "  Create one with: ${CYAN}alias-create${NC}"
+fi
+echo ""
+
 # System Symlinks
 echo -e "${BOLD}ACTIVE SYMLINKS IN /usr/local/bin${NC}"
 echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
@@ -124,28 +145,4 @@ if [ -d /usr/local/bin ]; then
 else
     echo -e "${YELLOW}  /usr/local/bin not accessible${NC}"
 fi
-echo ""
-
-# Custom Aliases
-echo -e "${BOLD}CUSTOM USER ALIASES${NC}"
-echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
-
-if [ -f ~/.bash_aliases ] && grep -q "ds01" ~/.bash_aliases 2>/dev/null; then
-    echo ""
-    grep "ds01\|container\|image\|project" ~/.bash_aliases | while read -r line; do
-        echo -e "  $line"
-    done
-else
-    echo -e "${YELLOW}  No custom aliases found${NC}"
-    echo -e "  Create one with: ${CYAN}alias-create${NC}"
-fi
-echo ""
-
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "${BOLD}Tips:${NC}"
-echo -e "  • All container/image commands work in both forms:"
-echo -e "    ${CYAN}container list${NC} or ${CYAN}container-list${NC}"
-echo -e "  • Run any command with ${CYAN}--help${NC} for detailed usage"
-echo -e "  • Admin commands require appropriate permissions"
 echo ""

@@ -384,6 +384,8 @@ When modifying resource allocation logic:
 - **Docker group**: Use standard `docker` group for Docker socket access
 - **Image naming**: Always `{project}-image` format (e.g., `my-thesis-image`)
 - **Command dispatchers**: Support both forms: `command subcommand` and `command-subcommand`
+- **Flag conventions**: All commands support `-h`, `--help`, and `--info` for help; Tier 2 commands support `--guided`
+- **Interactive selection**: Source `/opt/ds01-infra/scripts/lib/interactive-select.sh` for menu prompts when args missing
 
 ## Dependencies
 
@@ -409,6 +411,18 @@ When modifying resource allocation logic:
 - Users must be added to `docker` group for Docker socket access
 
 ## Recent Changes (November 2025)
+
+**CLI Ecosystem Overhaul (November 10, 2025):**
+- Added `--info` flag support: All dispatchers and Tier 2 commands now accept `--info` as alias for `--help`
+- Completed `--guided` flag coverage: All 16 Tier 2 commands now support educational beginner mode
+- New interactive GUI library: Commands prompt user to select containers/images when no argument provided
+- Interactive selection: `image-update`, `image-delete`, `container-run`, `container-stop`, `container-cleanup`
+- Deprecated redundant scripts: Moved `create-custom-image.sh`, `manage-images.sh`, `student-setup.sh` to `_deprecated/`
+- Updated symlinks: Added 14 new commands (container-dashboard, gpu-dashboard, audit-*, etc.)
+- Fixed documentation: Corrected alias-list errors, removed misleading Ctrl+P/Ctrl+Q references
+- New shared library: `/opt/ds01-infra/scripts/lib/interactive-select.sh` for reusable selection functions
+
+## Recent Changes (November 2025 - Previous)
 
 **User Onboarding Overhaul:**
 - New dual onboarding workflows: `user-setup` (educational) and `new-project` (streamlined)

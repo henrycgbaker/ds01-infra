@@ -1,6 +1,9 @@
 #!/bin/bash
 # Clean up stopped containers and unused resources
 
+# Source interactive library
+source /usr/local/lib/interactive-select.sh
+
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -19,11 +22,13 @@ usage() {
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-cleanup [name] [options]"
+    echo "  container-cleanup                    # Prompts to select cleanup action (if none specified)"
     echo ""
     echo -e "${CYAN}Arguments:${NC}"
-    echo "  name              Specific container to remove (optional)"
+    echo "  name              Specific container to remove (optional - will prompt if not provided)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
+    echo "  --guided          Show detailed explanations for beginners"
     echo "  -a, --all         Remove ALL your stopped containers"
     echo "  -i, --images      Also remove unused images"
     echo "  -f, --force       Skip confirmation prompts"
@@ -273,6 +278,7 @@ cleanup_volumes() {
 
 # Parse arguments
 CONTAINER_NAME=""
+GUIDED=false
 CLEANUP_ALL=false
 CLEANUP_IMAGES=false
 CLEANUP_VOLUMES=false
@@ -281,6 +287,10 @@ DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
         -a|--all)
             CLEANUP_ALL=true
             shift
@@ -301,7 +311,7 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
-        -h|--help)
+        -h|--help|--info)
             usage
             exit 0
             ;;
@@ -327,8 +337,40 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo -e "${CYAN}${BOLD}    Container Cleanup${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}ℹ ${NC}${BOLD}What cleanup removes:${NC}"
+    echo -e "  • ${BOLD}Containers${NC} - Only stopped containers (not running ones)"
+    echo -e "  • ${BOLD}Images${NC} - Only unused/dangling images (with --images flag)"
+    echo -e "  • ${BOLD}Volumes${NC} - Only anonymous volumes not attached to containers (with --volumes flag)"
+    echo ""
+    echo -e "${RED}⚠ Important:${NC} ${BOLD}What is NOT removed:${NC}"
+    echo -e "  • ${GREEN}✓${NC} Your workspace files (always safe)"
+    echo -e "  • ${GREEN}✓${NC} Running containers"
+    echo -e "  • ${GREEN}✓${NC} Container configurations"
+    echo -e "  • ${GREEN}✓${NC} Dockerfiles"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Why cleanup?${NC}"
+    echo -e "  Over time, stopped containers accumulate and consume disk space."
+    echo -e "  Regular cleanup keeps the system healthy and frees resources."
+    echo -e "  You can always recreate containers with ${GREEN}container-create${NC}."
+    echo ""
+fi
+
 if [ "$DRY_RUN" = "true" ]; then
     echo -e "${YELLOW}━━━ DRY RUN MODE ━━━${NC}\n"
+fi
+
+# If no container name or --all flag, prompt to select stopped container
+if [ -z "$CONTAINER_NAME" ] && [ "$CLEANUP_ALL" = false ]; then
+    echo -e "${CYAN}Select stopped container to remove:${NC}"
+    echo -e "${DIM}(Tip: Use --all to remove all stopped containers)${NC}"
+    echo ""
+    CONTAINER_NAME=$(select_container "stopped")
+    if [ -z "$CONTAINER_NAME" ]; then
+        echo "No selection made. Exiting."
+        exit 0
+    fi
+    echo ""
 fi
 
 # Clean specific container
