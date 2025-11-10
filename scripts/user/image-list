@@ -40,7 +40,8 @@ show_detailed() {
     if [ "$filter" = "all" ]; then
         images=$(docker images --format "{{.Repository}}" | grep -v "^<none>$" || true)
     else
-        images=$(docker images --format "{{.Repository}}" | grep "^${USERNAME}-" || true)
+        # Filter by maintainer label instead of name
+        images=$(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" || true)
     fi
 
     if [ -z "$images" ]; then
@@ -102,7 +103,7 @@ show_simple() {
         echo -e "  • Your custom packages and configurations"
         echo ""
         echo -e "${CYAN}ℹ ${NC}${BOLD}What the columns show:${NC}"
-        echo -e "  • ${BOLD}Repository${NC} - The image name (e.g., username-project-image)"
+        echo -e "  • ${BOLD}Repository${NC} - The image name (e.g., project-username-image)"
         echo -e "  • ${BOLD}Tag${NC} - The version (usually 'latest' for most recent)"
         echo -e "  • ${BOLD}Size${NC} - Disk space used by the image (if --size flag used)"
         echo -e "  • ${BOLD}Created${NC} - How long ago the image was built"
@@ -122,14 +123,14 @@ show_simple() {
         echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}\n"
 
         if [ "$show_size" = "true" ]; then
-            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" \
-                --filter "reference=${USERNAME}-*"
+            docker images --filter "label=maintainer=$USERNAME" \
+                --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}"
         else
-            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" \
-                --filter "reference=${USERNAME}-*"
+            docker images --filter "label=maintainer=$USERNAME" \
+                --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}"
         fi
 
-        local count=$(docker images --format "{{.Repository}}" --filter "reference=${USERNAME}-*" | wc -l)
+        local count=$(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" | wc -l)
 
         echo ""
         if [ "$count" -eq 0 ]; then
@@ -139,11 +140,14 @@ show_simple() {
         else
             echo -e "${BOLD}Total:${NC} $count image(s)"
             echo ""
-            echo -e "${YELLOW}💡 Tips:${NC}"
-            echo "  • Create container: ${GREEN}container-create <image-name>${NC}"
-            echo "  • Update image: ${GREEN}image-update <image-name>${NC}"
-            echo "  • Delete image: ${GREEN}image-delete <image-name>${NC}"
-            echo "  • Detailed view: ${GREEN}image-list --detailed${NC}"
+            
+            if [ "$GUIDED" = true ]; then
+                echo -e "${YELLOW}💡 Tips:${NC}"
+                echo -e "  • Create container: ${GREEN}container-create <image-name>${NC}"
+                echo -e "  • Update image: ${GREEN}image-update <image-name>${NC}"
+                echo -e "  • Delete image: ${GREEN}image-delete <image-name>${NC}"
+                echo -e "  • Detailed view: ${GREEN}image-list --detailed${NC}"
+            fi
         fi
     fi
 }

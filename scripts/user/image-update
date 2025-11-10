@@ -1,11 +1,11 @@
 #!/bin/bash
-# Enhanced Docker Image Updater with Interactive Package Management
+# Docker Image Updater with Interactive Package Management
 # Supports adding/removing packages without manual Dockerfile editing
 
 set -e
 
 # Source interactive library
-source /usr/local/lib/interactive-select.sh
+source /usr/local/lib/interactive-select.sh # I phased this out?
 
 BLUE='\033[94m'
 GREEN='\033[0;32m'
@@ -120,9 +120,13 @@ add_python_packages() {
     # Add packages to the last pip install section
     # We'll insert them before the last package (which might have no backslash)
     for pkg in "${packages[@]}"; do
-        # Check if package already exists
-        if grep -q "$pkg" "$dockerfile"; then
-            echo -e "${YELLOW}  ⚠ $pkg already in Dockerfile, skipping${NC}"
+        # Extract base package name (remove version specifiers like ==, >=, etc.)
+        local pkg_base=$(echo "$pkg" | sed 's/[=><!].*//')
+
+        # Check if package already exists in pip install lines
+        # Use word boundary match to avoid false positives (e.g., "torch" vs "pytorch")
+        if grep -E "RUN pip install|pip install --no-cache-dir" "$dockerfile" | grep -qw "$pkg_base"; then
+            echo -e "${YELLOW}  ⚠ $pkg_base already in Dockerfile, skipping${NC}"
             continue
         fi
 

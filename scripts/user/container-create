@@ -136,24 +136,20 @@ if [ -z "$CONTAINER_NAME" ]; then
     echo -e "${BOLD}DS01 Container Creation Wizard${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "Let's create your container step-by-step."
-    echo ""
 
     # Step 1: Image source (CHANGED: now comes first!)
-    echo -e "${BOLD}Step 1: Docker Image${NC}"
+    echo -e "---${BOLD}Step 1: Docker Image${NC} (required)---"
     echo ""
-    echo "Containers are created from Docker images (blueprints with all software)."
+    echo "Containers are created from Docker images as blueprints. Choose an image option:"
     echo ""
-    echo "Choose an option:"
-    echo ""
-    echo -e "  ${BOLD}1)${NC} Use existing image ${GREEN}(recommended if you have one)${NC}"
+    echo -e "  ${BOLD}1) Use existing image${NC}"
     echo "     Select from images already built on this system"
     echo ""
-    echo -e "  ${BOLD}2)${NC} Create custom image"
+    echo -e "  ${BOLD}2) Create custom image${NC}"
     echo "     Build a new image with your choice of framework and packages"
     echo ""
-    echo -e "  ${BOLD}3)${NC} Use base framework (PyTorch/TensorFlow)"
-    echo "     Quick start with standard frameworks (no customization)"
+    echo -e "  ${BOLD}3) Use base framework${NC} (PyTorch/TensorFlow)"
+    echo "     Quick start with standard frameworks (no customisation)"
     echo ""
     read -p "Choice [1-3, default: 1]: " IMAGE_CHOICE </dev/tty
     IMAGE_CHOICE=${IMAGE_CHOICE:-1}
@@ -171,8 +167,6 @@ if [ -z "$CONTAINER_NAME" ]; then
                 AVAILABLE_IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "$USERNAME-|pytorch|tensorflow" | grep -v "<none>" | sort)
 
                 if [ -n "$AVAILABLE_IMAGES" ]; then
-                    echo "Your images:"
-                    echo ""
 
                     # Create array and display with numbers
                     mapfile -t IMAGE_ARRAY <<< "$AVAILABLE_IMAGES"
