@@ -139,32 +139,18 @@ if [ -z "$CONTAINER_NAME" ]; then
     echo "Let's create your container step-by-step."
     echo ""
 
-    # Step 1: Container name
-    echo -e "${BOLD}Step 1: Container Name${NC}"
+    # Step 1: Image source (CHANGED: now comes first!)
+    echo -e "${BOLD}Step 1: Docker Image${NC}"
     echo ""
-    echo "Choose a name for your container (e.g., my-project, thesis-cv, nlp-exp)"
-    echo ""
-    read -p "Container name: " CONTAINER_NAME </dev/tty
-
-    if [ -z "$CONTAINER_NAME" ]; then
-        echo -e "${RED}✗ Container name cannot be empty${NC}"
-        exit 1
-    fi
-
-    echo ""
-
-    # Step 2: Image source
-    echo -e "${BOLD}Step 2: Docker Image${NC}"
-    echo ""
-    echo "Your container needs a Docker image (the blueprint with all software)."
+    echo "Containers are created from Docker images (blueprints with all software)."
     echo ""
     echo "Choose an option:"
     echo ""
-    echo -e "  ${BOLD}1)${NC} Create custom image ${GREEN}(recommended)${NC}"
-    echo "     Build a new image with your choice of framework and packages"
-    echo ""
-    echo -e "  ${BOLD}2)${NC} Use existing image"
+    echo -e "  ${BOLD}1)${NC} Use existing image ${GREEN}(recommended if you have one)${NC}"
     echo "     Select from images already built on this system"
+    echo ""
+    echo -e "  ${BOLD}2)${NC} Create custom image"
+    echo "     Build a new image with your choice of framework and packages"
     echo ""
     echo -e "  ${BOLD}3)${NC} Use base framework (PyTorch/TensorFlow)"
     echo "     Quick start with standard frameworks (no customization)"
@@ -175,8 +161,106 @@ if [ -z "$CONTAINER_NAME" ]; then
 
     case $IMAGE_CHOICE in
         1)
+            # Use existing image
+            echo -e "${CYAN}━━━ Available Images ━━━${NC}"
+            echo ""
+
+            # List available images
+            if command -v docker &>/dev/null; then
+                # Get all images with username prefix or standard frameworks
+                AVAILABLE_IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "$USERNAME-|pytorch|tensorflow" | grep -v "<none>" | sort)
+
+                if [ -n "$AVAILABLE_IMAGES" ]; then
+                    echo "Your images:"
+                    echo ""
+
+                    # Create array and display with numbers
+                    mapfile -t IMAGE_ARRAY <<< "$AVAILABLE_IMAGES"
+                    IMAGE_COUNT=${#IMAGE_ARRAY[@]}
+
+                    for i in "${!IMAGE_ARRAY[@]}"; do
+                        IMG="${IMAGE_ARRAY[$i]}"
+                        # Extract just the repository name (remove tag)
+                        IMG_REPO="${IMG%:*}"
+                        echo -e "  ${BOLD}$((i+1)))${NC} $IMG_REPO"
+                    done
+                    echo ""
+
+                    read -p "Select image [1-$IMAGE_COUNT]: " IMG_SELECTION </dev/tty
+
+                    if [[ "$IMG_SELECTION" =~ ^[0-9]+$ ]] && [ "$IMG_SELECTION" -ge 1 ] && [ "$IMG_SELECTION" -le "$IMAGE_COUNT" ]; then
+                        SELECTED_IMAGE="${IMAGE_ARRAY[$((IMG_SELECTION-1))]}"
+                        # Extract repository name only (no tag)
+                        IMAGE_OR_FRAMEWORK="${SELECTED_IMAGE%:*}"
+
+                        echo ""
+                        echo -e "${GREEN}✓${NC} Selected image: ${CYAN}$IMAGE_OR_FRAMEWORK${NC}"
+                        echo ""
+
+                        # Derive container name from image name
+                        # Remove username prefix and -image suffix if present
+                        CONTAINER_NAME="$IMAGE_OR_FRAMEWORK"
+                        CONTAINER_NAME="${CONTAINER_NAME#$USERNAME-}"  # Remove username prefix
+                        CONTAINER_NAME="${CONTAINER_NAME%-image}"      # Remove -image suffix
+
+                        echo -e "${BOLD}Step 2: Container Name${NC}"
+                        echo ""
+                        echo -e "Default name based on image: ${CYAN}$CONTAINER_NAME${NC}"
+                        echo ""
+                        read -p "Use this name or enter a different one [$CONTAINER_NAME]: " CUSTOM_NAME </dev/tty
+
+                        if [ -n "$CUSTOM_NAME" ]; then
+                            CONTAINER_NAME="$CUSTOM_NAME"
+                        fi
+                        echo ""
+                    else
+                        echo -e "${RED}✗ Invalid selection${NC}"
+                        exit 1
+                    fi
+                else
+                    echo "No custom images found."
+                    echo ""
+                    echo "Would you like to create a new image instead?"
+                    read -p "Create new image? [Y/n]: " CREATE_NEW </dev/tty
+                    if [[ ! "$CREATE_NEW" =~ ^[Yy]$ ]] && [[ ! -z "$CREATE_NEW" ]]; then
+                        echo "Cancelled."
+                        exit 0
+                    fi
+                    # Fall through to create custom image
+                    IMAGE_CHOICE=2
+                    echo ""
+                fi
+            else
+                echo -e "${RED}✗ Docker not available${NC}"
+                exit 1
+            fi
+
+            # Skip to GPU mode if we selected an existing image
+            if [ "$IMAGE_CHOICE" = "1" ] && [ -n "$IMAGE_OR_FRAMEWORK" ]; then
+                # Jump to GPU mode section
+                :  # No-op, we'll handle GPU mode after the case statement
+            fi
+            ;;
+
+        2)
             # Create custom image
             echo -e "${CYAN}━━━ Creating Custom Image ━━━${NC}"
+            echo ""
+
+            # Image name (ask first!)
+            echo -e "${BOLD}Image Name${NC}"
+            echo ""
+            echo "Choose a name for your image (e.g., my-project, thesis-cv, nlp-exp)"
+            echo ""
+            read -p "Image name: " IMAGE_BASE_NAME </dev/tty
+
+            if [ -z "$IMAGE_BASE_NAME" ]; then
+                echo -e "${RED}✗ Image name cannot be empty${NC}"
+                exit 1
+            fi
+
+            # Sanitize image name
+            IMAGE_BASE_NAME=$(echo "$IMAGE_BASE_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
             echo ""
 
             # Framework selection
@@ -227,7 +311,7 @@ if [ -z "$CONTAINER_NAME" ]; then
             echo -e "${CYAN}Building custom image...${NC}"
             echo ""
 
-            IMAGE_BUILD_ARGS=("${CONTAINER_NAME}-image" "-f" "$FRAMEWORK_NAME" "-t" "$USE_CASE_TYPE")
+            IMAGE_BUILD_ARGS=("${IMAGE_BASE_NAME}-image" "-f" "$FRAMEWORK_NAME" "-t" "$USE_CASE_TYPE")
 
             if [ -n "$EXTRA_PACKAGES" ]; then
                 IMAGE_BUILD_ARGS+=("-p" "$EXTRA_PACKAGES")
@@ -236,10 +320,14 @@ if [ -z "$CONTAINER_NAME" ]; then
             # Check if image-create exists
             if [ -x "$SCRIPT_DIR/image-create" ]; then
                 if "$SCRIPT_DIR/image-create" "${IMAGE_BUILD_ARGS[@]}"; then
-                    IMAGE_OR_FRAMEWORK="$USERNAME-${CONTAINER_NAME}-image"
+                    IMAGE_OR_FRAMEWORK="$USERNAME-${IMAGE_BASE_NAME}-image"
                     echo ""
                     echo -e "${GREEN}✓${NC} Image created: ${CYAN}$IMAGE_OR_FRAMEWORK${NC}"
                     echo ""
+
+                    # Derive container name from image name
+                    CONTAINER_NAME="$IMAGE_BASE_NAME"
+
                     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
                     echo -e "${BOLD}Create Container from Image?${NC}"
                     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -247,14 +335,23 @@ if [ -z "$CONTAINER_NAME" ]; then
                     echo "Your custom image is ready! Would you like to create"
                     echo "a container from it now?"
                     echo ""
+                    echo -e "Default container name: ${CYAN}$CONTAINER_NAME${NC}"
+                    echo ""
                     echo -e "  ${BOLD}Y)${NC} Yes, create container ${GREEN}(recommended)${NC}"
                     echo -e "  ${BOLD}N)${NC} No, I'll create it later"
+                    echo -e "  ${BOLD}C)${NC} Choose a different container name"
                     echo ""
-                    read -p "Continue with container creation? [Y/n]: " CREATE_CONTAINER </dev/tty
+                    read -p "Continue with container creation? [Y/n/c]: " CREATE_CONTAINER </dev/tty
                     CREATE_CONTAINER=${CREATE_CONTAINER:-Y}
                     echo ""
 
-                    if [[ ! "$CREATE_CONTAINER" =~ ^[Yy]$ ]]; then
+                    if [[ "$CREATE_CONTAINER" =~ ^[Cc]$ ]]; then
+                        read -p "Enter container name: " CUSTOM_CONTAINER_NAME </dev/tty
+                        if [ -n "$CUSTOM_CONTAINER_NAME" ]; then
+                            CONTAINER_NAME="$CUSTOM_CONTAINER_NAME"
+                        fi
+                        echo ""
+                    elif [[ ! "$CREATE_CONTAINER" =~ ^[Yy]$ ]]; then
                         echo -e "${YELLOW}Container creation skipped${NC}"
                         echo ""
                         echo -e "${BOLD}To create a container later, run:${NC}"
@@ -270,41 +367,20 @@ if [ -z "$CONTAINER_NAME" ]; then
                 echo -e "${RED}✗ image-create command not found${NC}"
                 echo "Falling back to PyTorch framework"
                 IMAGE_OR_FRAMEWORK="pytorch"
-            fi
-            ;;
-
-        2)
-            # Use existing image
-            echo -e "${CYAN}Available Images:${NC}"
-            echo ""
-
-            # List available images
-            if command -v docker &>/dev/null; then
-                AVAILABLE_IMAGES=$(docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}" | grep -E "$USERNAME|pytorch|tensorflow" | head -20)
-                if [ -n "$AVAILABLE_IMAGES" ]; then
-                    echo "$AVAILABLE_IMAGES"
-                    echo ""
-                    read -p "Enter image name: " IMAGE_OR_FRAMEWORK </dev/tty
-                else
-                    echo "No custom images found."
-                    echo ""
-                    echo "Would you like to use a base framework instead?"
-                    read -p "Use PyTorch? [Y/n]: " USE_BASE </dev/tty
-                    if [[ "$USE_BASE" =~ ^[Nn]$ ]]; then
-                        echo "Cancelled."
-                        exit 0
-                    fi
-                    IMAGE_OR_FRAMEWORK="pytorch"
+                # Still need to ask for container name if falling back
+                read -p "Container name: " CONTAINER_NAME </dev/tty
+                if [ -z "$CONTAINER_NAME" ]; then
+                    echo -e "${RED}✗ Container name required${NC}"
+                    exit 1
                 fi
-            else
-                echo -e "${RED}✗ Docker not available${NC}"
-                exit 1
             fi
-            echo ""
             ;;
 
         3)
             # Use base framework
+            echo -e "${CYAN}━━━ Base Framework ━━━${NC}"
+            echo ""
+
             echo -e "${BOLD}Select Framework:${NC}"
             echo ""
             echo -e "  ${BOLD}1)${NC} PyTorch (default)"
@@ -316,6 +392,19 @@ if [ -z "$CONTAINER_NAME" ]; then
             IMAGE_OR_FRAMEWORK="pytorch"
             if [ "$FW_CHOICE" = "2" ]; then
                 IMAGE_OR_FRAMEWORK="tensorflow"
+            fi
+            echo ""
+
+            # Ask for container name
+            echo -e "${BOLD}Step 2: Container Name${NC}"
+            echo ""
+            echo "Choose a name for your container (e.g., my-project, preprocessing)"
+            echo ""
+            read -p "Container name: " CONTAINER_NAME </dev/tty
+
+            if [ -z "$CONTAINER_NAME" ]; then
+                echo -e "${RED}✗ Container name cannot be empty${NC}"
+                exit 1
             fi
             echo ""
             ;;
