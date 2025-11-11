@@ -16,7 +16,9 @@ IMAGES_DIR="$HOME/docker-images"
 
 usage() {
     echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Docker Image Creator${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  image-create [image-name] [options]"
@@ -459,39 +461,81 @@ DOCKERFILEEOF
         if [ "$base_pkg_choice" = "skip" ]; then
             echo "# Base packages skipped by user" >> "$dockerfile"
         elif [ "$base_pkg_choice" = "custom" ] && [ -n "$custom_base_pkgs" ]; then
-            cat >> "$dockerfile" << DOCKERFILEEOF
-# Custom base packages
-RUN pip install --no-cache-dir $custom_base_pkgs
-
-DOCKERFILEEOF
+            # Convert custom packages to multi-line format
+            echo "# Core Python packages" >> "$dockerfile"
+            echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+            local pkg_array=($custom_base_pkgs)
+            local pkg_count=${#pkg_array[@]}
+            local i=0
+            for pkg in "${pkg_array[@]}"; do
+                ((i++))
+                if [ $i -lt $pkg_count ]; then
+                    echo "    $pkg \\" >> "$dockerfile"
+                else
+                    echo "    $pkg" >> "$dockerfile"
+                fi
+            done
+            echo "" >> "$dockerfile"
         else
-            # Default base packages
+            # Default base packages - convert to one-per-line format
             local base_packages=$(get_base_packages)
-            cat >> "$dockerfile" << DOCKERFILEEOF
-# Core Python packages
-RUN pip install --no-cache-dir \\
-    $base_packages
-
-DOCKERFILEEOF
+            echo "# Core Python packages" >> "$dockerfile"
+            echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+            local pkg_array=($base_packages)
+            local pkg_count=${#pkg_array[@]}
+            local i=0
+            for pkg in "${pkg_array[@]}"; do
+                ((i++))
+                if [ $i -lt $pkg_count ]; then
+                    echo "    $pkg \\" >> "$dockerfile"
+                else
+                    echo "    $pkg" >> "$dockerfile"
+                fi
+            done
+            echo "" >> "$dockerfile"
         fi
 
         # Use case specific packages
         if [ -n "$usecase_packages" ]; then
-            cat >> "$dockerfile" << DOCKERFILEEOF
-# Use case specific packages
-RUN pip install --no-cache-dir $usecase_packages
-
-DOCKERFILEEOF
+            echo "# Use case specific packages" >> "$dockerfile"
+            echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+            local pkg_array=($usecase_packages)
+            local pkg_count=${#pkg_array[@]}
+            local i=0
+            for pkg in "${pkg_array[@]}"; do
+                ((i++))
+                if [ $i -lt $pkg_count ]; then
+                    echo "    $pkg \\" >> "$dockerfile"
+                else
+                    echo "    $pkg" >> "$dockerfile"
+                fi
+            done
+            echo "" >> "$dockerfile"
         fi
 
         # Additional user packages
         if [ -n "$additional" ]; then
-            cat >> "$dockerfile" << DOCKERFILEEOF
-# Additional user packages
-RUN pip install --no-cache-dir $additional
+            echo "# Additional user packages" >> "$dockerfile"
+            echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+            local pkg_array=($additional)
+            local pkg_count=${#pkg_array[@]}
+            local i=0
+            for pkg in "${pkg_array[@]}"; do
+                ((i++))
+                if [ $i -lt $pkg_count ]; then
+                    echo "    $pkg \\" >> "$dockerfile"
+                else
+                    echo "    $pkg" >> "$dockerfile"
+                fi
+            done
+            echo "" >> "$dockerfile"
+        fi
+
+        # Always add custom section for future additions
+        cat >> "$dockerfile" << DOCKERFILEEOF
+# Custom additional packages
 
 DOCKERFILEEOF
-        fi
     else
         echo "# Custom base image - no default packages installed" >> "$dockerfile"
         echo "" >> "$dockerfile"
