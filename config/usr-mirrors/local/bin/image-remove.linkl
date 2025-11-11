@@ -1,0 +1,6 @@
+# Symlink record for: image-remove
+# Created: 2025-11-11
+# Source: /opt/ds01-infra/scripts/user/image-delete
+# Target: /usr/local/bin/image-remove
+
+ln -s /opt/ds01-infra/scripts/user/image-delete /usr/local/bin/image-remove
