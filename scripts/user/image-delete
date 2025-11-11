@@ -19,8 +19,10 @@ usage() {
     echo -e "${BOLD}Docker Image Remover${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  image-delete [image-name] [options]"
-    echo "  image-delete                         # Prompts to select image (if none specified)"
+    echo "  image-delete [image-name...] [options]"
+    echo "  image-delete                           # Prompts to select image (if none specified)"
+    echo "  image-delete img1 img2 img3            # Bulk delete multiple images"
+    echo "  (also: `remove` as alias for delete)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided            Show detailed explanations for beginners"
@@ -48,7 +50,7 @@ usage() {
 }
 
 # Parse arguments
-IMAGE_NAME=""
+IMAGE_NAMES=()
 GUIDED=false
 FORCE=false
 KEEP_DOCKERFILE=false
@@ -77,50 +79,69 @@ while [[ $# -gt 0 ]]; do
             exit 1
             ;;
         *)
-            if [ -z "$IMAGE_NAME" ]; then
-                IMAGE_NAME="$1"
-            else
-                echo -e "${RED}Multiple image names specified${NC}\n"
-                usage
-                exit 1
-            fi
+            IMAGE_NAMES+=("$1")
             shift
             ;;
     esac
 done
 
-# If no image name provided, prompt to select
-if [ -z "$IMAGE_NAME" ]; then
-    IMAGE_NAME=$(select_image)
-    if [ -z "$IMAGE_NAME" ]; then
+# Custom select_image function that filters by user's images
+select_user_image() {
+    local images=()
+
+    # Get user's images using maintainer label (same as image-list)
+    mapfile -t images < <(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" 2>/dev/null | grep -v "^<none>$" | sort -u)
+
+    # Check if we found any images
+    if [ ${#images[@]} -eq 0 ]; then
+        echo -e "${YELLOW}No images found${NC}" >&2
+        echo ""
+        echo -e "Create an image with: ${GREEN}image-create my-project${NC}" >&2
+        return 1
+    fi
+
+    # Select image using library function
+    select_from_list "Select image to delete:" "${images[@]}"
+}
+
+# If no image names provided, prompt to select
+if [ ${#IMAGE_NAMES[@]} -eq 0 ]; then
+    SELECTED=$(select_user_image)
+    if [ -z "$SELECTED" ]; then
         echo "No selection made. Exiting."
         exit 0
     fi
+    IMAGE_NAMES=("$SELECTED")
     echo ""
 fi
 
-# Validate image name
-if [ -z "$IMAGE_NAME" ]; then
-    echo -e "${RED}Error: Image name is required${NC}\n"
+# Validate at least one image name
+if [ ${#IMAGE_NAMES[@]} -eq 0 ]; then
+    echo -e "${RED}Error: At least one image name is required${NC}\n"
     usage
     exit 1
 fi
 
-# Add username prefix if not present
-if [[ ! "$IMAGE_NAME" =~ ^${USERNAME}- ]]; then
-    IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
-fi
+# Function to delete a single image
+delete_single_image() {
+    local IMAGE_NAME="$1"
 
-# Check if image exists
-if ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
-    echo -e "${RED}✗ Image '$IMAGE_NAME' not found${NC}\n"
-    echo "Available images:"
-    docker images --format "  {{.Repository}}" --filter "reference=${USERNAME}-*"
+    # Add username prefix if not present
+    if [[ ! "$IMAGE_NAME" =~ ^${USERNAME}- ]]; then
+        IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+    fi
+
+    # Check if image exists
+    if ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
+        echo -e "${RED}✗ Image '$IMAGE_NAME' not found${NC}"
+        echo "Skipping..."
+        echo ""
+        return 1
+    fi
+
     echo ""
-    exit 1
-fi
-
-echo -e "${CYAN}━━━ Deleting Image: ${BOLD}$IMAGE_NAME${NC} ${CYAN}━━━${NC}\n"
+    echo -e "${CYAN}━━━ Deleting Image: ${BOLD}$IMAGE_NAME${NC} ${CYAN}━━━${NC}"
+    echo ""
 
 if [ "$GUIDED" = true ]; then
     echo -e "${CYAN}ℹ ${NC}${BOLD}What happens when you delete an image:${NC}"
@@ -175,7 +196,7 @@ if [ "$CONTAINER_COUNT" -gt 0 ]; then
         echo "  2. Force delete (stops/removes containers):"
         echo "     ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
         echo ""
-        exit 1
+        return 1
     else
         echo -e "${YELLOW}--force specified: Removing containers...${NC}"
         echo ""
@@ -198,8 +219,9 @@ if [ "$FORCE" = false ]; then
     echo ""
     read -p "Are you sure? [y/N]: " CONFIRM
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-        echo "Cancelled."
-        exit 0
+        echo "Deletion cancelled."
+        echo ""
+        return 1
     fi
     echo ""
 fi
@@ -210,8 +232,8 @@ if docker rmi "$IMAGE_NAME"; then
     echo -e "${GREEN}✓ Image removed${NC}\n"
 
     # Handle Dockerfile
-    IMAGES_DIR="$HOME/docker-images"
-    DOCKERFILE="$IMAGES_DIR/${IMAGE_NAME}.Dockerfile"
+    DOCKERFILES_DIR="$HOME/dockerfiles"
+    DOCKERFILE="$DOCKERFILES_DIR/${IMAGE_NAME}.Dockerfile"
     INFO_FILE="$HOME/ds01-config/images/${IMAGE_NAME}.info"
 
     # Check info file for custom Dockerfile location
@@ -231,7 +253,7 @@ if docker rmi "$IMAGE_NAME"; then
             rm "$DOCKERFILE"
 
             echo -e "${YELLOW}📄 Dockerfile backed up to:${NC}"
-            echo "   ${BLUE}$BACKUP_FILE${NC}"
+            echo -e "   ${BLUE}$BACKUP_FILE${NC}"
             echo ""
         fi
 
@@ -264,7 +286,70 @@ else
     echo "  1. Check for running containers: ${GREEN}container-list${NC}"
     echo "  2. Force deletion: ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
     echo "  3. Manual removal: ${BLUE}docker rmi $IMAGE_ID${NC}"
-    exit 1
+    return 1
 fi
 
-echo ""
+    echo ""
+}
+
+# Main execution: Process all images
+DELETED_COUNT=0
+FAILED_COUNT=0
+SKIPPED_COUNT=0
+TOTAL_COUNT=${#IMAGE_NAMES[@]}
+
+# Show bulk operation header if multiple images
+if [ ${#IMAGE_NAMES[@]} -gt 1 ]; then
+    echo ""
+    echo -e "${CYAN}━━━ Bulk Image Deletion ━━━${NC}"
+    echo ""
+    echo -e "Processing ${BOLD}${TOTAL_COUNT}${NC} image(s)..."
+    echo ""
+fi
+
+# Process each image
+for IMAGE_NAME in "${IMAGE_NAMES[@]}"; do
+    if delete_single_image "$IMAGE_NAME"; then
+        DELETED_COUNT=$((DELETED_COUNT + 1))
+    else
+        # Check if it was skipped (not found) or failed (error during deletion)
+        if ! docker images --format "{{.Repository}}" | grep -q "^${USERNAME}-${IMAGE_NAME}$" && \
+           ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+        else
+            FAILED_COUNT=$((FAILED_COUNT + 1))
+        fi
+    fi
+done
+
+# Show summary for bulk operations
+if [ ${#IMAGE_NAMES[@]} -gt 1 ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Bulk Deletion Summary${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  Total processed: $TOTAL_COUNT"
+    echo -e "  ${GREEN}✓ Deleted:${NC}       $DELETED_COUNT"
+
+    if [ $SKIPPED_COUNT -gt 0 ]; then
+        echo -e "  ${YELLOW}⊘ Skipped:${NC}       $SKIPPED_COUNT (not found)"
+    fi
+
+    if [ $FAILED_COUNT -gt 0 ]; then
+        echo -e "  ${RED}✗ Failed:${NC}        $FAILED_COUNT"
+    fi
+
+    echo ""
+
+    # Show final status
+    if [ $DELETED_COUNT -eq $TOTAL_COUNT ]; then
+        echo -e "${GREEN}All images deleted successfully!${NC}"
+    elif [ $DELETED_COUNT -gt 0 ]; then
+        echo -e "${YELLOW}Partial success: $DELETED_COUNT of $TOTAL_COUNT deleted${NC}"
+    else
+        echo -e "${RED}No images were deleted${NC}"
+    fi
+
+    echo ""
+fi

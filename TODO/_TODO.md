@@ -205,13 +205,58 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
     - in general, work out what python libs to include as standard
 - [x] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
 - [x] maybe just have this defult to no libraries installed? I'm not really sure how this works once a container is up and running how easy/hard it is to install packages... does it need to be pre-installed, or can you dynanmically add to them. 
-- [x] updated to consistent multi-line formatting of packages, w/ deparation of system, core python, use-case python, custom additional
-- [ ] add in hugging face image (that uses hugging face rather than pytorch?)
-- [ ] review which libs are preinstalled
-    - [ ] add torch & pytorth etc into the preinstalled libs for pytorch framework??? Surely they should already be there, or are they there underthe hood somehow from the AIME base image? 
+- [x] updated to consistent multi-line formatting of packages, w/ separation of system, core python, use-case python, custom additional
+- [x] fixed 'image create failed' bug
+- [x] maybe separate out image create from docker file create -> at least have the option to just create the dockerfile without the image
+    - [x] same with `image updade`: give the option just update the docker file with new packages etc > then offer the option to rebuild the image > then offer the option to re-spin up the container 
+
+- [x] CRITICAL FIRST THING: audit the `image create`/`image update` -> `container create` workflow
+    - currently `image create`/`image update` allows lots of editing & customisation of an dockerfile
+    - but then, it seems like maybe then the subsequent building of the image / container just pulls an existing AIME template. 
+    - what I want is for it to pull the base AIME template, then add any further packages defined through the `image create`/`image update` processes
+
+
+
+
+
+- [ ] add/separate out another layer of install categorisation:
+    - (1) base framework (i.e. AIME base image <- need to see what's in there already)
+    - (2) base interactive envs (jupyter, jupyterlab, ipykernel, ipywidgets)
+    - (3) default data science (numpy pandas matplotlib seaborn scikit-learn scipy tqdm tensorboard Pillow python-dotenv)
+    - (4) specific use case (comp-vis, nlp etc)
+    - = separating out 2 & 3, which are currently combined
+    - also: add in a bit more description into the wizard as to what's included
+    - TODO first: check what is included in AIME and confirm that these base images are being called, as i'm not sure they are.....???
+- [ ] related to above: review which libs are preinstalled -> plan out what would be optimal
+    - [ ] add torch & pytorth etc into the preinstalled libs for pytorch framework??? Surely they should already be there, or are they there underthe hood somehow from the AIME base image? I THINK THESE ARE IN FACT INCLUDED IN AIME -> SEE WHAT'S ALREADY IN THERE?
     - [ ] also maybe make custom (i.e. no default packages / frameworks) more prominent / the default?
-- [ ] fixed 'image create failed' bug
-- [ ] maybe separate out image create from docker file create -> at least have the option to just create the dockerfile without the image
+- [ ] add in hugging face image (that uses hugging face rather than pytorch?)
+- [ ] add in a nice banner at the top of the wizard (it has them from 
+        ```
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        ✓ Phase 1/3: Dockerfile Created
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+        ```
+onwards -> add one at the top that says `IMAGE CREATION WIZARD`, then new line: `Phase 1/2: Create Dockerfile (Blueprint)`
+- [ ] BUG: 
+        ```
+        Build image now? [Y/n]: y
+
+        Building image... (this takes 3-5 minutes)
+
+        /usr/local/bin/image-create: line 826: local: can only be used in a function
+        [+] Building 7.7s (12/12) FINISHED                                                                                                                                                                                                                               docker:default
+        => [internal] load build definition from test-datasciencelab.Dockerfile                                                                                                                                                                                                   0.0s
+        => => transferring dockerfile: 1.97kB                                                                                                                                                                                                                                     0.0s
+        => WARN: NoEmptyContinuation: Empty continuation line (line 25)
+        
+        ....
+
+        WARNING: current commit information was not captured by the build: failed to read current commit information with git rev-parse --is-inside-work-tree
+
+        1 warning found (use --debug to expand):
+        - NoEmptyContinuation: Empty continuation line (line 25)
+        ```
 
 ### Image list 
 - [x] update based on naming changes in image create
@@ -223,17 +268,28 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 -  [x] BUG: the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
 - [x] BUG: it's not refreshing / listing / adding pkgs correctly. E.g. with `test-datasciencelab` I'm adding torch, but then it doesn't show up when it prints the Current python packages. It also let's me add it multiple times (whereas it SHOULD) give a notification saying that that package is already in the image (and gracefully direct me to readding more)
 - [ ] nice to have: the `image list` call is directly edited before output so that it forms a selection screen, rather than being printed, then a duplicate selection screen below.
-- [ ] DO: CHECK WORKS WITH NICE FORMAT AFTER NEW IMAGE
+- [ ] after updating the docker file, give the option to recreate the image - I dont' think this currently happens?
+- [x] sort out the logic between `image create` and `image update` about when to write the `pip install` command if/when there are packages after.
+- [ ] add a notification output after the image is rebuild to the new dockerfile specs so the user is aware 
+- [ ] after adding / removing a python / system package, 
+    - 1) explain very briefly (if no --guided) that dockerfile blueprint updated, but still need to rebuild the image (and later to recreate container based on rebuild image). More in depth if --guided flat on.
+    - 2) offer to continue to rebuild, or loop back gracefully to the "What would you like to do?" menu.
 
 ### Image delete
-- [ ] accept multiple image names as arguments -> will delete in bulk
-- [ ] the GUI after providing no image names -> only see users own images (take the same logic as image-list; perhaps most efficient to call image-list directly)
-- [ ] 
+- [x] accept multiple image names as arguments -> will delete in bulk
+- [x] the GUI after providing no image names -> only see users own images
+- [ ] make sdure that when a user does `docker image prune` it only cleans up their images (or at least blocks them with sudo)
+- [ ] currently once image removed -> "Dockerfile backed up to: `/home/datasciencelab/ds01-config/images/deleted/datasciencelab-test-20251111-165620.Dockerfile`" ... why? back it up somewhere in tmp or other? (and zip/compress it), but not in this folder.
+
 
 ### Image miscellaneous
-- [ ] distinguish between image vs dockerfile appropriately 
+- [x] distinguish between image vs dockerfile appropriately 
     - e.g. currently there's a dir created called /home/<user-name>/docker-images/ -> this should in fact use a directory like /home/<user-name>/my-project/dockerfiles/, so it is stored within the project. You can see how project directories are currently structured from using the `project init` command -> figure out how best to store dockerfiles with this in mind. 
     - in the GUIs and explanatory content of all my commands I'm not sure I appropriately use dockerfile vs image correctly. Go through it all and make sure it is correctly distinguished between.
+- [x] related: maybe separate out / specify logic between `image create` from `dockerfile create`? 
+    - [x] at least in `image create` commend have the option to just create the dockerfile without the image
+    - [x] same with `image updade`: give the option just update the docker file with new packages etc > then offer the option to rebuild the image > then offer the option to re-spin up the container 
+
 
 ### Container Create
 - [x] BUG: `✗ mlc-create-wrapper not found at: /usr/local/docker/mlc-create-wrapper.sh
@@ -242,11 +298,12 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 - [x]  also when just running container create, make the name optional (if not provided it opens up a full GUI, with name, ability to create custom image, or use existing template)
 - [ ] !! when chosing the `create custom image` option -> make it call to `image create` (to avoid current duplication of functionality which is bad!)
 - [ ] manually just add some initial explanation that to create a container we need an image (literally one line, add by hand)
-- [ ] make `container create` default to (1) a call to `image create` to create custom image, with possiblitlites to chose PyTorch or Tensorflow
+- [ ] make `container create` default to (1) a call to `image create` to create custom image, with possiblitlites to chose PyTorch or Tensorflow (currently it has it's own workflow - this is duplication!)
 - Resource allocation workflow
     - [ ] have so that students can get up to 4 MIG instances, but setup wizard defaults to 1, but gives them the option to choose more
     - [ ] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
 - [ ] (is this under `container create` or `container run`?) currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
+- [ ] container create's option to `1) use existing image` -> lists too many images. Instead, call to `image-list` command (which does this properly), and set up output as bash selection.
 
 ### Running Containers
 - [x] develop wrapper for mlc-open that prints explanation
@@ -257,6 +314,7 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
         - Add to /etc/docker/daemon.json:        {"userns-remap": "default"} NB I did NOT do this, complicates gpu pids -> instead use cgroups....
         - currently if run through Dev Containers then it all works, but if run through `container run` which calls `mlc-create` then it doesn't display properly,
 - [ ] aesthetics: remove the last part: "[pset3_delete] exists and will be opened. > [pset3_delete] container already running. > [pset3_delete] opening shell to container... > (REMOVE FROM HERE:) To run a command as administrator (user "root"), use "sudo <command>". > See "man sudo_root" for details."
+- [ ] `container run` to list table of users' containers with their basic stats -> make selection
 
 - [ ] when INSIDE a container, make `alias-list` list all the available commands INSIDE container (just as alias-list lists availbale host commands when OUTSIDE container)
 - [ ] TODO: INTEGRATE DEV CONTAINERS INTO SCRIPTS / WIZARDS
@@ -279,6 +337,14 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
 - related: CONTAINER STOP
     - [ ] increase timeout >10s?
     - [ ] add default Yes to ```⚠ This will STOP the container...Continue? [y/N]: ```
+
+
+### for all dockerfile > image > container workflow
+- [ ] make more modular
+    - avoid duplication of functionality
+    - currently there's a lot of calling eachtoher, but instead: at end of completion of that command's core function, it gives concise output of what was done, and what command to run next to continue the workflow (rather than calling that command)
+    - this makes each command more independent / isolated
+    - principle: all tier 2 commands should be isolated -> Tier 3 & 4 workflow orchestrators string this together
 
 ### Container Cleanup
 - [ ] buggy
