@@ -1,0 +1,3 @@
+[submodule "aime-ml-containers"]
+	path = aime-ml-containers
+	url = https://github.com/aime-team/aime-ml-containers.git
