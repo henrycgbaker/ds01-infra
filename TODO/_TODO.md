@@ -205,15 +205,35 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
     - in general, work out what python libs to include as standard
 - [x] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
 - [x] maybe just have this defult to no libraries installed? I'm not really sure how this works once a container is up and running how easy/hard it is to install packages... does it need to be pre-installed, or can you dynanmically add to them. 
+- [x] updated to consistent multi-line formatting of packages, w/ deparation of system, core python, use-case python, custom additional
 - [ ] add in hugging face image (that uses hugging face rather than pytorch?)
+- [ ] review which libs are preinstalled
+    - [ ] add torch & pytorth etc into the preinstalled libs for pytorch framework??? Surely they should already be there, or are they there underthe hood somehow from the AIME base image? 
+    - [ ] also maybe make custom (i.e. no default packages / frameworks) more prominent / the default?
+- [ ] fixed 'image create failed' bug
+- [ ] maybe separate out image create from docker file create -> at least have the option to just create the dockerfile without the image
 
 ### Image list 
-- [ ] update based on naming changes in image create
+- [x] update based on naming changes in image create
 
 ### Image Update
-- [ ] BUG: either the currently installed packages list is not up to date, or it's not able to add new packages correctly, or both. All my images have the same 4 "Current Python packages" listed, then whwenever you try to add more python packages, it says it's already in the dockerfile, no matter "which package.
--  [ ] BUG: the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
-- [ ] BUG: when listing all images, it lists a lot of them, not just the user created ones. `image list` command gets this right, so call directly there! 
+- [x]add aesthetic entry banner at top
+- [x] BUG: when listing all available images, it's buggy. `image list` command gets this right, so call directly there! 
+- [x] BUG: either the currently installed packages list is not up to date, or it's not able to add new packages correctly, or both. All my images have the same 4 "Current Python packages" listed, then whwenever you try to add more python packages, it says it's already in the dockerfile, no matter "which package. Take the same package reading logic as in `image create`
+-  [x] BUG: the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
+- [x] BUG: it's not refreshing / listing / adding pkgs correctly. E.g. with `test-datasciencelab` I'm adding torch, but then it doesn't show up when it prints the Current python packages. It also let's me add it multiple times (whereas it SHOULD) give a notification saying that that package is already in the image (and gracefully direct me to readding more)
+- [ ] nice to have: the `image list` call is directly edited before output so that it forms a selection screen, rather than being printed, then a duplicate selection screen below.
+- [ ] DO: CHECK WORKS WITH NICE FORMAT AFTER NEW IMAGE
+
+### Image delete
+- [ ] accept multiple image names as arguments -> will delete in bulk
+- [ ] the GUI after providing no image names -> only see users own images (take the same logic as image-list; perhaps most efficient to call image-list directly)
+- [ ] 
+
+### Image miscellaneous
+- [ ] distinguish between image vs dockerfile appropriately 
+    - e.g. currently there's a dir created called /home/<user-name>/docker-images/ -> this should in fact use a directory like /home/<user-name>/my-project/dockerfiles/, so it is stored within the project. You can see how project directories are currently structured from using the `project init` command -> figure out how best to store dockerfiles with this in mind. 
+    - in the GUIs and explanatory content of all my commands I'm not sure I appropriately use dockerfile vs image correctly. Go through it all and make sure it is correctly distinguished between.
 
 ### Container Create
 - [x] BUG: `✗ mlc-create-wrapper not found at: /usr/local/docker/mlc-create-wrapper.sh
