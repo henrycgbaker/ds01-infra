@@ -149,6 +149,8 @@ Standard deployment paths (when installed on server):
 - Scripts: `/opt/ds01-infra/scripts/`
 - State: `/var/lib/ds01/`
 - Logs: `/var/logs/ds01/`
+- **Dockerfiles**: `~/dockerfiles/` (centralized, per-user)
+  - Alternative: `~/workspace/<project>/Dockerfile` (with `--project-dockerfile` flag)
 
 Config mirrors for system files (deployed separately):
 - `config/etc-mirrors/systemd/system/` → `/etc/systemd/system/`
@@ -416,6 +418,27 @@ When modifying resource allocation logic:
 - Users must be added to `docker` group for Docker socket access
 
 ## Recent Changes (November 2025)
+
+**Dockerfile Storage & Phased Workflows (November 11, 2025):**
+- **Directory Migration**: Renamed `~/docker-images/` → `~/dockerfiles/` for accurate terminology
+  - Migration script: `/opt/ds01-infra/scripts/system/migrate-dockerfiles.sh`
+  - Automatically updates metadata files with new paths
+  - All existing images and containers continue to work
+- **Phased Workflows**: Both `image-create` and `image-update` now have 3-phase interactive workflows:
+  - **Phase 1**: Dockerfile created/updated
+  - **Phase 2**: Build/Rebuild image? (user confirms)
+  - **Phase 3**: Create/Recreate container? (user confirms)
+  - Each phase can be skipped, allowing granular control
+- **Hybrid Dockerfile Storage**:
+  - Default: Centralized at `~/dockerfiles/` (one Dockerfile/image → many projects)
+  - Optional: `--project-dockerfile` flag stores in `~/workspace/<project>/Dockerfile`
+  - Clear separation: Dockerfile (recipe) → Image (blueprint) → Container (instance)
+- **Terminology Audit**: Verified correct usage throughout:
+  - Dockerfile = Recipe (text file with build instructions)
+  - Image = Blueprint (built from Dockerfile, stored by Docker)
+  - Container = Running instance (where actual work happens)
+- **Scripts Updated**: `image-create`, `image-update`, `image-delete` use `DOCKERFILES_DIR`
+- **Empty pip install Protection**: `image-update` now detects and removes empty RUN blocks to prevent build errors
 
 **CLI Ecosystem Overhaul (November 10, 2025):**
 - Added `--info` flag support: All dispatchers and Tier 2 commands now accept `--info` as alias for `--help`
