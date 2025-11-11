@@ -12,7 +12,8 @@ NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
-IMAGES_DIR="$HOME/docker-images"
+DOCKERFILES_DIR="$HOME/dockerfiles"
+PROJECT_DOCKERFILE=false
 
 usage() {
     echo ""
@@ -28,7 +29,8 @@ usage() {
     echo "  -t, --type TYPE            Use case type (cv, nlp, rl, ml, custom)"
     echo "  -p, --packages PACKAGES    Additional Python packages (space-separated)"
     echo "  -s, --system PACKAGES      System packages via apt (space-separated)"
-    echo "  --no-build                 Create Dockerfile only, don't build"
+    echo "  --project-dockerfile       Store Dockerfile in project dir (~/workspace/<project>/)"
+    echo "  --no-build                 Create Dockerfile only, don't build image"
     echo "  --guided                   Show detailed explanations for beginners"
     echo "  -h, --help                 Show this help message"
     echo ""
@@ -223,7 +225,7 @@ interactive_mode() {
             echo ""
         fi
 
-        echo "${BOLD}Select base framework:${NC}"
+        echo -e "${BOLD}Select base framework:${NC}"
         echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
         echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
         echo -e "  ${BOLD}3)${NC} JAX + CUDA"
@@ -271,10 +273,10 @@ interactive_mode() {
             echo ""
         fi
 
-        echo -e "\n${BOLD}Install base data science packages?${NC}"
+        echo -e "\n${BOLD}Install base data science Python packages? (jupyter, ipykernel, etc.) ${NC}"
         echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended${NC})"
-        echo -e "  ${BOLD}2)${NC} No - Skip base packages"
-        echo -e "  ${BOLD}3)${NC} Custom - Specify base packages manually"
+        echo -e "  ${BOLD}2)${NC} No - Skip Python base packages"
+        echo -e "  ${BOLD}3)${NC} Custom - Specify base Python packages manually"
         read -p "Choice [1-3, default: 1]: " BASE_PKG_CHOICE
 
         case $BASE_PKG_CHOICE in
@@ -322,7 +324,7 @@ interactive_mode() {
             echo ""
         fi
 
-        echo -e "\n${BOLD}Select use case (domain-specific packages):${NC}"
+        echo -e "\n${BOLD}Select use case (additional domain-specific packages):${NC}"
         echo -e "  ${BOLD}1)${NC} None/Custom (skip or specify manually)"
         echo -e "  ${BOLD}2)${NC} General ML (xgboost, lightgbm, catboost) (${GREEN}default${NC})"
         echo -e "  ${BOLD}3)${NC} Computer Vision (timm, albumentations, opencv)"
@@ -420,8 +422,14 @@ create_dockerfile() {
         usecase_packages=""
     fi
 
-    mkdir -p "$IMAGES_DIR"
-    local dockerfile="$IMAGES_DIR/${image_name}.Dockerfile"
+    # Determine Dockerfile location based on flag
+    local dockerfile_dir="$DOCKERFILES_DIR"
+    if [ "$PROJECT_DOCKERFILE" = true ] && [ -n "$PROJECT_DIR" ]; then
+        dockerfile_dir="$PROJECT_DIR"
+    fi
+
+    mkdir -p "$dockerfile_dir"
+    local dockerfile="$dockerfile_dir/${image_name}.Dockerfile"
 
     cat > "$dockerfile" << DOCKERFILEEOF
 # DS01 Custom Image: $image_name
@@ -612,6 +620,10 @@ while [[ $# -gt 0 ]]; do
             SYSTEM_PACKAGES="$2"
             shift 2
             ;;
+        --project-dockerfile)
+            PROJECT_DOCKERFILE=true
+            shift
+            ;;
         --no-build)
             NO_BUILD=true
             shift
@@ -641,6 +653,35 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Handle --project-dockerfile flag
+if [ "$PROJECT_DOCKERFILE" = true ]; then
+    # Try to determine project name from image name
+    if [ -n "$IMAGE_NAME" ]; then
+        # Remove -image suffix if present
+        PROJECT_NAME="${IMAGE_NAME%-image}"
+        PROJECT_DIR="$HOME/workspace/$PROJECT_NAME"
+
+        # Create project directory if it doesn't exist
+        if [ ! -d "$PROJECT_DIR" ]; then
+            echo -e "${YELLOW}⚠ Project directory does not exist: $PROJECT_DIR${NC}"
+            read -p "Create it now? [Y/n]: " CREATE_DIR </dev/tty
+            CREATE_DIR=${CREATE_DIR:-Y}
+            if [[ "$CREATE_DIR" =~ ^[Yy]$ ]]; then
+                mkdir -p "$PROJECT_DIR"
+                echo -e "${GREEN}✓ Created $PROJECT_DIR${NC}"
+            else
+                echo -e "${RED}Cannot use --project-dockerfile without project directory${NC}"
+                echo "Falling back to centralized location: ~/dockerfiles/"
+                PROJECT_DOCKERFILE=false
+                PROJECT_DIR=""
+            fi
+        fi
+    else
+        echo -e "${YELLOW}⚠ --project-dockerfile requires an image name${NC}"
+        PROJECT_DOCKERFILE=false
+    fi
+fi
 
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
@@ -727,28 +768,64 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "Then rebuild with: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
     echo ""
-    echo -e "${BOLD}Now Building the Image${NC}"
-    echo ""
-    echo "This will:"
-    echo "  1. Download base image (~2 GB)"
-    echo "  2. Install all packages"
-    echo "  3. Configure Jupyter and Python"
-    echo "  4. Save final image (~4-5 GB)"
-    echo ""
-    echo "Time: 3-5 minutes (depending on packages and network)"
-    echo ""
-    read -p "Press Enter to start the build..." </dev/tty
-    echo ""
 fi
 
-# Build image
-if [ "$NO_BUILD" = false ]; then
+# Phase 1: Dockerfile Created ✓
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ Phase 1/3: Dockerfile Created${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "Location: ${BLUE}$DOCKERFILE${NC}"
+echo ""
+
+# Phase 2: Build Image?
+BUILD_IMAGE=true
+if [ "$NO_BUILD" = true ]; then
+    BUILD_IMAGE=false
+    echo -e "${YELLOW}Build skipped (--no-build flag)${NC}"
+    echo ""
+    local build_context=$(dirname "$DOCKERFILE")
+    echo "Build later with:"
+    echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $build_context/${NC}"
+    echo ""
+else
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Phase 2/3: Build Docker Image?${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This will:"
+    echo "  • Download base image (~2 GB)"
+    echo "  • Install all packages"
+    echo "  • Configure Jupyter and Python"
+    echo "  • Save final image (~4-5 GB)"
+    echo ""
+    echo -e "${DIM}This can take a few minutes${NC}"
+    echo ""
+    read -p "Build image now? [Y/n]: " BUILD_CONFIRM </dev/tty
+    BUILD_CONFIRM=${BUILD_CONFIRM:-Y}
+    echo ""
+
+    if [[ ! "$BUILD_CONFIRM" =~ ^[Yy]$ ]]; then
+        BUILD_IMAGE=false
+        echo "Build skipped."
+        echo ""
+        local build_context=$(dirname "$DOCKERFILE")
+        echo "Build later with:"
+        echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $build_context/${NC}"
+        echo ""
+    fi
+fi
+
+# Build image if confirmed
+IMAGE_BUILT=false
+if [ "$BUILD_IMAGE" = true ]; then
     echo -e "${CYAN}Building image... (this takes 3-5 minutes)${NC}\n"
 
-    if docker build -t "$FULL_IMAGE_NAME" -f "$DOCKERFILE" "$IMAGES_DIR/"; then
-        echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}${BOLD}✓ Image built successfully!${NC}"
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    # Use the directory containing the Dockerfile as build context
+    local build_context=$(dirname "$DOCKERFILE")
+    if docker build -t "$FULL_IMAGE_NAME" -f "$DOCKERFILE" "$build_context/"; then
+        IMAGE_BUILT=true
 
         # Save metadata
         mkdir -p "$HOME/ds01-config/images"
@@ -765,62 +842,107 @@ $([ -n "$ADDITIONAL_PACKAGES" ] && echo "- Additional: $ADDITIONAL_PACKAGES")
 $([ -n "$SYSTEM_PACKAGES" ] && echo "- System: $SYSTEM_PACKAGES")
 INFOEOF
 
+        echo ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}${BOLD}✓ Phase 2/3: Docker Image Built${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "Image: ${CYAN}$FULL_IMAGE_NAME${NC}"
+        echo ""
+
         if [ "$GUIDED" = true ]; then
-            echo ""
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${BOLD}Image Created Successfully!${NC}"
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo ""
             echo -e "${BOLD}What Just Happened?${NC}"
             echo ""
             echo "  ✓ Downloaded base image with $FRAMEWORK"
             echo "  ✓ Installed all requested packages"
             echo "  ✓ Configured Jupyter Lab"
             echo "  ✓ Set up Python environment"
-            echo "  ✓ Saved image: ${CYAN}$FULL_IMAGE_NAME${NC}"
             echo ""
-            echo -e "${BOLD}What Can You Do Now?${NC}"
-            echo ""
-            echo "  ${BOLD}1) View your images:${NC}"
-            echo -e "     ${GREEN}image-list${NC}"
-            echo "     See all available Docker images"
-            echo ""
-            echo "  ${BOLD}2) Create a container from this image:${NC}"
-            echo -e "     ${GREEN}container-create $IMAGE_NAME${NC}"
-            echo "     This creates a running environment from your image"
-            echo ""
-            echo "  ${BOLD}3) Start and enter the container:${NC}"
-            echo -e "     ${GREEN}container-run $IMAGE_NAME${NC}"
-            echo "     Opens a shell inside the container"
-            echo ""
-            echo -e "${BOLD}Remember:${NC}"
-            echo "  • ${CYAN}Image${NC} = Blueprint (what you just created)"
-            echo "  • ${CYAN}Container${NC} = Running instance (what you'll work in)"
-            echo "  • One image can create many containers"
-            echo ""
-            echo -e "${BOLD}Updating the Image Later:${NC}"
-            echo ""
-            echo "  If you need to add more packages:"
-            echo -e "  1. Edit Dockerfile: ${GREEN}vim $DOCKERFILE${NC}"
-            echo -e "  2. Rebuild image: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
-            echo ""
-        else
-            echo -e "${BOLD}Next Steps:${NC}"
-            echo -e "  1. List images:       ${GREEN}image-list${NC}"
-            echo -e "  2. Create container:  ${GREEN}container-create $IMAGE_NAME${NC}"
-            echo -e "  3. Start container:   ${GREEN}container-run $IMAGE_NAME${NC}"
-            echo ""
-            echo -e "${YELLOW}💡 Update packages: Edit ${BLUE}$DOCKERFILE${NC}"
-            echo -e "   ${YELLOW}Then rebuild: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
         fi
     else
-        echo -e "\n${RED}✗ Build failed${NC}"
+        echo ""
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${RED}${BOLD}✗ Phase 2/3: Build Failed${NC}"
+        echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
         echo "Check Dockerfile: $DOCKERFILE"
+        echo ""
         exit 1
     fi
-else
-    echo -e "${YELLOW}Build skipped (--no-build)${NC}"
-    echo "Build later with: ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $IMAGES_DIR/${NC}"
+fi
+
+# Phase 3: Create Container?
+if [ "$IMAGE_BUILT" = true ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Phase 3/3: Create Container?${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "A container is a running instance of your image where you'll"
+    echo "actually do your work (run code, train models, etc.)."
+    echo ""
+    echo "This will:"
+    echo "  • Create container: $IMAGE_NAME"
+    echo "  • Allocate GPU resources"
+    echo "  • Mount your workspace directory"
+    echo "  • Apply resource limits"
+    echo ""
+    read -p "Create container now? [Y/n]: " CONTAINER_CONFIRM </dev/tty
+    CONTAINER_CONFIRM=${CONTAINER_CONFIRM:-Y}
+    echo ""
+
+    if [[ "$CONTAINER_CONFIRM" =~ ^[Yy]$ ]]; then
+        echo -e "${CYAN}Creating container...${NC}"
+        echo ""
+
+        if command -v container-create &>/dev/null; then
+            if container-create "$IMAGE_NAME"; then
+                echo ""
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${GREEN}${BOLD}✓ Phase 3/3: Container Created${NC}"
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                echo -e "${BOLD}All Done! 🎉${NC}"
+                echo ""
+                echo "Start working:"
+                echo -e "  ${GREEN}container-run $IMAGE_NAME${NC}"
+                echo ""
+            else
+                echo ""
+                echo -e "${YELLOW}Container creation failed${NC}"
+                echo "You can create it manually later:"
+                echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
+                echo ""
+            fi
+        else
+            echo -e "${RED}✗ container-create command not found${NC}"
+            echo "Create container manually:"
+            echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
+            echo ""
+        fi
+    else
+        echo "Container creation skipped."
+        echo ""
+        echo "Create container later:"
+        echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo ""
+    fi
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Remember:${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo "  • ${CYAN}Dockerfile${NC} = Recipe (text file with instructions)"
+        echo "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile)"
+        echo "  • ${CYAN}Container${NC} = Running instance (where you work)"
+        echo ""
+        echo -e "${BOLD}Useful Commands:${NC}"
+        echo -e "  ${GREEN}image-list${NC}          List all images"
+        echo -e "  ${GREEN}container-list${NC}      List all containers"
+        echo -e "  ${GREEN}container-run${NC}       Enter a container"
+        echo -e "  ${GREEN}image-update${NC}        Update Dockerfile & rebuild image"
+        echo ""
+    fi
 fi
 
 echo ""

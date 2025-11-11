@@ -14,7 +14,7 @@ DIM='\033[2m'
 NC='\033[0m'
 
 USERNAME=$(whoami)
-IMAGES_DIR="$HOME/docker-images"
+DOCKERFILES_DIR="$HOME/dockerfiles"
 
 # Find available text editor
 find_editor() {
@@ -656,7 +656,7 @@ guided_mode() {
     echo ""
     echo -e "${BOLD}Understanding Docker Images${NC}"
     echo ""
-    echo "A Docker image is like a ${CYAN}blueprint${NC} for your computing environment."
+    echo -e "A Docker image is like a ${CYAN}blueprint${NC} for your computing environment."
     echo "It defines what software, packages, and tools are installed."
     echo ""
     echo -e "${BOLD}Why Can't I Just 'pip install' in My Container?${NC}"
@@ -679,10 +679,10 @@ guided_mode() {
     echo ""
     echo -e "${BOLD}Best Practice Workflow:${NC}"
     echo ""
-    echo "  1. ${CYAN}Test${NC} new packages: pip install in container"
-    echo "  2. ${CYAN}Confirm${NC} they work: run your code"
-    echo "  3. ${CYAN}Make permanent${NC}: image-update (this command)"
-    echo "  4. ${CYAN}Recreate${NC} container with updated image"
+    echo -e "  1. ${CYAN}Test${NC} new packages: pip install in container"
+    echo -e "  2. ${CYAN}Confirm${NC} they work: run your code"
+    echo -e "  3. ${CYAN}Make permanent${NC}: image-update (this command)"
+    echo -e "  4. ${CYAN}Recreate${NC} container with updated image"
     echo ""
     echo -e "${BOLD}What This Command Does:${NC}"
     echo ""
@@ -805,7 +805,7 @@ fi
 
 # Fallback to standard location
 if [ -z "$DOCKERFILE" ] || [ ! -f "$DOCKERFILE" ]; then
-    DOCKERFILE="$IMAGES_DIR/${IMAGE_NAME}.Dockerfile"
+    DOCKERFILE="$DOCKERFILES_DIR/${IMAGE_NAME}.Dockerfile"
 fi
 
 # Check if Dockerfile exists
@@ -824,7 +824,7 @@ fi
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Updating Image: ${CYAN}$IMAGE_NAME${NC}"
+echo -e "${BOLD}Updating Dockerfile for Image: ${CYAN}$IMAGE_NAME${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "Dockerfile: ${BLUE}$DOCKERFILE${NC}"
@@ -888,11 +888,19 @@ else
     interactive_mode "$DOCKERFILE"
 fi
 
-# Confirm rebuild
+# Phase 1: Dockerfile Updated ✓
 echo ""
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${YELLOW}Ready to Rebuild Image${NC}"
-echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ Phase 1/3: Dockerfile Updated${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+echo -e "Location: ${BLUE}$DOCKERFILE${NC}"
+echo ""
+
+# Phase 2: Rebuild Image?
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Phase 2/3: Rebuild Docker Image?${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "This will rebuild the image with your changes."
 if [ "$NO_CACHE" = true ]; then
@@ -901,17 +909,20 @@ fi
 echo ""
 echo -e "${DIM}Time estimate: 3-5 minutes${NC}"
 echo ""
-read -p "Continue? [Y/n]: " CONFIRM
-CONFIRM=${CONFIRM:-Y}
+read -p "Rebuild image now? [Y/n]: " REBUILD_CONFIRM </dev/tty
+REBUILD_CONFIRM=${REBUILD_CONFIRM:-Y}
+echo ""
 
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    echo "Cancelled."
+if [[ ! "$REBUILD_CONFIRM" =~ ^[Yy]$ ]]; then
+    echo "Rebuild skipped."
+    echo ""
+    echo "Your Dockerfile has been updated."
+    echo "Rebuild later with:"
+    echo -e "  ${GREEN}image-update $IMAGE_NAME${NC}"
+    echo ""
 
-    # Restore backup if exists
-    if [ -f "${DOCKERFILE}.bak" ]; then
-        mv "${DOCKERFILE}.bak" "$DOCKERFILE"
-        echo "Dockerfile restored to original state."
-    fi
+    # Remove backup since changes were intentional
+    rm -f "${DOCKERFILE}.bak"
     exit 0
 fi
 
@@ -920,7 +931,8 @@ BUILD_CMD="docker build -t $IMAGE_NAME -f $DOCKERFILE"
 if [ "$NO_CACHE" = true ]; then
     BUILD_CMD="$BUILD_CMD --no-cache"
 fi
-BUILD_CMD="$BUILD_CMD $IMAGES_DIR/"
+# Use Dockerfile directory as build context
+BUILD_CMD="$BUILD_CMD $(dirname "$DOCKERFILE")/"
 
 echo ""
 echo -e "${CYAN}Building image...${NC}"
@@ -929,9 +941,9 @@ echo ""
 # Build
 if eval "$BUILD_CMD"; then
     echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✓ Image updated successfully!${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✓ Phase 2/3: Docker Image Rebuilt${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
     # Remove backup
@@ -1004,10 +1016,10 @@ if eval "$BUILD_CMD"; then
     CONTAINER_BASE_NAME="${CONTAINER_BASE_NAME%-image}"
     FULL_CONTAINER_NAME="$CONTAINER_BASE_NAME._.$(id -u)"
 
-    # Check if container exists
+    # Phase 3: Recreate Container?
     if docker ps -a --format "{{.Names}}" | grep -q "^${FULL_CONTAINER_NAME}$"; then
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}Recreate Container?${NC}"
+        echo -e "${BOLD}Phase 3/3: Recreate Container?${NC}"
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
         echo "Your image has been updated, but your container is still"
@@ -1043,7 +1055,11 @@ if eval "$BUILD_CMD"; then
             if command -v container-create &>/dev/null; then
                 container-create "$CONTAINER_BASE_NAME"
                 echo ""
-                echo -e "${GREEN}✓${NC} Container recreated successfully!"
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${GREEN}${BOLD}✓ Phase 3/3: Container Recreated${NC}"
+                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                echo -e "${BOLD}All Done! 🎉${NC}"
                 echo ""
                 echo -e "Start your container with: ${GREEN}container-run $CONTAINER_BASE_NAME${NC}"
             else
