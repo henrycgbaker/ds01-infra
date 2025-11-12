@@ -7,7 +7,7 @@ set -e
 # Script paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
-MLC_OPEN="/opt/aime-ml-containers/mlc-open"
+MLC_OPEN="$INFRA_ROOT/aime-ml-containers/mlc-open"
 RESOURCE_PARSER="$INFRA_ROOT/docker/get_resource_limits.py"
 
 # Source interactive library
