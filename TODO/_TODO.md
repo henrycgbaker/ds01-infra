@@ -398,6 +398,13 @@ onwards -> add one at the top that says `IMAGE CREATION WIZARD`, then new line: 
         - Register release hook
 - [ ] check, is max_mig_per_user
 - [ ] check: idle timeout -> how do i set it so that users can run training runs in background, but that it checks when it's done and shuts it if nothing happening?
+- [ ] Dynamic MIG configuration
+   - Auto-partition GPUs based on demand
+   - Reconfigure MIG profiles on-the-fly
+- [ ] Container migration
+   - Move containers between GPUs
+   - Live migration for maintenance
+
     
 # cgroups
 # cgroups
