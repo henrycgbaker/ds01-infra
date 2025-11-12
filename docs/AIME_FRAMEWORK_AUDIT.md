@@ -41,6 +41,14 @@ AIME ML Containers (v1) is a **deprecated but functional** container management 
 | `mlc-update-sys` | Update system | ❌ **NO** | System admin only |
 | `mlc-upgrade-sys` | Upgrade system | ❌ **NO** | System admin only |
 
+ONE AIM OF THE PLANNED REFACTOR: to properly integrate and use all of rest of `mlc-*` commands in ds01 (either wrapped if needed, or directly called).
+- `container list` should call `mlc-list` in a customisable wrapper (which also provides GUI for selection if called without arguments - as is currently in ds01).
+- `container stop` should call `mlc-stop` in a customisable wrapper (which also provides GUI for selection if called without arguments - as is currently in ds01).
+- new cmd: `container start` that calls `mlc-start` in a customisable wrapper (which also provides GUI for selection if called without arguments - as is currently in ds01)
+- `container cleanup` / `container remove` should call `mlc-remove` in a customisable wrapper (which also provides GUI for selection if called without arguments - as is currently in ds01)
+
+Also TODO: make sure I've downloaded and am using latest mlc!
+
 ### 2.2 Supporting Files
 
 ```

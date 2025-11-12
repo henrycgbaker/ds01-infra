@@ -34,6 +34,7 @@ DS01 (Integrated):
 │   • ml_images.repo (76 frameworks)       │
 │   • mlc-create-patched ✨ NEW            │
 │   • mlc-open (unchanged)                 │
+|   * the rest of mlc-* commands           |
 │   • aime.mlc.* labels                    │
 ├──────────────────────────────────────────┤
 │ Tier 2: DS01 Modular Commands            │
@@ -41,13 +42,18 @@ DS01 (Integrated):
 │   • container-create (calls patched) ✨   │
 │   • resource limits (get_resource_*.py)  │
 │   • GPU allocation (gpu_allocator.py)    │
+|   * all Tier 2 call on Tier 1 mlc-* commands
 ├──────────────────────────────────────────┤
 │ Tier 3: DS01 Orchestrators               │
 │   • project-init                         │
 │   • user-setup                           │
 │   • All existing workflows               │
 └──────────────────────────────────────────┘
+= Tier 1 is the engine: AIME `mlc-*` commands
+= Tier 2 is light CLI layer over them
+= Tier 3 is orchestration layer
 ```
+TO CHANGE: make sure all Tier 1 AIME functionality is leveraged by ds01! Currently the AIME audit suggests it is not all being used at present.
 
 ### Unified Workflow
 
@@ -811,45 +817,6 @@ If integration fails:
 
 ---
 
-## 8. Future Enhancements
-
-### Phase 5: Upstream Contribution (optional)
-
-Once stable, contribute back to AIME:
-
-**Pull request to aime-ml-containers:**
-```
-Title: Add custom image support and resource limits
-
-Description:
-This PR adds optional support for:
-1. Custom Docker images (--image flag)
-2. Resource limits (--cpus, --memory, --shm-size)
-3. Backward compatible with existing workflow
-
-These changes enable institutional deployments with:
-- User-customized images built on AIME base
-- Fair resource sharing via limits
-- Multi-tenant GPU servers
-
-All changes are optional and backward compatible.
-```
-
-### Phase 6: Advanced Features (future)
-
-1. **Image inheritance**
-   - Allow images to inherit from other custom images
-   - Build image chains: AIME → team-base → project
-
-2. **Dynamic MIG configuration**
-   - Auto-partition GPUs based on demand
-   - Reconfigure MIG profiles on-the-fly
-
-3. **Container migration**
-   - Move containers between GPUs
-   - Live migration for maintenance
-
----
 
 ## 9. Success Criteria
 
@@ -889,22 +856,11 @@ All changes are optional and backward compatible.
 
 ---
 
-## 10. Conclusion
+# QUESTIONS FROM HENRY
+- does mlc-create-patched pass to mlc.py?
+- how does the custom image vs AIME images workflow differ
+- can i use image inheritance to make it cleaner? so the parent AIME images are handled according to AIME workflow, then ds01 takes over and inherits the image to add custom packages, resource allocation? or is that already happening?
+    - Build image chains: AIME -> ds01
 
-This integration strategy provides:
-
-- ✅ **95% AIME reuse** (only 65 lines changed in mlc-create)
-- ✅ **100% DS01 feature preservation** (all workflows work)
-- ✅ **Clear upgrade path** (phased implementation)
-- ✅ **Low risk** (backward compatible, rollback plan)
-- ✅ **Production ready** (comprehensive testing)
-
-The result is a **unified system** that combines:
-- AIME's battle-tested framework catalog
-- DS01's resource management and UX
-
-**Ready to implement?** Start with Phase 1, test thoroughly, then proceed through phases.
 
 ---
-
-**Next Step:** Present this strategy to user for approval, then begin Phase 1 implementation.
