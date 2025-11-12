@@ -16,7 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 RESOURCE_PARSER="$SCRIPT_DIR/get_resource_limits.py"
-ORIGINAL_MLC="/opt/aime-ml-containers/mlc-create"
+ORIGINAL_MLC="$INFRA_ROOT/aime-ml-containers/mlc-create"
 
 # Colors for output
 RED='\033[0;31m'

@@ -37,10 +37,10 @@ echo -e "  Location:     ${INFRA_DIR}"
 echo ""
 
 # Base system
-if [ -d "/opt/aime-ml-containers" ]; then
+if [ -d "$INFRA_ROOT/aime-ml-containers" ]; then
     echo -e "${BOLD}Base System:${NC}"
     echo -e "  aime-ml-containers: ${GREEN}installed${NC}"
-    echo -e "  Location: /opt/aime-ml-containers"
+    echo -e "  Location: $INFRA_ROOT/aime-ml-containers"
     echo ""
 fi
 
