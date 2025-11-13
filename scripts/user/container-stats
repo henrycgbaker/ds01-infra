@@ -26,7 +26,6 @@ usage() {
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
     echo "  -w, --watch       Continuous monitoring (refresh every 2s)"
-    echo "  -g, --gpu         Show GPU stats (if available)"
     echo "  --no-trunc        Don't truncate output"
     echo "  -h, --help        Show this help message"
     echo ""
@@ -34,7 +33,6 @@ usage() {
     echo "  container-stats               # Show all your containers"
     echo "  container-stats my-project    # Show specific container"
     echo "  container-stats --watch       # Live monitoring"
-    echo "  container-stats --gpu         # Include GPU stats"
     echo ""
     echo -e "${CYAN}Metrics shown:${NC}"
     echo "  • CPU usage (%)"
@@ -42,6 +40,7 @@ usage() {
     echo "  • Network I/O"
     echo "  • Block I/O"
     echo "  • PIDs (processes)"
+    echo "  • GPU usage (if available)"
     echo ""
 }
 
@@ -110,14 +109,14 @@ show_gpu_stats() {
 show_container_stats() {
     local container_name="$1"
     local watch_mode="$2"
-    local show_gpu="$3"
 
-    local filter=""
+    # Get running containers using docker ps with filter
+    local ps_filter=""
     if [ -n "$container_name" ]; then
         local container_tag="${container_name}._.$USER_ID"
-        filter="--filter name=^${container_tag}$"
+        ps_filter="--filter name=${container_tag}"
     else
-        filter="--filter name=._.$USER_ID"
+        ps_filter="--filter name=._.$USER_ID"
     fi
 
     # Header
@@ -147,7 +146,7 @@ show_container_stats() {
     fi
 
     # Get running containers
-    local containers=$(docker ps --format "{{.Names}}" $filter 2>/dev/null)
+    local containers=$(docker ps --format "{{.Names}}" $ps_filter 2>/dev/null)
 
     if [ -z "$containers" ]; then
         echo -e "${YELLOW}No running containers found${NC}\n"
@@ -160,8 +159,8 @@ show_container_stats() {
         return
     fi
 
-    # Get stats
-    docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}" $filter | \
+    # Get stats - pass container names directly, not via filter
+    docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}" $containers | \
     while IFS= read -r line; do
         # Skip header
         if [[ "$line" =~ ^NAME ]]; then
@@ -206,10 +205,8 @@ show_container_stats() {
         echo ""
     fi
 
-    # GPU stats
-    if [ "$show_gpu" = "true" ]; then
-        show_gpu_stats
-    fi
+    # Always show GPU stats
+    show_gpu_stats
 
     # Summary
     if [ "$watch_mode" != "true" ]; then
@@ -220,8 +217,7 @@ show_container_stats() {
 
         echo -e "${YELLOW}💡 Tips:${NC}"
         echo -e "   Live view:  ${GREEN}container-stats --watch${NC}"
-        echo -e "   With GPU:   ${GREEN}container-stats --gpu${NC}"
-        echo -e "   All info:   ${GREEN}container-list --detailed${NC}"
+        echo -e "   All info:   ${GREEN}container-list --all${NC}"
         echo ""
     fi
 }
@@ -230,7 +226,6 @@ show_container_stats() {
 CONTAINER_NAME=""
 GUIDED=false
 WATCH_MODE=false
-SHOW_GPU=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -240,10 +235,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         -w|--watch)
             WATCH_MODE=true
-            shift
-            ;;
-        -g|--gpu)
-            SHOW_GPU=true
             shift
             ;;
         --no-trunc)
@@ -275,9 +266,9 @@ done
 # Watch mode
 if [ "$WATCH_MODE" = true ]; then
     while true; do
-        show_container_stats "$CONTAINER_NAME" "true" "$SHOW_GPU"
+        show_container_stats "$CONTAINER_NAME" "true"
         sleep 2
     done
 else
-    show_container_stats "$CONTAINER_NAME" "false" "$SHOW_GPU"
+    show_container_stats "$CONTAINER_NAME" "false"
 fi
