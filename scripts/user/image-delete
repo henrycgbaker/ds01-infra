@@ -104,6 +104,26 @@ select_user_image() {
     select_from_list "Select image to delete:" "${images[@]}"
 }
 
+# Show guided explanation BEFORE selection
+if [ "$GUIDED" = true ] && [ ${#IMAGE_NAMES[@]} -eq 0 ]; then
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}What happens when you delete an image:${NC}"
+    echo -e "  • The image file is permanently removed from disk"
+    echo -e "  • Any containers using this image will need to be removed first"
+    echo -e "  • The Dockerfile is backed up (unless --keep-dockerfile is used)"
+    echo -e "  • You can rebuild the image later using the Dockerfile"
+    echo ""
+    echo -e "${RED}⚠ Important:${NC} ${BOLD}What is NOT deleted:${NC}"
+    echo -e "  • ${GREEN}✓${NC} Your workspace files and data (always safe)"
+    echo -e "  • ${GREEN}✓${NC} Dockerfile (backed up to ds01-config/images/deleted/)"
+    echo -e "  • ${GREEN}✓${NC} Container configurations"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Why delete images?${NC}"
+    echo -e "  Images can be large (several GB). Deleting unused images"
+    echo -e "  frees disk space. You can always rebuild from the Dockerfile."
+    echo ""
+fi
+
 # If no image names provided, prompt to select
 if [ ${#IMAGE_NAMES[@]} -eq 0 ]; then
     SELECTED=$(select_user_image)
@@ -143,25 +163,7 @@ delete_single_image() {
     echo -e "${CYAN}━━━ Deleting Image: ${BOLD}$IMAGE_NAME${NC} ${CYAN}━━━${NC}"
     echo ""
 
-if [ "$GUIDED" = true ]; then
-    echo -e "${CYAN}ℹ ${NC}${BOLD}What happens when you delete an image:${NC}"
-    echo -e "  • The image file is permanently removed from disk"
-    echo -e "  • Any containers using this image will need to be removed first"
-    echo -e "  • The Dockerfile is backed up (unless --keep-dockerfile is used)"
-    echo -e "  • You can rebuild the image later using the Dockerfile"
-    echo ""
-    echo -e "${RED}⚠ Important:${NC} ${BOLD}What is NOT deleted:${NC}"
-    echo -e "  • ${GREEN}✓${NC} Your workspace files and data (always safe)"
-    echo -e "  • ${GREEN}✓${NC} Dockerfile (backed up to ds01-config/images/deleted/)"
-    echo -e "  • ${GREEN}✓${NC} Container configurations"
-    echo ""
-    echo -e "${CYAN}ℹ ${NC}${BOLD}Why delete images?${NC}"
-    echo -e "  Images can be large (several GB). Deleting unused images"
-    echo -e "  frees disk space. You can rebuild anytime from the Dockerfile."
-    echo ""
-fi
-
-# Show image info
+    # Show image info
 SIZE=$(docker images --format "{{.Size}}" "$IMAGE_NAME" | head -1)
 CREATED=$(docker images --format "{{.CreatedAt}}" "$IMAGE_NAME" | head -1)
 IMAGE_ID=$(docker images --format "{{.ID}}" "$IMAGE_NAME" | head -1)
