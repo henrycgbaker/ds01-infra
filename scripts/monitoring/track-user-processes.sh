@@ -8,7 +8,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Get all DS01 users
-USERS=$(docker ps -a --filter "label=ds01.user" --format "{{index .Config.Labels \"ds01.user\"}}" | sort -u)
+USERS=$(docker ps -a --filter "label=aime.mlc.DS01_USER" --format "{{index .Config.Labels \"aime.mlc.DS01_USER\"}}" | sort -u)
 
 for user in $USERS; do
     echo "User: $user"
@@ -22,7 +22,7 @@ for user in $USERS; do
         echo "  Host processes: $host_procs"
         
         # Container processes
-        user_containers=$(docker ps --filter "label=ds01.user=$user" --format "{{.Names}}")
+        user_containers=$(docker ps --filter "label=aime.mlc.DS01_USER=$user" --format "{{.Names}}")
         
         for container in $user_containers; do
             short_name=$(echo "$container" | cut -d'.' -f1)

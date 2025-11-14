@@ -8,8 +8,8 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Get all DS01 containers
-docker ps -a --filter "label=ds01.user" \
-    --format "{{.Names}}|{{.Status}}|{{index .Labels \"ds01.user\"}}|{{index .Labels \"ds01.user_id\"}}|{{index .Labels \"ds01.project\"}}" | \
+docker ps -a --filter "label=aime.mlc.DS01_USER" \
+    --format "{{.Names}}|{{.Status}}|{{index .Labels \"aime.mlc.DS01_USER\"}}|{{index .Labels \"aime.mlc.DS01_USER_ID\"}}|{{index .Labels \"aime.mlc.DS01_PROJECT\"}}" | \
 while IFS='|' read -r container status user uid project; do
     
     short_name=$(echo "$container" | cut -d'.' -f1)
@@ -42,7 +42,7 @@ echo "Summary by User"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-docker ps -a --filter "label=ds01.user" --format "{{index .Labels \"ds01.user\"}}" | \
+docker ps -a --filter "label=aime.mlc.DS01_USER" --format "{{index .Labels \"aime.mlc.DS01_USER\"}}" | \
     sort | uniq -c | while read count user; do
     echo "  $user: $count container(s)"
 done

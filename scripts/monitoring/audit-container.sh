@@ -12,9 +12,9 @@ docker ps --format "{{.Names}}" | while read container; do
     echo "Auditing: $container"
     
     # Check if it's a DS01 container
-    if docker inspect "$container" --format='{{index .Config.Labels "ds01.user"}}' 2>/dev/null | grep -q .; then
-        user=$(docker inspect "$container" --format='{{index .Config.Labels "ds01.user"}}')
-        uid=$(docker inspect "$container" --format='{{index .Config.Labels "ds01.user_id"}}')
+    if docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER"}}' 2>/dev/null | grep -q .; then
+        user=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER"}}')
+        uid=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER_ID"}}')
         
         echo "  ✓ DS01 container"
         echo "  Owner: $user (UID: $uid)"
@@ -56,7 +56,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 docker ps -a --format "{{.Names}}" | while read container; do
-    if ! docker inspect "$container" --format='{{index .Config.Labels "ds01.user"}}' 2>/dev/null | grep -q .; then
+    if ! docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER"}}' 2>/dev/null | grep -q .; then
         status=$(docker inspect "$container" --format='{{.State.Status}}')
         created=$(docker inspect "$container" --format='{{.Created}}' | cut -d'T' -f1)
         echo "  $container [$status] (created: $created)"
