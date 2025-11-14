@@ -58,7 +58,7 @@ All compute workloads must run inside containers.
 📋 Your Containers:
 MSGEOF
 
-docker ps -a --filter "label=ds01.user=\$(whoami)" \
+docker ps -a --filter "label=aime.mlc.DS01_USER=\$(whoami)" \
     --format "   • {{.Names}} [{{.Status}}]" 2>/dev/null | \
     sed 's/\._\..*\ /\ /' || echo "   (none found)"
 
@@ -128,7 +128,7 @@ if [ -z "$DS01_CONTAINER" ] && [ -z "$DS01_WELCOME_SHOWN" ]; then
     export DS01_WELCOME_SHOWN=1
     
     # Count containers
-    CONTAINER_COUNT=$(docker ps -a --filter "label=ds01.user=$(whoami)" --format "{{.Names}}" 2>/dev/null | wc -l)
+    CONTAINER_COUNT=$(docker ps -a --filter "label=aime.mlc.DS01_USER=$(whoami)" --format "{{.Names}}" 2>/dev/null | wc -l)
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -142,7 +142,7 @@ if [ -z "$DS01_CONTAINER" ] && [ -z "$DS01_WELCOME_SHOWN" ]; then
     else
         echo ""
         echo "📦 Your containers:"
-        docker ps -a --filter "label=ds01.user=$(whoami)" \
+        docker ps -a --filter "label=aime.mlc.DS01_USER=$(whoami)" \
             --format "  • {{.Names}}\t{{.Status}}" 2>/dev/null | \
             sed 's/\._\..*\t/\t/'
         echo ""
