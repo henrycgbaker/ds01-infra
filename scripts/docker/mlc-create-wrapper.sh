@@ -2,9 +2,10 @@
 # Enhanced MLC Create - container creation with resource limits
 # /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh
 #
-# This wraps the original mlc-create and adds:
+# This wraps mlc-patched.py (DS01-enhanced AIME v2) and adds:
 # - Automatic resource limits based on user/group
 # - GPU allocation management
+# - Custom image support (built via image-create)
 # - Simplified interface for students
 #
 # Installation: sudo ln -sf /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh /usr/local/bin/mlc-create
@@ -16,7 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 RESOURCE_PARSER="$SCRIPT_DIR/get_resource_limits.py"
-ORIGINAL_MLC="$INFRA_ROOT/aime-ml-containers/mlc-create"
+MLC_PATCHED="$SCRIPT_DIR/mlc-patched.py"  # DS01-enhanced AIME v2
+ORIGINAL_MLC="$INFRA_ROOT/aime-ml-containers/mlc-create"  # Fallback for v1
 
 # Colors for output
 RED='\033[0;31m'
@@ -108,10 +110,10 @@ preflight_checks() {
         exit 1
     fi
     
-    # Check original mlc-create exists
-    if [ ! -f "$ORIGINAL_MLC" ]; then
-        log_error "Original mlc-create not found at: $ORIGINAL_MLC"
-        log_error "Please ensure aime-ml-containers is installed"
+    # Check mlc-patched.py exists (DS01-enhanced AIME v2)
+    if [ ! -f "$MLC_PATCHED" ]; then
+        log_error "mlc-patched.py not found at: $MLC_PATCHED"
+        log_error "DS01 infrastructure may not be properly installed"
         exit 1
     fi
     
@@ -143,6 +145,7 @@ fi
 CONTAINER_NAME=""
 FRAMEWORK=""
 VERSION=""
+CUSTOM_IMAGE=""  # Custom Docker image (bypasses AIME catalog)
 WORKSPACE_DIR="$HOME/workspace"
 DATA_DIR=""
 REQUESTED_GPU=""
@@ -185,6 +188,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         -g=*|--gpu=*)
             REQUESTED_GPU="${1#*=}"
+            ;;
+        --image=*)
+            CUSTOM_IMAGE="${1#*=}"
             ;;
         --cpu-only)
             CPU_ONLY=true
@@ -312,33 +318,115 @@ else
     RESOURCE_LIMITS="--cpus=16 --memory=32g --memory-swap=32g --shm-size=16g --pids-limit=4096"
 fi
 
-# GPU allocation
+# GPU allocation via gpu_allocator.py (DS01 priority-based allocation)
 GPU_ARG=""
+ALLOCATED_GPU=""
+
 if [ "$CPU_ONLY" = true ]; then
     log_info "Creating CPU-only container (no GPU)"
 else
     if [ -n "$REQUESTED_GPU" ]; then
+        # Admin-requested specific GPU (bypasses allocator)
         log_info "Specific GPU requested: $REQUESTED_GPU"
         GPU_ARG="-g=$REQUESTED_GPU"
     else
-        log_info "GPU will be auto-allocated by mlc-create"
+        # Priority-based GPU allocation via gpu_allocator.py
+        GPU_ALLOCATOR="$SCRIPT_DIR/gpu_allocator.py"
+
+        if [ -f "$GPU_ALLOCATOR" ] && [ -f "$RESOURCE_PARSER" ]; then
+            # Get user's GPU limits and priority
+            MAX_GPUS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --max-gpus 2>/dev/null || echo "1")
+            PRIORITY=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --priority 2>/dev/null || echo "10")
+
+            log_info "Allocating GPU via gpu_allocator.py (priority: $PRIORITY, max: $MAX_GPUS)..."
+
+            # Allocate GPU
+            ALLOC_OUTPUT=$(python3 "$GPU_ALLOCATOR" allocate "$CURRENT_USER" "$CONTAINER_TAG" "$MAX_GPUS" "$PRIORITY" 2>&1)
+            ALLOC_EXIT=$?
+
+            if [ $ALLOC_EXIT -eq 0 ] && echo "$ALLOC_OUTPUT" | grep -q "✓ Allocated"; then
+                # Extract GPU ID from output (format: "✓ Allocated GPU/MIG X to container")
+                ALLOCATED_GPU=$(echo "$ALLOC_OUTPUT" | grep -oP '(?<=GPU/MIG )\S+(?= to)')
+
+                if [ -n "$ALLOCATED_GPU" ]; then
+                    GPU_ARG="-g=device=$ALLOCATED_GPU"
+                    log_success "GPU $ALLOCATED_GPU allocated successfully"
+                else
+                    log_error "GPU allocator returned success but couldn't parse GPU ID"
+                    log_error "Output: $ALLOC_OUTPUT"
+                    exit 1
+                fi
+            else
+                log_error "GPU allocation failed: $ALLOC_OUTPUT"
+                exit 1
+            fi
+        else
+            # Fallback if allocator not available
+            log_warning "GPU allocator not found, using default GPU allocation"
+            GPU_ARG="-g=all"
+        fi
     fi
 fi
 
-# Build arguments for original mlc-create
-ORIGINAL_ARGS="$CONTAINER_NAME $FRAMEWORK"
+# Extract shm-size and cgroup-parent from resource limits for mlc-patched.py
+# These must be passed AT CREATION TIME (cannot be updated via docker update)
+SHM_SIZE=""
+CGROUP_PARENT=""
+for arg in $RESOURCE_LIMITS; do
+    case $arg in
+        --shm-size=*)
+            SHM_SIZE="${arg#*=}"
+            ;;
+        --cgroup-parent=*)
+            CGROUP_PARENT="${arg#*=}"
+            ;;
+    esac
+done
+
+# Build arguments for mlc-patched.py (DS01-enhanced AIME v2)
+MLC_ARGS="create $CONTAINER_NAME"
+
+# Add framework (optional if custom image provided)
+if [ -n "$FRAMEWORK" ]; then
+    MLC_ARGS="$MLC_ARGS $FRAMEWORK"
+fi
+
+# Add version (optional)
 if [ -n "$VERSION" ]; then
-    ORIGINAL_ARGS="$ORIGINAL_ARGS $VERSION"
+    MLC_ARGS="$MLC_ARGS $VERSION"
 fi
 
-ORIGINAL_ARGS="$ORIGINAL_ARGS -w=$WORKSPACE_DIR"
+# Add script mode flag (non-interactive)
+MLC_ARGS="$MLC_ARGS -s"
 
+# Add workspace directory
+MLC_ARGS="$MLC_ARGS -w $WORKSPACE_DIR"
+
+# Add data directory (optional)
 if [ -n "$DATA_DIR" ]; then
-    ORIGINAL_ARGS="$ORIGINAL_ARGS -d=$DATA_DIR"
+    MLC_ARGS="$MLC_ARGS -d $DATA_DIR"
 fi
 
+# Add custom image (DS01-specific: bypasses AIME catalog)
+if [ -n "$CUSTOM_IMAGE" ]; then
+    MLC_ARGS="$MLC_ARGS --image $CUSTOM_IMAGE"
+    log_info "Using custom image: $CUSTOM_IMAGE"
+fi
+
+# Add GPU argument (optional)
 if [ -n "$GPU_ARG" ]; then
-    ORIGINAL_ARGS="$ORIGINAL_ARGS $GPU_ARG"
+    MLC_ARGS="$MLC_ARGS $GPU_ARG"
+fi
+
+# Add resource limits that must be set at creation time (DS01 patch)
+if [ -n "$SHM_SIZE" ]; then
+    MLC_ARGS="$MLC_ARGS --shm-size=$SHM_SIZE"
+    log_info "Setting shm-size: $SHM_SIZE (at creation)"
+fi
+
+if [ -n "$CGROUP_PARENT" ]; then
+    MLC_ARGS="$MLC_ARGS --cgroup-parent=$CGROUP_PARENT"
+    log_info "Setting cgroup-parent: $CGROUP_PARENT (at creation)"
 fi
 
 # Dry run mode
@@ -346,7 +434,7 @@ if [ "$DRY_RUN" = true ]; then
     log_info "DRY RUN MODE - No containers will be created"
     echo ""
     log_info "Would execute:"
-    echo "  bash $ORIGINAL_MLC $ORIGINAL_ARGS"
+    echo "  python3 $MLC_PATCHED $MLC_ARGS"
     echo ""
     log_info "Would apply resource limits:"
     echo "$RESOURCE_LIMITS" | tr ' ' '\n' | sed 's/^/  /'
@@ -355,14 +443,21 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-# Call original mlc-create
-log_info "Creating container with mlc-create..."
+# Call mlc-patched.py (DS01-enhanced AIME v2)
+log_info "Creating container with mlc-patched.py (AIME v2)..."
 
-bash "$ORIGINAL_MLC" $ORIGINAL_ARGS
+python3 "$MLC_PATCHED" $MLC_ARGS
 MLC_EXIT_CODE=$?
 
 if [ $MLC_EXIT_CODE -ne 0 ]; then
     log_error "Container creation failed (exit code: $MLC_EXIT_CODE)"
+
+    # Release allocated GPU if one was allocated
+    if [ -n "$ALLOCATED_GPU" ] && [ -f "$GPU_ALLOCATOR" ]; then
+        log_info "Releasing allocated GPU $ALLOCATED_GPU..."
+        python3 "$GPU_ALLOCATOR" release "$CONTAINER_TAG" &>/dev/null || true
+    fi
+
     exit $MLC_EXIT_CODE
 fi
 
@@ -372,6 +467,13 @@ log_info "Applying resource limits to container..."
 # Verify container was created
 if ! docker inspect "$CONTAINER_TAG" &>/dev/null; then
     log_error "Container $CONTAINER_TAG was not created successfully"
+
+    # Release allocated GPU if one was allocated
+    if [ -n "$ALLOCATED_GPU" ] && [ -f "$GPU_ALLOCATOR" ]; then
+        log_info "Releasing allocated GPU $ALLOCATED_GPU..."
+        python3 "$GPU_ALLOCATOR" release "$CONTAINER_TAG" &>/dev/null || true
+    fi
+
     exit 1
 fi
 
