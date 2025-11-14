@@ -26,7 +26,7 @@ usage() {
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
     echo "  -w, --watch       Continuous monitoring (refresh every 2s)"
-    echo "  -g, --gpu         Show GPU stats (if available)"
+    echo "  -g, --gpu         Include GPU statistics"
     echo "  --no-trunc        Don't truncate output"
     echo "  -h, --help        Show this help message"
     echo ""
@@ -34,7 +34,7 @@ usage() {
     echo "  container-stats               # Show all your containers"
     echo "  container-stats my-project    # Show specific container"
     echo "  container-stats --watch       # Live monitoring"
-    echo "  container-stats --gpu         # Include GPU stats"
+    echo "  container-stats --gpu         # Include GPU usage"
     echo ""
     echo -e "${CYAN}Metrics shown:${NC}"
     echo "  • CPU usage (%)"
@@ -42,6 +42,7 @@ usage() {
     echo "  • Network I/O"
     echo "  • Block I/O"
     echo "  • PIDs (processes)"
+    echo "  • GPU usage (with --gpu flag)"
     echo ""
 }
 
@@ -77,19 +78,73 @@ format_bytes() {
     echo "${size}${units[$unit]}"
 }
 
+get_container_gpu() {
+    local container_full_name="$1"
+
+    # Get GPU device from container's DeviceRequests
+    local gpu_ids=$(docker inspect "$container_full_name" --format '{{range .HostConfig.DeviceRequests}}{{range .DeviceIDs}}{{.}} {{end}}{{end}}' 2>/dev/null | xargs)
+
+    if [ -z "$gpu_ids" ]; then
+        # Try getting from Devices (legacy method)
+        gpu_ids=$(docker inspect "$container_full_name" --format '{{range .HostConfig.Devices}}{{if contains .PathOnHost "/dev/nvidia"}}{{.PathOnHost}} {{end}}{{end}}' 2>/dev/null | grep -oP 'nvidia\K[0-9]+' | head -1)
+    fi
+
+    echo "$gpu_ids"
+}
+
+get_gpu_utilization() {
+    local gpu_id="$1"
+
+    if ! command -v nvidia-smi &> /dev/null; then
+        echo "N/A"
+        return
+    fi
+
+    if [ -z "$gpu_id" ]; then
+        echo "-"
+        return
+    fi
+
+    # Get GPU utilization for specific GPU
+    local util=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits -i "$gpu_id" 2>/dev/null | xargs)
+
+    if [ -z "$util" ]; then
+        echo "-"
+    else
+        echo "${util}%"
+    fi
+}
+
 show_gpu_stats() {
     if ! command -v nvidia-smi &> /dev/null; then
         return
     fi
 
-    echo -e "\n${CYAN}━━━ GPU Statistics ━━━${NC}\n"
+    echo -e "\n${CYAN}━━━ GPU Statistics (Your Allocated GPUs) ━━━${NC}\n"
 
-    # Get GPU info
-    nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu \
-        --format=csv,noheader,nounits 2>/dev/null | while IFS=, read -r idx name util mem_used mem_total temp; do
+    # Get all user's containers and their GPU allocations
+    local user_gpus=$(docker ps --filter "name=._.$USER_ID" --format "{{.Names}}" 2>/dev/null | while read container; do
+        get_container_gpu "$container"
+    done | sort -u)
+
+    if [ -z "$user_gpus" ]; then
+        echo -e "${DIM}No GPUs allocated to your containers${NC}\n"
+        return
+    fi
+
+    # Show stats for each allocated GPU
+    for gpu_id in $user_gpus; do
+        # Get GPU info
+        local info=$(nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu \
+            --format=csv,noheader,nounits -i "$gpu_id" 2>/dev/null)
+
+        if [ -z "$info" ]; then
+            continue
+        fi
+
+        IFS=, read -r name util mem_used mem_total temp <<< "$info"
 
         # Trim whitespace
-        idx=$(echo "$idx" | xargs)
         name=$(echo "$name" | xargs)
         util=$(echo "$util" | xargs)
         mem_used=$(echo "$mem_used" | xargs)
@@ -99,7 +154,7 @@ show_gpu_stats() {
         # Color code based on utilization
         local color=$(get_color_for_percentage "${util}%")
 
-        echo -e "${BOLD}GPU $idx:${NC} ${DIM}$name${NC}"
+        echo -e "${BOLD}GPU $gpu_id:${NC} ${DIM}$name${NC}"
         echo -e "  Utilization: ${color}${util}%${NC}"
         echo -e "  Memory:      ${GREEN}${mem_used}MB${NC} / ${DIM}${mem_total}MB${NC}"
         echo -e "  Temperature: ${YELLOW}${temp}°C${NC}"
@@ -112,12 +167,13 @@ show_container_stats() {
     local watch_mode="$2"
     local show_gpu="$3"
 
-    local filter=""
+    # Get running containers using docker ps with filter
+    local ps_filter=""
     if [ -n "$container_name" ]; then
         local container_tag="${container_name}._.$USER_ID"
-        filter="--filter name=^${container_tag}$"
+        ps_filter="--filter name=${container_tag}"
     else
-        filter="--filter name=._.$USER_ID"
+        ps_filter="--filter name=._.$USER_ID"
     fi
 
     # Header
@@ -134,6 +190,9 @@ show_container_stats() {
             echo -e "  • ${BOLD}NET I/O${NC} - Network data received / sent"
             echo -e "  • ${BOLD}BLOCK I/O${NC} - Disk data read / written"
             echo -e "  • ${BOLD}PIDS${NC} - Number of processes running in the container"
+            if [ "$show_gpu" = "true" ]; then
+                echo -e "  • ${BOLD}GPU %${NC} - GPU utilization for the GPU allocated to this container"
+            fi
             echo ""
             echo -e "${CYAN}ℹ ${NC}${BOLD}Color Coding:${NC}"
             echo -e "  • ${GREEN}Green${NC} - Healthy usage (<70%)"
@@ -147,7 +206,7 @@ show_container_stats() {
     fi
 
     # Get running containers
-    local containers=$(docker ps --format "{{.Names}}" $filter 2>/dev/null)
+    local containers=$(docker ps --format "{{.Names}}" $ps_filter 2>/dev/null)
 
     if [ -z "$containers" ]; then
         echo -e "${YELLOW}No running containers found${NC}\n"
@@ -160,28 +219,46 @@ show_container_stats() {
         return
     fi
 
-    # Get stats
-    docker stats --no-stream --format "table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}" $filter | \
-    while IFS= read -r line; do
-        # Skip header
-        if [[ "$line" =~ ^NAME ]]; then
-            echo -e "${BOLD}${line}${NC}" | sed "s/\._\.$USER_ID//g"
+    # Print header with proper formatting
+    if [ "$show_gpu" = "true" ]; then
+        printf "${BOLD}%-20s %-8s %-22s %-8s %-15s %-15s %-6s %-8s${NC}\n" \
+            "NAME" "CPU %" "MEM USAGE / LIMIT" "MEM %" "NET I/O" "BLOCK I/O" "PIDS" "GPU %"
+    else
+        printf "${BOLD}%-20s %-8s %-22s %-8s %-15s %-15s %-6s${NC}\n" \
+            "NAME" "CPU %" "MEM USAGE / LIMIT" "MEM %" "NET I/O" "BLOCK I/O" "PIDS"
+    fi
+
+    # Get stats - pass container names directly, not via filter
+    for container in $containers; do
+        local stats=$(docker stats --no-stream --format "{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}\t{{.PIDs}}" "$container" 2>/dev/null)
+
+        if [ -z "$stats" ]; then
             continue
         fi
 
-        # Parse line
-        IFS=$'\t' read -r name cpu mem mem_perc net block pids <<< "$line"
+        IFS=$'\t' read -r cpu mem mem_perc net block pids <<< "$stats"
 
         # Remove user ID from name
-        name=$(echo "$name" | sed "s/\._\.$USER_ID//")
+        local display_name=$(echo "$container" | sed "s/\._\.$USER_ID//")
 
         # Color code CPU
-        cpu_color=$(get_color_for_percentage "$cpu")
+        local cpu_color=$(get_color_for_percentage "$cpu")
 
         # Color code memory
-        mem_color=$(get_color_for_percentage "$mem_perc")
+        local mem_color=$(get_color_for_percentage "$mem_perc")
 
-        echo -e "${CYAN}$name${NC}\t${cpu_color}${cpu}${NC}\t${mem_color}${mem}${NC}\t${mem_color}${mem_perc}${NC}\t${DIM}${net}${NC}\t${DIM}${block}${NC}\t${pids}"
+        # Get GPU utilization if flag is set
+        if [ "$show_gpu" = "true" ]; then
+            local gpu_id=$(get_container_gpu "$container")
+            local gpu_util=$(get_gpu_utilization "$gpu_id")
+            local gpu_color=$(get_color_for_percentage "$gpu_util")
+
+            printf "${CYAN}%-20s${NC} ${cpu_color}%-8s${NC} ${mem_color}%-22s${NC} ${mem_color}%-8s${NC} ${DIM}%-15s${NC} ${DIM}%-15s${NC} %-6s ${gpu_color}%-8s${NC}\n" \
+                "$display_name" "$cpu" "$mem" "$mem_perc" "$net" "$block" "$pids" "$gpu_util"
+        else
+            printf "${CYAN}%-20s${NC} ${cpu_color}%-8s${NC} ${mem_color}%-22s${NC} ${mem_color}%-8s${NC} ${DIM}%-15s${NC} ${DIM}%-15s${NC} %-6s${NC}\n" \
+                "$display_name" "$cpu" "$mem" "$mem_perc" "$net" "$block" "$pids"
+        fi
     done
 
     # Resource limits
@@ -206,7 +283,7 @@ show_container_stats() {
         echo ""
     fi
 
-    # GPU stats
+    # Show GPU stats if flag is set
     if [ "$show_gpu" = "true" ]; then
         show_gpu_stats
     fi
@@ -221,7 +298,7 @@ show_container_stats() {
         echo -e "${YELLOW}💡 Tips:${NC}"
         echo -e "   Live view:  ${GREEN}container-stats --watch${NC}"
         echo -e "   With GPU:   ${GREEN}container-stats --gpu${NC}"
-        echo -e "   All info:   ${GREEN}container-list --detailed${NC}"
+        echo -e "   All info:   ${GREEN}container-list --all${NC}"
         echo ""
     fi
 }

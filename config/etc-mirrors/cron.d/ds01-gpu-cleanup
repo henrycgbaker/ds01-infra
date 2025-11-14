@@ -1,0 +1,7 @@
+# DS01 - Cleanup stale GPU allocations every hour
+# This releases GPUs from stopped containers that have exceeded their hold timeout
+#
+# Deploy with: sudo cp /opt/ds01-infra/config/etc-mirrors/cron.d/ds01-gpu-cleanup /etc/cron.d/
+
+# Run every hour at :15 past the hour
+15 * * * * root /opt/ds01-infra/scripts/maintenance/cleanup-stale-gpu-allocations.sh >> /var/log/ds01/gpu-stale-cleanup.log 2>&1

@@ -1,5 +1,15 @@
 #!/bin/bash
-# Stop a running container
+# DS01 Container Stop - Stops containers via mlc-stop with DS01 UX
+# Tier 2 Command - Wraps AIME mlc-stop with interactive GUI and safety checks
+
+set -e
+
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+MLC_STOP="$INFRA_ROOT/aime-ml-containers/mlc-stop"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
 
 # Source interactive library
 source /usr/local/lib/interactive-select.sh
@@ -18,7 +28,7 @@ USER_ID=$(id -u)
 
 usage() {
     echo ""
-    echo -e "${BOLD}Container Stopper${NC}"
+    echo -e "${BOLD}DS01 Container Stop${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-stop [name] [options]"
@@ -57,6 +67,8 @@ usage() {
     echo -e "  • Remove:  ${GREEN}container-cleanup <name>${NC}"
     echo -e "  • Status:  ${GREEN}container-list${NC}"
     echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-stop for container stopping"
+    echo ""
 }
 
 stop_container() {
@@ -78,7 +90,7 @@ stop_container() {
         return 0
     fi
 
-    # Get container info
+    # Get container info (DS01 display)
     local uptime=$(docker ps --format "{{.Status}}" --filter "name=^${container_tag}$")
     local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null)
 
@@ -87,17 +99,7 @@ stop_container() {
     echo -e "${BOLD}Image:${NC}     $image"
     echo ""
 
-    if [ "$GUIDED" = true ]; then
-        echo -e "${CYAN}ℹ ${NC}${BOLD}What does stopping mean?${NC}"
-        echo -e "  Stopping a container halts all processes inside it, but preserves:"
-        echo -e "  • All your files and data in the workspace"
-        echo -e "  • The container configuration"
-        echo -e "  • Any changes you made inside the container"
-        echo -e "  You can restart it later with ${GREEN}container-run${NC} and continue where you left off."
-        echo ""
-    fi
-
-    # Warning about running processes
+    # Warning about running processes (DS01-specific)
     local process_count=$(docker exec "$container_tag" ps aux 2>/dev/null | wc -l)
     if [ "$process_count" -gt 5 ]; then
         echo -e "${YELLOW}⚠ Warning: Container has running processes${NC}"
@@ -108,30 +110,68 @@ stop_container() {
         echo ""
     fi
 
-    # Stop container
+    # Check if mlc-stop exists
+    if [ ! -f "$MLC_STOP" ]; then
+        # Fallback to docker directly
+        if [ "$force" = true ]; then
+            echo -e "${YELLOW}Force stopping...${NC}"
+            if docker kill "$container_tag" > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Container force stopped"
+                return 0
+            else
+                echo -e "${RED}✗${NC} Failed to stop container"
+                return 1
+            fi
+        else
+            echo -e "${CYAN}Stopping gracefully (timeout: ${timeout}s)...${NC}"
+            if docker stop -t "$timeout" "$container_tag" > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Container stopped"
+                return 0
+            else
+                echo -e "${RED}✗${NC} Failed to stop container"
+                return 1
+            fi
+        fi
+    fi
+
+    # Stop container via mlc-stop (AIME Tier 1)
     if [ "$force" = true ]; then
         echo -e "${YELLOW}Force stopping...${NC}"
         if [ "$GUIDED" = true ]; then
             echo -e "${CYAN}ℹ ${NC}Force stop sends SIGKILL, immediately terminating all processes without cleanup."
         fi
-        if docker kill "$container_tag" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Container force stopped"
+        # mlc-stop -f for force
+        if bash "$MLC_STOP" "$container_name" -f -s > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Container force stopped (via mlc-stop)"
             return 0
         else
-            echo -e "${RED}✗${NC} Failed to stop container"
-            return 1
+            # Fallback to docker kill
+            if docker kill "$container_tag" > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Container force stopped"
+                return 0
+            else
+                echo -e "${RED}✗${NC} Failed to stop container"
+                return 1
+            fi
         fi
     else
         echo -e "${CYAN}Stopping gracefully (timeout: ${timeout}s)...${NC}"
         if [ "$GUIDED" = true ]; then
             echo -e "${CYAN}ℹ ${NC}Graceful stop sends SIGTERM, allowing processes to save state and exit cleanly."
         fi
-        if docker stop -t "$timeout" "$container_tag" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Container stopped"
+        # Call mlc-stop with script mode (-s for non-interactive)
+        if bash "$MLC_STOP" "$container_name" -s > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Container stopped (via mlc-stop)"
             return 0
         else
-            echo -e "${RED}✗${NC} Failed to stop container"
-            return 1
+            # Fallback to docker stop
+            if docker stop -t "$timeout" "$container_tag" > /dev/null 2>&1; then
+                echo -e "${GREEN}✓${NC} Container stopped"
+                return 0
+            else
+                echo -e "${RED}✗${NC} Failed to stop container"
+                return 1
+            fi
         fi
     fi
 }
@@ -221,7 +261,33 @@ if [ "$STOP_ALL" = true ]; then
     exit 0
 fi
 
-# If no container name provided, prompt to select running containers
+# Show guided explanation BEFORE selection
+if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
+    echo -e "${CYAN}ℹ ${NC}${BOLD}What does stopping mean?${NC}"
+    echo -e "  Stopping a container halts all processes inside it, but preserves:"
+    echo -e "  • All your files and data in the workspace"
+    echo -e "  • The container configuration"
+    echo -e "  • Any changes you made inside the container"
+    echo -e "  You can restart it later with ${GREEN}container-run${NC} and continue where you left off."
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}GPU allocation after stop:${NC}"
+    echo -e "  • Your GPU is held for 1h after stopping"
+    echo -e "  • Restart within 1h → GPU still yours (no re-competing)"
+    echo -e "  • After 1h → GPU auto-released for others"
+    echo -e "  • Need GPU freed immediately? Use ${GREEN}container-cleanup${NC}"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}System automation:${NC}"
+    echo -e "  • Idle containers auto-stopped after 24h GPU inactivity"
+    echo -e "  • Stopped containers' GPUs auto-released after 1h hold time"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Behind the scenes:${NC}"
+    echo -e "  • DS01 uses AIME's ${GREEN}mlc-stop${NC} for the actual stopping operation"
+    echo -e "  • This ensures consistent container lifecycle management"
+    echo -e "  • DS01 adds safety checks and user confirmations"
+    echo ""
+fi
+
+# If no container name provided, prompt to select running containers (DS01 UX)
 if [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
     CONTAINER_NAME=$(select_container "running")
     if [ -z "$CONTAINER_NAME" ]; then
@@ -238,11 +304,11 @@ if [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
     exit 1
 fi
 
-# Warning message
+# Warning message (DS01 safety check)
 echo -e "${RED}⚠ This will STOP the container${NC}"
 echo -e "${BOLD}All processes will be terminated, including:${NC}"
 echo -e "  • Training jobs"
-echo -e "  • Jupyter sessions  "
+echo -e "  • Jupyter sessions"
 echo -e "  • SSH connections"
 echo ""
 echo -e "${YELLOW}💡 Tip:${NC} To exit without stopping: Just type ${GREEN}exit${NC} (container keeps running)"
@@ -262,9 +328,53 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
     echo -e "${GREEN}${BOLD}    ✓ Container Stopped${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
+    # Mark container as stopped (starts GPU hold timer)
+    CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
+    if [ -f "$GPU_ALLOCATOR" ]; then
+        python3 "$GPU_ALLOCATOR" mark-stopped "$CONTAINER_TAG" >/dev/null 2>&1 || true
+    fi
+
+    # Check if container has GPU allocated and show warning
+    if [ -f "$GPU_ALLOCATOR" ]; then
+        GPU_INFO=$(python3 "$GPU_ALLOCATOR" user-status "$USERNAME" 2>/dev/null | grep "$CONTAINER_TAG" || true)
+
+        if [ -n "$GPU_INFO" ]; then
+            # Get GPU hold time from config
+            GPU_HOLD_TIME="24h"  # default
+            if [ -f "$RESOURCE_PARSER" ]; then
+                GPU_HOLD_TIME=$(python3 "$RESOURCE_PARSER" "$USERNAME" --gpu-hold-time 2>/dev/null || echo "24h")
+            fi
+
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}${BOLD}    ⚠ GPU Still Allocated${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+            echo -e "${BOLD}Important:${NC} Your container still has a GPU allocated!"
+            echo ""
+
+            if [ "$GPU_HOLD_TIME" = "indefinite" ] || [ "$GPU_HOLD_TIME" = "null" ]; then
+                echo -e "  • GPU will be held ${CYAN}indefinitely${NC} (until you cleanup)"
+            else
+                echo -e "  • GPU will be held for ${CYAN}$GPU_HOLD_TIME${NC}"
+                echo -e "  • After that, GPU will be auto-released"
+            fi
+            echo -e "  • Other users cannot use this GPU during this time"
+            echo ""
+
+            echo -e "${BOLD}Be a good citizen:${NC}"
+            echo -e "  If you're done with this container, release the GPU now:"
+            echo -e "    ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
+            echo ""
+            echo -e "  This removes the container and ${BOLD}immediately frees the GPU${NC} for others."
+            echo ""
+            echo -e "${CYAN}ℹ ${NC}${DIM}Your workspace files are always safe - cleanup only removes the container.${NC}"
+            echo ""
+        fi
+    fi
+
     echo -e "${BOLD}Next Steps:${NC}"
     echo -e "  • Restart:   ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "  • Remove:    ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
+    echo -e "  • Cleanup:   ${GREEN}container-cleanup $CONTAINER_NAME${NC} ${DIM}(releases GPU)${NC}"
     echo -e "  • View all:  ${GREEN}container-list${NC}"
     echo ""
 else
