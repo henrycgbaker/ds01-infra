@@ -30,17 +30,64 @@ echo ""
 echo -e "${BOLD}GPU STATUS${NC}"
 echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
 if command -v nvidia-smi &>/dev/null; then
-    nvidia-smi --query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu --format=table
+    # Show physical GPUs with MIG mode
+    nvidia-smi --query-gpu=index,name,mig.mode.current,memory.total,temperature.gpu --format=csv,noheader | \
+        awk -F', ' 'BEGIN {printf "  %-5s %-25s %-12s %-12s %-6s\n", "GPU", "Name", "MIG Mode", "Mem Total", "Temp"}
+                    BEGIN {printf "  %-5s %-25s %-12s %-12s %-6s\n", "---", "----", "--------", "---------", "----"}
+                    {
+                        mig_status = ($3 == "Enabled") ? "MIG ✓" : "Full GPU"
+                        printf "  %-5s %-25s %-12s %-12s %-6s\n", $1, $2, mig_status, $4, $5
+                    }'
+
+    # Show utilization only for non-MIG GPUs (MIG GPUs show [N/A])
+    echo ""
+    echo -e "  ${BOLD}Full GPU Utilization:${NC}"
+    nvidia-smi --query-gpu=index,utilization.gpu,memory.used --format=csv,noheader | \
+        awk -F', ' '{
+            if ($2 != "[N/A]" && $2 != "N/A") {
+                printf "    GPU %s: %s (Memory: %s)\n", $1, $2, $3
+            }
+        }' | head -n 10
+
+    # If no full GPUs, show message
+    if ! nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader | grep -qv "\[N/A\]"; then
+        echo "    (All GPUs have MIG enabled - see MIG instances below)"
+    fi
 else
     echo -e "${YELLOW}  nvidia-smi not available${NC}"
 fi
 echo ""
 
-# MIG Status (if enabled)
+# MIG Instances (if any exist)
 if nvidia-smi mig -lgi &>/dev/null 2>&1; then
     echo -e "${BOLD}MIG INSTANCES${NC}"
     echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
-    nvidia-smi mig -lgi
+
+    # Count MIG instances
+    MIG_COUNT=$(nvidia-smi mig -lgi 2>/dev/null | grep "GPU" | wc -l)
+
+    if [ "$MIG_COUNT" -gt 0 ]; then
+        # Parse and display MIG instances in a cleaner format
+        echo -e "  ${BOLD}Active MIG Instances: $MIG_COUNT${NC}"
+        echo ""
+        nvidia-smi mig -lgi | grep -A 1 "GPU" | grep -E "GPU|MIG" | \
+            awk '{
+                if ($1 == "GPU") {
+                    gpu_id = $2
+                } else if ($1 ~ /^[0-9]+$/) {
+                    printf "    GPU %s, Instance %s: %s (Memory: %s)\n", gpu_id, $1, $4, $6
+                }
+            }' 2>/dev/null || nvidia-smi mig -lgi
+    else
+        echo -e "  ${YELLOW}No MIG instances created yet${NC}"
+        echo -e "  ${CYAN}Hint:${NC} Run 'sudo ds01-mig-partition' to create instances from config"
+    fi
+    echo ""
+elif nvidia-smi --query-gpu=mig.mode.current --format=csv,noheader | grep -q "Enabled"; then
+    echo -e "${BOLD}MIG STATUS${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${YELLOW}MIG enabled but no instances created yet${NC}"
+    echo -e "  ${CYAN}Run:${NC} sudo ds01-mig-partition"
     echo ""
 fi
 
