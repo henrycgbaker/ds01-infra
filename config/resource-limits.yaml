@@ -23,7 +23,7 @@ defaults:
   
   # Container lifecycle
   max_containers_per_user: 3        # Max simultaneous containers
-  idle_timeout: 24h                 # Auto-stop after X hours of GPU inactivity
+  idle_timeout: 1h                 # Auto-stop after X hours of GPU inactivity
   max_runtime: null                 # Max walltime (null = no limit)
   gpu_hold_after_stop: 1h          # How long to hold GPU after container stopped (null = indefinite)
   

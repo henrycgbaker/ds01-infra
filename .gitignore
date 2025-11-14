@@ -1,0 +1,35 @@
+__pycache__/
+
+
+# macOS specific files
+.DS_Store
+
+# Linux specific files
+*~
+
+# IDE specific files 
+.vscode/
+
+# Virtual environment directories
+venv/
+env/
+.env/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+
+# Coverage/Test files
+.coverage
+.tox/
+htmlcov/
+.pytest_cache/
+
+# Log files and checkpoints
+*.log
+*.err
+*.out
+logs/*
