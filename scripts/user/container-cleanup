@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
 MLC_REMOVE="$INFRA_ROOT/aime-ml-containers/mlc-remove"
 GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
 # Source interactive library
 source /usr/local/lib/interactive-select.sh
@@ -24,6 +25,21 @@ NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
+
+# Helper function to get user's resource limits
+get_user_lifecycle_limits() {
+    local username="$1"
+    if [ ! -f "$RESOURCE_PARSER" ]; then
+        echo "None|None|None"
+        return
+    fi
+
+    local idle_timeout=$(python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "None")
+    local max_runtime=$(python3 "$RESOURCE_PARSER" "$username" --max-runtime 2>/dev/null || echo "None")
+    local gpu_hold=$(python3 "$RESOURCE_PARSER" "$username" --gpu-hold-time 2>/dev/null || echo "None")
+
+    echo "${idle_timeout}|${max_runtime}|${gpu_hold}"
+}
 
 usage() {
     echo ""
@@ -401,6 +417,8 @@ echo -e "${CYAN}${BOLD}    Container Cleanup${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 if [ "$GUIDED" = true ]; then
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
     echo -e "${CYAN}ℹ ${NC}${BOLD}What cleanup removes:${NC}"
     echo -e "  • ${BOLD}Containers${NC} - Only stopped containers (not running ones)"
     echo -e "  • ${BOLD}GPU allocations${NC} - Released immediately (good citizen!)"
@@ -415,16 +433,29 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Cleanup vs. Stop - When to use each:${NC}"
     echo -e "  ${BOLD}Stop:${NC} Taking a break, might restart soon"
-    echo -e "    • ${GREEN}container-stop${NC} - Halts container, GPU held for 1h"
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        echo -e "    • ${GREEN}container-stop${NC} - Halts container, GPU held for ${CYAN}$gpu_hold${NC}"
+    elif [ "$gpu_hold" = "indefinite" ]; then
+        echo -e "    • ${GREEN}container-stop${NC} - Halts container, GPU held indefinitely"
+    else
+        echo -e "    • ${GREEN}container-stop${NC} - Halts container"
+    fi
     echo -e "    • Use when: Done for the day but continuing tomorrow"
     echo ""
     echo -e "  ${BOLD}Cleanup:${NC} Completely done with this container"
     echo -e "    • ${GREEN}container-cleanup${NC} - Removes container, GPU freed immediately"
     echo -e "    • Use when: Project finished or switching to different setup"
     echo ""
-    echo -e "${CYAN}ℹ ${NC}${BOLD}System automation:${NC}"
-    echo -e "  • Idle containers auto-stopped after 24h GPU inactivity"
-    echo -e "  • Stopped containers' GPUs auto-released after 1h hold time"
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        echo -e "  • Idle timeout: ${CYAN}$idle_timeout${NC} (auto-stop after GPU idle)"
+    fi
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        echo -e "  • Max runtime: ${CYAN}$max_runtime${NC}"
+    fi
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ]; then
+        echo -e "  • GPU hold after stop: ${CYAN}$gpu_hold${NC} (auto-release window)"
+    fi
     echo -e "  • Manual cleanup is fastest way to free GPU for others"
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Why cleanup?${NC}"
