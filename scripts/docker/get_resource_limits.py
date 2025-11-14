@@ -156,7 +156,7 @@ class ResourceLimitParser:
 def main():
     """CLI interface for testing"""
     if len(sys.argv) < 2:
-        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--priority|--gpu-hold-time|--idle-timeout]")
+        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--priority|--gpu-hold-time|--idle-timeout|--max-runtime]")
         sys.exit(1)
 
     username = sys.argv[1]
@@ -169,7 +169,7 @@ def main():
         print(parser.get_user_group(username))
     elif '--max-gpus' in sys.argv:
         limits = parser.get_user_limits(username)
-        max_gpus = limits.get('max_gpus_per_user', 1)
+        max_gpus = limits.get('max_gpus_per_user') or limits.get('max_mig_instances', 1)
         print(max_gpus if max_gpus is not None else "unlimited")
     elif '--priority' in sys.argv:
         limits = parser.get_user_limits(username)
@@ -182,6 +182,10 @@ def main():
         limits = parser.get_user_limits(username)
         idle_timeout = limits.get('idle_timeout')
         print(idle_timeout if idle_timeout is not None else "None")
+    elif '--max-runtime' in sys.argv:
+        limits = parser.get_user_limits(username)
+        max_runtime = limits.get('max_runtime')
+        print(max_runtime if max_runtime is not None else "None")
     else:
         print(parser.format_for_display(username))
 

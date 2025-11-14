@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
 MLC_START="$INFRA_ROOT/aime-ml-containers/mlc-start"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
 # Source interactive library
 source /usr/local/lib/interactive-select.sh
@@ -23,6 +24,21 @@ NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
+
+# Helper function to get user's resource limits
+get_user_lifecycle_limits() {
+    local username="$1"
+    if [ ! -f "$RESOURCE_PARSER" ]; then
+        echo "None|None|None"
+        return
+    fi
+
+    local idle_timeout=$(python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "None")
+    local max_runtime=$(python3 "$RESOURCE_PARSER" "$username" --max-runtime 2>/dev/null || echo "None")
+    local gpu_hold=$(python3 "$RESOURCE_PARSER" "$username" --gpu-hold-time 2>/dev/null || echo "None")
+
+    echo "${idle_timeout}|${max_runtime}|${gpu_hold}"
+}
 
 usage() {
     echo ""
@@ -159,6 +175,8 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 
 # Show guided explanation BEFORE selection
 if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
     echo -e "${CYAN}ℹ ${NC}${BOLD}What does starting mean?${NC}"
     echo -e "  Starting a container resumes it from a stopped state."
     echo -e "  This will:"
@@ -169,6 +187,19 @@ if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
     echo ""
     echo -e "  ${YELLOW}Note:${NC} This ${BOLD}does not${NC} automatically connect you to the container."
     echo -e "  To enter the container, use: ${GREEN}container-run <name>${NC}"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        echo -e "  • Idle timeout: ${CYAN}$idle_timeout${NC} (auto-stop after GPU idle)"
+    fi
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        echo -e "  • Max runtime: ${CYAN}$max_runtime${NC}"
+    fi
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        echo -e "  • GPU hold after stop: ${CYAN}$gpu_hold${NC} (restart window)"
+    elif [ "$gpu_hold" = "indefinite" ]; then
+        echo -e "  • GPU held indefinitely until cleanup"
+    fi
     echo ""
 fi
 

@@ -26,6 +26,21 @@ NC='\033[0m'
 USERNAME=$(whoami)
 USER_ID=$(id -u)
 
+# Helper function to get user's resource limits
+get_user_lifecycle_limits() {
+    local username="$1"
+    if [ ! -f "$RESOURCE_PARSER" ]; then
+        echo "None|None|None"
+        return
+    fi
+
+    local idle_timeout=$(python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "None")
+    local max_runtime=$(python3 "$RESOURCE_PARSER" "$username" --max-runtime 2>/dev/null || echo "None")
+    local gpu_hold=$(python3 "$RESOURCE_PARSER" "$username" --gpu-hold-time 2>/dev/null || echo "None")
+
+    echo "${idle_timeout}|${max_runtime}|${gpu_hold}"
+}
+
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Stop${NC}"
@@ -263,6 +278,9 @@ fi
 
 # Show guided explanation BEFORE selection
 if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
+    # Get user's actual limits
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
     echo -e "${CYAN}ℹ ${NC}${BOLD}What does stopping mean?${NC}"
     echo -e "  Stopping a container halts all processes inside it, but preserves:"
     echo -e "  • All your files and data in the workspace"
@@ -271,14 +289,24 @@ if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; 
     echo -e "  You can restart it later with ${GREEN}container-run${NC} and continue where you left off."
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}GPU allocation after stop:${NC}"
-    echo -e "  • Your GPU is held for 1h after stopping"
-    echo -e "  • Restart within 1h → GPU still yours (no re-competing)"
-    echo -e "  • After 1h → GPU auto-released for others"
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        echo -e "  • Your GPU is held for ${CYAN}$gpu_hold${NC} after stopping"
+        echo -e "  • Restart within ${CYAN}$gpu_hold${NC} → GPU still yours (no re-competing)"
+        echo -e "  • After ${CYAN}$gpu_hold${NC} → GPU auto-released for others"
+    elif [ "$gpu_hold" = "indefinite" ]; then
+        echo -e "  • GPU held ${CYAN}indefinitely${NC} until you run container-cleanup"
+    fi
     echo -e "  • Need GPU freed immediately? Use ${GREEN}container-cleanup${NC}"
     echo ""
-    echo -e "${CYAN}ℹ ${NC}${BOLD}System automation:${NC}"
-    echo -e "  • Idle containers auto-stopped after 24h GPU inactivity"
-    echo -e "  • Stopped containers' GPUs auto-released after 1h hold time"
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        echo -e "  • Auto-stop after ${CYAN}$idle_timeout${NC} of GPU inactivity"
+    else
+        echo -e "  • No auto-stop on idle"
+    fi
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        echo -e "  • Max container lifetime: ${CYAN}$max_runtime${NC}"
+    fi
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Behind the scenes:${NC}"
     echo -e "  • DS01 uses AIME's ${GREEN}mlc-stop${NC} for the actual stopping operation"
@@ -339,11 +367,8 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
         GPU_INFO=$(python3 "$GPU_ALLOCATOR" user-status "$USERNAME" 2>/dev/null | grep "$CONTAINER_TAG" || true)
 
         if [ -n "$GPU_INFO" ]; then
-            # Get GPU hold time from config
-            GPU_HOLD_TIME="24h"  # default
-            if [ -f "$RESOURCE_PARSER" ]; then
-                GPU_HOLD_TIME=$(python3 "$RESOURCE_PARSER" "$USERNAME" --gpu-hold-time 2>/dev/null || echo "24h")
-            fi
+            # Get user's lifecycle limits
+            IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
 
             echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo -e "${YELLOW}${BOLD}    ⚠ GPU Still Allocated${NC}"
@@ -352,10 +377,10 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
             echo -e "${BOLD}Important:${NC} Your container still has a GPU allocated!"
             echo ""
 
-            if [ "$GPU_HOLD_TIME" = "indefinite" ] || [ "$GPU_HOLD_TIME" = "null" ]; then
+            if [ "$gpu_hold" = "indefinite" ] || [ "$gpu_hold" = "null" ] || [ "$gpu_hold" = "None" ]; then
                 echo -e "  • GPU will be held ${CYAN}indefinitely${NC} (until you cleanup)"
             else
-                echo -e "  • GPU will be held for ${CYAN}$GPU_HOLD_TIME${NC}"
+                echo -e "  • GPU will be held for ${CYAN}$gpu_hold${NC}"
                 echo -e "  • After that, GPU will be auto-released"
             fi
             echo -e "  • Other users cannot use this GPU during this time"

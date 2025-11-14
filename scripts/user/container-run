@@ -8,7 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
 MLC_OPEN="$INFRA_ROOT/aime-ml-containers/mlc-open"
-RESOURCE_PARSER="$INFRA_ROOT/docker/get_resource_limits.py"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
 # Source interactive library
 source /usr/local/lib/interactive-select.sh
@@ -25,6 +25,21 @@ NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
+
+# Helper function to get user's resource limits
+get_user_lifecycle_limits() {
+    local username="$1"
+    if [ ! -f "$RESOURCE_PARSER" ]; then
+        echo "None|None|None"
+        return
+    fi
+
+    local idle_timeout=$(python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "None")
+    local max_runtime=$(python3 "$RESOURCE_PARSER" "$username" --max-runtime 2>/dev/null || echo "None")
+    local gpu_hold=$(python3 "$RESOURCE_PARSER" "$username" --gpu-hold-time 2>/dev/null || echo "None")
+
+    echo "${idle_timeout}|${max_runtime}|${gpu_hold}"
+}
 
 usage() {
     echo ""
@@ -55,30 +70,6 @@ usage() {
     echo -e "  • Exit session: ${GREEN}exit${NC} (container keeps running)"
     echo ""
 }
-
-
-# Get idle timeout info
-get_idle_timeout() {
-    local username="$1"
-    if [ -f "$RESOURCE_PARSER" ]; then
-        python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "1h"
-    else
-        echo "24h"
-    fi
-}
-
-# Show idle timeout reminder
-if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
-    IDLE_TIMEOUT=$(get_idle_timeout "$USERNAME")
-    if [ "$IDLE_TIMEOUT" != "null" ] && [ "$IDLE_TIMEOUT" != "None" ]; then
-        if [ "$GUIDED" = false ]; then
-            echo -e "${DIM}Auto-stop after ${IDLE_TIMEOUT} of idle GPU time${NC}"
-            echo ""
-        fi
-    fi
-fi
-
-
 
 # Parse arguments
 CONTAINER_NAME=""
@@ -195,7 +186,7 @@ if [ "$GUIDED" = true ]; then
     echo -e "  ${BOLD}Option 2: Stop Container (Halts All Processes)${NC}"
     echo "    • Exit first (type 'exit')"
     echo -e "    • Then run on host: ${GREEN}container-stop <name>${NC}"
-    echo "    • Halts container, GPU held temporarily (defult 1h)"
+    echo "    • Halts container, GPU held temporarily"
     echo -e "    • ${BOLD}Use this as a 'pause'.${NC}"
     echo ""
     echo -e "  ${BOLD}Option 3: Cleanup Container (Remove & Free GPU)${NC}"
@@ -204,11 +195,27 @@ if [ "$GUIDED" = true ]; then
     echo "    • Removes container, frees GPU immediately"
     echo -e "    • ${BOLD}Be a good citizen - use this when current tasks is done, free up space for others!${NC}"
     echo ""
-    echo -e "${BOLD}Additional System Automation:${NC}"
+
+    # Show user's specific lifecycle limits
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
+    echo -e "${BOLD}Your Resource Limits:${NC}"
     echo ""
-    echo "  • Idle containers auto-stopped after 24h GPU inactivity"
-    echo "  • GPUs held for 1h after stop, then auto-released"
-    echo "  • Restart within hold time → GPU still yours"
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        echo -e "  • ${CYAN}Idle timeout:${NC} $idle_timeout (auto-stop after GPU idle)"
+    else
+        echo -e "  • ${CYAN}Idle timeout:${NC} None (no auto-stop)"
+    fi
+
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        echo -e "  • ${CYAN}Max runtime:${NC} $max_runtime (absolute max container lifetime)"
+    fi
+
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        echo -e "  • ${CYAN}GPU hold after stop:${NC} $gpu_hold (restart window)"
+    elif [ "$gpu_hold" = "indefinite" ]; then
+        echo -e "  • ${CYAN}GPU hold after stop:${NC} Indefinite (GPU held until cleanup)"
+    fi
     echo ""
     echo -e "${YELLOW}💡 Remember:${NC} Your files in /workspace are ${BOLD}always safe${NC}"
     echo "   Stopping/cleanup doesn't delete your files!"
@@ -237,6 +244,27 @@ if [ "$GUIDED" = true ]; then
     echo ""
     read -p "Press Enter to enter the container..." </dev/tty
     echo ""
+fi
+
+# Show lifecycle limits for non-guided mode
+if [ "$GUIDED" = false ]; then
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
+    LIMIT_PARTS=()
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        LIMIT_PARTS+=("idle timeout: $idle_timeout")
+    fi
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        LIMIT_PARTS+=("max runtime: $max_runtime")
+    fi
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        LIMIT_PARTS+=("GPU hold: $gpu_hold")
+    fi
+
+    if [ ${#LIMIT_PARTS[@]} -gt 0 ]; then
+        echo -e "${DIM}Your limits: $(IFS=', '; echo "${LIMIT_PARTS[*]}")${NC}"
+        echo ""
+    fi
 fi
 
 # Check if mlc-open exists (base system)

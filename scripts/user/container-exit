@@ -49,17 +49,23 @@ for arg in "$@"; do
     esac
 done
 
-get_idle_timeout() {
+# Helper function to get user's resource limits
+get_user_lifecycle_limits() {
     local username="$1"
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local infra_root="$(dirname "$(dirname "$script_dir")")"
+    local infra_root="$(dirname "$script_dir")"
     local resource_parser="$infra_root/scripts/docker/get_resource_limits.py"
 
-    if [ -f "$resource_parser" ]; then
-        python3 "$resource_parser" "$username" --idle-timeout 2>/dev/null || echo "48h"
-    else
-        echo "48h"
+    if [ ! -f "$resource_parser" ]; then
+        echo "None|None|None"
+        return
     fi
+
+    local idle_timeout=$(python3 "$resource_parser" "$username" --idle-timeout 2>/dev/null || echo "None")
+    local max_runtime=$(python3 "$resource_parser" "$username" --max-runtime 2>/dev/null || echo "None")
+    local gpu_hold=$(python3 "$resource_parser" "$username" --gpu-hold-time 2>/dev/null || echo "None")
+
+    echo "${idle_timeout}|${max_runtime}|${gpu_hold}"
 }
 
 if [ "$GUIDED" = true ]; then
@@ -118,9 +124,21 @@ echo -e "  ${GREEN}✓${NC} GPU allocation remains"
 echo -e "  ${GREEN}✓${NC} You can reconnect anytime"
 echo ""
 
-echo -e "${BOLD}Auto-Stop Policy:${NC}"
-echo -e "  ${YELLOW}$(get_idle_timeout "$USERNAME")${NC} of idle GPU time"
-echo -e "  ${DIM}(Container auto-stops after this period of no GPU activity)${NC}"
+# Get user's lifecycle limits
+IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
+echo -e "${BOLD}Your Resource Limits:${NC}"
+if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+    echo -e "  • Idle timeout: ${CYAN}$idle_timeout${NC} (auto-stop after GPU idle)"
+fi
+if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+    echo -e "  • Max runtime: ${CYAN}$max_runtime${NC}"
+fi
+if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+    echo -e "  • GPU hold after stop: ${CYAN}$gpu_hold${NC}"
+elif [ "$gpu_hold" = "indefinite" ]; then
+    echo -e "  • GPU hold after stop: Indefinite"
+fi
 echo ""
 
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
@@ -146,20 +164,19 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "  ${CYAN}container-stop <name>${NC} (from host):"
     echo "    • Halts the entire container"
-    echo "    • All processes terminate"
-    echo "    • GPU held for 1h, then auto-released"
-    echo "    • Use for: When done for the day"
+    echo "    • All processes terminate, container state saved to disk - ready for restart"
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        echo "    • GPU held for ${CYAN}$gpu_hold${NC}, then auto-released"
+    elif [ "$gpu_hold" = "indefinite" ]; then
+        echo "    • GPU held indefinitely until cleanup"
+    fi
+    echo "    • Use for: When need to pause container temporarily"
     echo ""
     echo -e "  ${CYAN}container-cleanup <name>${NC} (from host):"
-    echo "    • Removes container completely"
+    echo "    • Removes container completely (easily recreated!)"
     echo "    • GPU released immediately"
-    echo "    • Use for: Completely done with project"
-    echo ""
-    echo -e "${BOLD}System Automation:${NC}"
-    echo ""
-    echo "  • Idle containers auto-stopped after 24h GPU inactivity"
-    echo "  • GPUs held for 1h after stop, then auto-released"
-    echo "  • Restart within hold time → GPU still allocated"
+    echo "    • Use for: done with current task"
+    echo -e "{BOLD}Note:${NC} Stopped containers still consume resources until cleaned up"
     echo ""
 fi
 
@@ -170,7 +187,7 @@ echo ""
 echo -e "  • ${BOLD}Long training jobs:${NC} Just ${GREEN}exit${NC} - job continues running"
 echo "    Reconnect later to check progress"
 echo ""
-echo -e "  • ${BOLD}Quick tasks:${NC} Use ${GREEN}container-stop${NC} when done"
+echo -e "  • ${BOLD}Quick tasks:${NC} Use ${GREEN}container-cleanup${NC} when done"
 echo "    Frees resources for others"
 echo ""
 echo -e "  • ${BOLD}Before logging off:${NC} Check ${GREEN}container-list${NC}"
@@ -194,7 +211,7 @@ echo -e "  ${DIM}# Scenario 2: Quick debugging${NC}"
 echo "  container-run my-project"
 echo -e "  ${DIM}(test some code, fix bugs)${NC}"
 echo -e "  ${GREEN}exit${NC}"
-echo -e "  container-stop my-project  ${DIM}# Stop to free resources${NC}"
+echo -e "  container-cleanup my-project  ${DIM}# Stop to free resources${NC}"
 echo ""
 
 echo -e "${DIM}────────────────────────────────────────────────${NC}"
