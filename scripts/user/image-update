@@ -16,6 +16,49 @@ NC='\033[0m'
 USERNAME=$(whoami)
 DOCKERFILES_DIR="$HOME/dockerfiles"
 
+normalize_package_name() {
+    # Normalize package name: lowercase, strip version specifiers
+    local pkg="$1"
+    # Remove version specifiers (==, >=, <=, ~=, etc.)
+    pkg=$(echo "$pkg" | sed 's/[=<>~!].*//')
+    # Convert to lowercase
+    echo "$pkg" | tr '[:upper:]' '[:lower:]'
+}
+
+check_duplicate_packages() {
+    # Check if any input packages are already in existing packages
+    # Args: $1 = new packages (space-separated), $2... = existing package lists
+    local new_packages="$1"
+    shift
+    local existing_packages="$*"
+
+    # Build array of existing packages (normalized)
+    local existing_array=()
+    for pkg in $existing_packages; do
+        local normalized=$(normalize_package_name "$pkg")
+        existing_array+=("$normalized")
+    done
+
+    # Check each new package
+    local duplicates=()
+    for new_pkg in $new_packages; do
+        local new_normalized=$(normalize_package_name "$new_pkg")
+        for existing in "${existing_array[@]}"; do
+            if [ "$new_normalized" = "$existing" ]; then
+                duplicates+=("$new_pkg")
+                break
+            fi
+        done
+    done
+
+    # Return duplicates (space-separated)
+    if [ ${#duplicates[@]} -gt 0 ]; then
+        echo "${duplicates[@]}"
+        return 1
+    fi
+    return 0
+}
+
 # Find available text editor
 find_editor() {
     # Try these editors in order
@@ -193,8 +236,10 @@ parse_python_packages() {
 parse_python_packages_by_category() {
     local dockerfile="$1"
 
-    # Extract packages organized by their comment sections
+    # Extract packages organized by their comment sections (matching image-create structure)
     awk '
+    /^# Jupyter & Interactive/ || /^# Jupyter.*Interactive/ { category="jupyter"; next }
+    /^# Core Data Science/ { category="datascience"; next }
     /^# Core Python packages/ { category="core"; next }
     /^# Use case specific packages/ { category="usecase"; next }
     /^# Custom additional packages/ || /^# Additional.*packages/ { category="custom"; next }
@@ -483,8 +528,21 @@ interactive_mode() {
         echo ""
 
         # Show current packages categorized
-        echo -e "${BOLD}Current Packages${NC}"
+        echo -e "${BOLD}Current Configuration${NC}"
         echo ""
+
+        # AIME base image (from FROM line)
+        local base_image=$(grep "^FROM " "$dockerfile" | head -1 | sed 's/FROM //')
+        if [ -n "$base_image" ]; then
+            echo -e "  ${BOLD}AIME Base Image:${NC} ${GREEN}$base_image${NC}"
+
+            # Show key packages from AIME base (if it's an AIME image)
+            if [[ "$base_image" =~ aimehub/ ]]; then
+                echo -e "    ${DIM}Pre-installed: torch, numpy, pillow, tqdm, conda, ipython, psutil${NC}"
+                echo -e "    ${DIM}(Use 'docker run --rm $base_image pip list' to see all)${NC}"
+            fi
+            echo ""
+        fi
 
         # System packages
         local sys_pkgs=$(parse_system_packages "$dockerfile" | tr '\n' ' ')
@@ -494,30 +552,43 @@ interactive_mode() {
             echo -e "  ${BOLD}System:${NC} ${DIM}(none)${NC}"
         fi
 
-        # Parse categorized Python packages
-        local core_pkgs=""
+        # Parse categorized Python packages (matching image-create structure)
+        local jupyter_pkgs=""
+        local datascience_pkgs=""
+        local core_pkgs=""  # Legacy category for old Dockerfiles
         local usecase_pkgs=""
         local custom_pkgs=""
 
         while IFS=: read -r category pkg; do
             case "$category" in
-                core) core_pkgs="$core_pkgs $pkg" ;;
+                jupyter) jupyter_pkgs="$jupyter_pkgs $pkg" ;;
+                datascience) datascience_pkgs="$datascience_pkgs $pkg" ;;
+                core) core_pkgs="$core_pkgs $pkg" ;;  # Legacy
                 usecase) usecase_pkgs="$usecase_pkgs $pkg" ;;
                 custom) custom_pkgs="$custom_pkgs $pkg" ;;
             esac
         done < <(parse_python_packages_by_category "$dockerfile")
 
-        # Display Python packages by category
-        if [ -n "$core_pkgs" ]; then
-            echo -e "  ${BOLD}Core Python:${NC}$core_pkgs"
+        # Display Python packages by category (new structure from image-create)
+        if [ -n "$jupyter_pkgs" ]; then
+            echo -e "  ${BOLD}Jupyter & Interactive:${NC}$jupyter_pkgs"
+        elif [ -n "$core_pkgs" ]; then
+            # Legacy: old Dockerfiles had everything as "core"
+            echo -e "  ${BOLD}Core Python:${NC}$core_pkgs ${DIM}(legacy format)${NC}"
         else
-            echo -e "  ${BOLD}Core Python:${NC} ${DIM}(none)${NC}"
+            echo -e "  ${BOLD}Jupyter & Interactive:${NC} ${DIM}(none)${NC}"
+        fi
+
+        if [ -n "$datascience_pkgs" ]; then
+            echo -e "  ${BOLD}Data Science:${NC}$datascience_pkgs"
+        else
+            echo -e "  ${BOLD}Data Science:${NC} ${DIM}(none)${NC}"
         fi
 
         if [ -n "$usecase_pkgs" ]; then
-            echo -e "  ${BOLD}Pre-installed for use case:${NC}$usecase_pkgs"
+            echo -e "  ${BOLD}Use Case Specific:${NC}$usecase_pkgs"
         else
-            echo -e "  ${BOLD}Pre-installed for use case:${NC} ${DIM}(none)${NC}"
+            echo -e "  ${BOLD}Use Case Specific:${NC} ${DIM}(none)${NC}"
         fi
 
         if [ -n "$custom_pkgs" ]; then
@@ -541,26 +612,62 @@ interactive_mode() {
 
         case $CHOICE in
             1)
-                echo ""
-                echo -e "${BOLD}Add Python Packages${NC}"
-                echo ""
-                echo "Enter package names (space-separated):"
-                echo -e "${DIM}Examples: wandb optuna pytorch-lightning transformers${NC}"
-                echo ""
-                read -p "> " NEW_PACKAGES </dev/tty
+                # Loop until no duplicates
+                while true; do
+                    echo ""
+                    echo -e "${BOLD}Add Python Packages${NC}"
+                    echo ""
+                    echo "Enter package names (space-separated):"
+                    echo -e "${DIM}Examples: wandb optuna pytorch-lightning pandas==1.5.3 transformers>=4.30.0${NC}"
+                    echo ""
+                    read -p "> " NEW_PACKAGES </dev/tty
 
-                if [ -n "$NEW_PACKAGES" ]; then
-                    echo ""
-                    echo -e "${CYAN}Adding packages...${NC}"
-                    echo ""
-                    add_python_packages "$dockerfile" $NEW_PACKAGES
-                    if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
-                        echo ""
-                        echo -e "${GREEN}✓${NC} Packages added to Dockerfile"
+                    if [ -z "$NEW_PACKAGES" ]; then
+                        echo -e "${YELLOW}No packages entered${NC}"
+                        break
                     fi
-                else
-                    echo -e "${YELLOW}No packages entered${NC}"
-                fi
+
+                    # Get all currently installed packages
+                    local aime_base="numpy pillow tqdm conda ipython psutil torch torchvision torchaudio"
+                    local all_current=""
+                    if [ -n "$jupyter_pkgs" ]; then
+                        all_current="$all_current $jupyter_pkgs"
+                    fi
+                    if [ -n "$datascience_pkgs" ]; then
+                        all_current="$all_current $datascience_pkgs"
+                    fi
+                    if [ -n "$core_pkgs" ]; then
+                        all_current="$all_current $core_pkgs"
+                    fi
+                    if [ -n "$usecase_pkgs" ]; then
+                        all_current="$all_current $usecase_pkgs"
+                    fi
+                    if [ -n "$custom_pkgs" ]; then
+                        all_current="$all_current $custom_pkgs"
+                    fi
+
+                    # Check for duplicates
+                    local duplicates=$(check_duplicate_packages "$NEW_PACKAGES" "$aime_base" "$all_current")
+
+                    if [ $? -eq 1 ]; then
+                        echo ""
+                        echo -e "${YELLOW}⚠  Warning: These packages are already installed:${NC}"
+                        echo -e "   ${YELLOW}$duplicates${NC}"
+                        echo ""
+                        echo "Please enter different packages (or press Enter to cancel):"
+                    else
+                        # No duplicates, proceed with adding
+                        echo ""
+                        echo -e "${CYAN}Adding packages...${NC}"
+                        echo ""
+                        add_python_packages "$dockerfile" $NEW_PACKAGES
+                        if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
+                            echo ""
+                            echo -e "${GREEN}✓${NC} Packages added to Dockerfile"
+                        fi
+                        break
+                    fi
+                done
                 ;;
 
             2)
@@ -691,6 +798,13 @@ guided_mode() {
     echo "  • Updates the Dockerfile automatically"
     echo "  • Rebuilds the image with your changes"
     echo "  • Creates a permanent, reproducible setup"
+    echo ""
+    echo -e "${BOLD}Package Versions:${NC}"
+    echo ""
+    echo "  • ${CYAN}Without version${NC}: 'pandas' → installs latest stable"
+    echo "  • ${CYAN}Exact version${NC}: 'pandas==1.5.3' → installs 1.5.3"
+    echo "  • ${CYAN}Minimum version${NC}: 'pandas>=2.0.0' → installs latest ≥2.0.0"
+    echo "  • ${CYAN}Compatible${NC}: 'pandas~=1.5.0' → installs latest 1.5.x"
     echo ""
     read -p "Press Enter to continue..." </dev/tty
     echo ""
@@ -963,6 +1077,12 @@ if eval "$BUILD_CMD"; then
     echo -e "${BOLD}Updated Dockerfile Packages${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
+
+    # AIME base image (from FROM line)
+    local base_image=$(grep "^FROM " "$DOCKERFILE" | head -1 | sed 's/FROM //')
+    if [ -n "$base_image" ]; then
+        echo -e "  ${BOLD}AIME base image:${NC} ${GREEN}$base_image${NC}"
+    fi
 
     # System packages
     local sys_pkgs=$(parse_system_packages "$DOCKERFILE" | tr '\n' ' ')
