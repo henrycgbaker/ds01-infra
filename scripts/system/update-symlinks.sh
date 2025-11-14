@@ -122,6 +122,7 @@ echo ""
 
 create_symlink "$INFRA_ROOT/scripts/user/ds01-status" "ds01-status" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ds01-run" "ds01-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/get-limits" "get-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ssh-config" "ssh-config" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/install-to-image.sh" "install-to-image" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
@@ -171,6 +172,8 @@ echo ""
 echo -e "${CYAN}Tier 4 - Complete Onboarding:${NC}"
 echo "  user-setup                  # First-time user onboarding wizard"
 echo "  user setup                  # Same (via dispatcher)"
+echo "  get-limits                  # Show resource limits and usage"
+echo "  user get-limits --guided    # With explanations"
 echo ""
 echo -e "${CYAN}Tier 3 - Project Setup:${NC}"
 echo "  project-init                # Complete project setup"
