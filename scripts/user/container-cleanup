@@ -1,5 +1,14 @@
 #!/bin/bash
-# Clean up stopped containers and unused resources
+# DS01 Container Cleanup - Removes containers via mlc-remove with DS01 UX
+# Tier 2 Command - Wraps AIME mlc-remove with bulk operations and GPU state cleanup
+
+set -e
+
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+MLC_REMOVE="$INFRA_ROOT/aime-ml-containers/mlc-remove"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
 
 # Source interactive library
 source /usr/local/lib/interactive-select.sh
@@ -18,7 +27,7 @@ USER_ID=$(id -u)
 
 usage() {
     echo ""
-    echo -e "${BOLD}Container Cleanup${NC}"
+    echo -e "${BOLD}DS01 Container Cleanup${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-cleanup [name] [options]"
@@ -38,6 +47,7 @@ usage() {
     echo ""
     echo -e "${CYAN}What gets cleaned:${NC}"
     echo "  • Stopped containers"
+    echo "  • GPU allocations (automatically)"
     echo "  • Unused images (with --images)"
     echo "  • Dangling volumes (with --volumes)"
     echo ""
@@ -64,6 +74,8 @@ usage() {
     echo "  This permanently removes containers."
     echo -e "  Recreate with: ${GREEN}container-create <name>${NC}"
     echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-remove for container removal"
+    echo ""
 }
 
 format_size() {
@@ -84,6 +96,15 @@ show_container_info() {
     echo -e "    Image:  ${DIM}$image${NC}"
     if [ -n "$size" ]; then
         echo -e "    Size:   ${DIM}$size${NC}"
+    fi
+}
+
+cleanup_gpu_state() {
+    local container_tag="$1"
+
+    # Clean up GPU allocation if GPU allocator exists
+    if [ -f "$GPU_ALLOCATOR" ]; then
+        python3 "$GPU_ALLOCATOR" release "$container_tag" > /dev/null 2>&1 || true
     fi
 }
 
@@ -111,6 +132,8 @@ cleanup_container() {
 
     # Confirm
     if [ "$force" != "true" ]; then
+        echo -e "${YELLOW}⚠ This will permanently remove the container${NC}"
+        echo ""
         read -p "Remove this container? [y/N]: " CONFIRM
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             echo "Skipped."
@@ -118,9 +141,31 @@ cleanup_container() {
         fi
     fi
 
-    # Remove
+    # Check if mlc-remove exists
+    if [ -f "$MLC_REMOVE" ]; then
+        # Remove via mlc-remove (AIME Tier 1)
+        if bash "$MLC_REMOVE" "$container_name" -f -s > /dev/null 2>&1; then
+            echo -e "${GREEN}✓${NC} Removed: $container_name (via mlc-remove)"
+
+            # DS01-specific cleanup
+            cleanup_gpu_state "$container_tag"
+
+            # Clean up DS01 metadata
+            local info_file="$HOME/ds01-config/containers/${container_name}.info"
+            if [ -f "$info_file" ]; then
+                rm "$info_file"
+            fi
+
+            return 0
+        fi
+    fi
+
+    # Fallback to docker rm
     if docker rm "$container_tag" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} Removed: $container_name"
+
+        # DS01-specific cleanup
+        cleanup_gpu_state "$container_tag"
 
         # Clean up metadata
         local info_file="$HOME/ds01-config/containers/${container_name}.info"
@@ -185,9 +230,27 @@ cleanup_all_stopped() {
 
         local name=$(echo "$container_tag" | sed "s/\._\.$USER_ID//")
 
-        if docker rm "$container_tag" > /dev/null 2>&1; then
+        # Use mlc-remove if available
+        local removed=false
+        if [ -f "$MLC_REMOVE" ]; then
+            if bash "$MLC_REMOVE" "$name" -f -s > /dev/null 2>&1; then
+                removed=true
+            fi
+        fi
+
+        # Fallback to docker rm
+        if [ "$removed" = false ]; then
+            if docker rm "$container_tag" > /dev/null 2>&1; then
+                removed=true
+            fi
+        fi
+
+        if [ "$removed" = true ]; then
             echo -e "${GREEN}✓${NC} Removed: $name"
             success=$((success + 1))
+
+            # DS01-specific cleanup
+            cleanup_gpu_state "$container_tag"
 
             # Clean up metadata
             local info_file="$HOME/ds01-config/containers/${name}.info"
@@ -340,6 +403,7 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 if [ "$GUIDED" = true ]; then
     echo -e "${CYAN}ℹ ${NC}${BOLD}What cleanup removes:${NC}"
     echo -e "  • ${BOLD}Containers${NC} - Only stopped containers (not running ones)"
+    echo -e "  • ${BOLD}GPU allocations${NC} - Released immediately (good citizen!)"
     echo -e "  • ${BOLD}Images${NC} - Only unused/dangling images (with --images flag)"
     echo -e "  • ${BOLD}Volumes${NC} - Only anonymous volumes not attached to containers (with --volumes flag)"
     echo ""
@@ -348,6 +412,20 @@ if [ "$GUIDED" = true ]; then
     echo -e "  • ${GREEN}✓${NC} Running containers"
     echo -e "  • ${GREEN}✓${NC} Container configurations"
     echo -e "  • ${GREEN}✓${NC} Dockerfiles"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Cleanup vs. Stop - When to use each:${NC}"
+    echo -e "  ${BOLD}Stop:${NC} Taking a break, might restart soon"
+    echo -e "    • ${GREEN}container-stop${NC} - Halts container, GPU held for 1h"
+    echo -e "    • Use when: Done for the day but continuing tomorrow"
+    echo ""
+    echo -e "  ${BOLD}Cleanup:${NC} Completely done with this container"
+    echo -e "    • ${GREEN}container-cleanup${NC} - Removes container, GPU freed immediately"
+    echo -e "    • Use when: Project finished or switching to different setup"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}System automation:${NC}"
+    echo -e "  • Idle containers auto-stopped after 24h GPU inactivity"
+    echo -e "  • Stopped containers' GPUs auto-released after 1h hold time"
+    echo -e "  • Manual cleanup is fastest way to free GPU for others"
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Why cleanup?${NC}"
     echo -e "  Over time, stopped containers accumulate and consume disk space."
@@ -360,7 +438,7 @@ if [ "$DRY_RUN" = "true" ]; then
     echo -e "${YELLOW}━━━ DRY RUN MODE ━━━${NC}\n"
 fi
 
-# If no container name or --all flag, prompt to select stopped container
+# If no container name or --all flag, prompt to select stopped container (DS01 UX)
 if [ -z "$CONTAINER_NAME" ] && [ "$CLEANUP_ALL" = false ]; then
     echo -e "${CYAN}Select stopped container to remove:${NC}"
     echo -e "${DIM}(Tip: Use --all to remove all stopped containers)${NC}"
