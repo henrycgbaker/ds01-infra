@@ -11,7 +11,7 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-LOG_DIR="/var/logs/ds01"
+LOG_DIR="/var/log/ds01"
 
 show_usage() {
     echo ""
