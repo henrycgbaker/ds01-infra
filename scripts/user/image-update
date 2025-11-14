@@ -405,6 +405,16 @@ add_python_packages() {
         fi
 
         echo -e "${GREEN}  ✓${NC} Added: $pkg"
+        echo -e ""
+        echo -e "Updated Dockerfile: ${BLUE}$DOCKERFILE${NC}"
+        echo -e ""
+        echo -e "${YELLOW}💡 After updating the Dockerfile, remember to rebuild your image and recreate containers to apply changes.${NC}"
+        echo -e "To apply changes, run:"
+        echo -e "   - ${GREEN}image-create $IMAGE_NAME${NC}"
+        echo -e "   - ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo ""
+        echo -e "${DIM} You may need to stop and remove existing containers using the old image before recreating them.${NC}"
+        echo ""
         ((PACKAGES_ADDED_COUNT++))
     done
 
