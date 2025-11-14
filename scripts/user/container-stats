@@ -213,7 +213,7 @@ show_container_stats() {
         if [ -n "$container_name" ]; then
             echo "Start container: ${GREEN}container-run $container_name${NC}"
         else
-            echo "View all containers: ${GREEN}container-list --all${NC}"
+            echo -e "View all containers: ${GREEN}container-list --all${NC}"
         fi
         echo ""
         return
