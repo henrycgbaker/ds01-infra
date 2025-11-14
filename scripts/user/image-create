@@ -56,13 +56,101 @@ usage() {
     echo -e "  1. Run: ${GREEN}image-create my-project${NC}"
     echo "  2. Answer prompts to customize"
     echo "  3. Wait a few minutes for build"
-    echo -e "  4. Create container: ${GREEN}container-create my-project${NC}"
+    echo -e "  4. Then run: ${GREEN}container-create my-project${NC}"
+    echo ""
+}
+
+show_base_image_packages() {
+    # Display key packages from AIME base image
+    local base_image="$1"
+
+    echo -e "${CYAN}━━━ AIME Base Image Packages ━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Pre-installed in $base_image:${NC}"
+    echo ""
+
+    # Key packages that are consistent across AIME images
+    echo -e "  ${BOLD}Framework:${NC}"
+    echo "    • torch, torchvision, torchaudio (PyTorch ecosystem)"
+    echo ""
+    echo -e "  ${BOLD}Core Scientific Computing:${NC}"
+    echo "    • numpy (arrays & numerical computing)"
+    echo "    • pillow (image processing)"
+    echo ""
+    echo -e "  ${BOLD}Utilities:${NC}"
+    echo "    • conda (package management)"
+    echo "    • ipython (interactive shell)"
+    echo "    • psutil (system monitoring)"
+    echo "    • tqdm (progress bars)"
+    echo ""
+    echo -e "  ${BOLD}CUDA & GPU:${NC}"
+    echo "    • CUDA 12.6.3, cuDNN, NCCL"
+    echo "    • nvidia-* packages (10+ CUDA dependencies)"
+    echo ""
+    echo -e "${YELLOW}💡 Note:${NC} AIME base images are framework-focused (133 packages total)."
+    echo "    They include the ML framework + CUDA, but NOT data science packages."
+    echo ""
+    echo -e "${BOLD}Still MISSING (we can add these next):${NC}"
+    echo "    • Jupyter Lab (for notebooks)"
+    echo "    • pandas, scipy, scikit-learn (data science)"
+    echo "    • matplotlib, seaborn (visualization)"
+    echo "    • Domain-specific: opencv, transformers, etc."
+    echo ""
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "${DIM}To see full package list: docker run --rm $base_image pip list${NC}"
+        echo ""
+    fi
+
+    read -p "Press Enter to continue..." </dev/tty
     echo ""
 }
 
 get_base_image() {
     local framework="$1"
     local custom_image="$2"
+    local version="$3"  # Optional version parameter
+
+    # Handle custom base image (bypass catalog)
+    if [ "$framework" = "custom" ]; then
+        echo "$custom_image"
+        return 0
+    fi
+
+    # Look up in AIME v2 catalog (150+ pre-built framework images)
+    local AIME_REPO="/opt/ds01-infra/aime-ml-containers/ml_images.repo"
+
+    if [ -f "$AIME_REPO" ]; then
+        # Capitalize framework name (AIME uses Pytorch, Tensorflow)
+        local framework_capital=$(echo "$framework" | sed 's/tf/tensorflow/; s/\b\(.\)/\u\1/g')
+
+        # Determine GPU architecture (default: CUDA_ADA for A100s)
+        local arch="${MLC_ARCH:-CUDA_ADA}"
+
+        # Look up specific version or latest
+        local image=""
+        if [ -n "$version" ]; then
+            # Find exact version match (architecture in brackets: [CUDA_ADA])
+            image=$(awk -F', ' -v fw="$framework_capital" -v ver="$version" -v arch="[$arch]" \
+                '$1 == fw && $2 == ver && $3 == arch {print $4; exit}' "$AIME_REPO")
+        fi
+
+        # If no version specified or not found, get latest for this architecture
+        if [ -z "$image" ]; then
+            image=$(awk -F', ' -v fw="$framework_capital" -v arch="[$arch]" \
+                '$1 == fw && $3 == arch {print $4; exit}' "$AIME_REPO")
+        fi
+
+        if [ -n "$image" ]; then
+            echo "$image"
+            [ -n "$VERBOSE" ] && echo -e "${GREEN}✓${NC} Using AIME v2 catalog image: ${YELLOW}$image${NC}" >&2
+            return 0
+        fi
+    fi
+
+    # Fallback: AIME catalog not found or framework not in catalog
+    [ -n "$VERBOSE" ] && echo -e "${YELLOW}⚠${NC} AIME catalog not available, using Docker Hub fallback" >&2
+
     case $framework in
         tensorflow|tf)
             echo "tensorflow/tensorflow:2.14.0-gpu"
@@ -73,18 +161,63 @@ get_base_image() {
         pytorch-cpu)
             echo "pytorch/pytorch:2.5.1-cpu"
             ;;
-        custom)
-            echo "$custom_image"
-            ;;
         *)
             echo "pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
             ;;
     esac
 }
 
-get_base_packages() {
-    # Core data science packages installed by default
-    echo "jupyter jupyterlab ipykernel ipywidgets numpy pandas matplotlib seaborn scikit-learn scipy tqdm tensorboard Pillow python-dotenv"
+get_jupyter_packages() {
+    # Jupyter and interactive tools
+    echo "jupyter jupyterlab ipykernel ipywidgets notebook"
+}
+
+get_data_science_packages() {
+    # Core data science packages (NOT in AIME base)
+    echo "pandas scipy scikit-learn matplotlib seaborn"
+}
+
+normalize_package_name() {
+    # Normalize package name: lowercase, strip version specifiers
+    local pkg="$1"
+    # Remove version specifiers (==, >=, <=, ~=, etc.)
+    pkg=$(echo "$pkg" | sed 's/[=<>~!].*//')
+    # Convert to lowercase
+    echo "$pkg" | tr '[:upper:]' '[:lower:]'
+}
+
+check_duplicate_packages() {
+    # Check if any input packages are already in existing packages
+    # Args: $1 = new packages (space-separated), $2... = existing package lists
+    local new_packages="$1"
+    shift
+    local existing_packages="$*"
+
+    # Build array of existing packages (normalized)
+    local existing_array=()
+    for pkg in $existing_packages; do
+        local normalized=$(normalize_package_name "$pkg")
+        existing_array+=("$normalized")
+    done
+
+    # Check each new package
+    local duplicates=()
+    for new_pkg in $new_packages; do
+        local new_normalized=$(normalize_package_name "$new_pkg")
+        for existing in "${existing_array[@]}"; do
+            if [ "$new_normalized" = "$existing" ]; then
+                duplicates+=("$new_pkg")
+                break
+            fi
+        done
+    done
+
+    # Return duplicates (space-separated)
+    if [ ${#duplicates[@]} -gt 0 ]; then
+        echo "${duplicates[@]}"
+        return 1
+    fi
+    return 0
 }
 
 check_user_limits() {
@@ -226,9 +359,9 @@ interactive_mode() {
         fi
 
         echo -e "${BOLD}Select base framework:${NC}"
-        echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 (${GREEN}recommended${NC})"
-        echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
-        echo -e "  ${BOLD}3)${NC} JAX + CUDA"
+        echo -e "  ${BOLD}1)${NC} PyTorch (latest from AIME catalog) ${GREEN}(recommended)${NC}"
+        echo -e "  ${BOLD}2)${NC} TensorFlow (latest from AIME catalog)"
+        echo -e "  ${BOLD}3)${NC} JAX + CUDA (if available)"
         echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
         echo -e "  ${BOLD}5)${NC} Custom (specify base image)"
         read -p "Choice [1-5, default: 1]: " FW_CHOICE
@@ -252,55 +385,167 @@ interactive_mode() {
                 ;;
             *) FRAMEWORK="pytorch" ;;
         esac
+
+        # Get actual base image from AIME catalog
+        if [ "$FRAMEWORK" != "custom" ]; then
+            SELECTED_BASE_IMAGE=$(get_base_image "$FRAMEWORK" "$CUSTOM_BASE_IMAGE")
+            echo ""
+            echo -e "${GREEN}✓${NC} Selected base image: ${CYAN}$SELECTED_BASE_IMAGE${NC}"
+            echo ""
+
+            # Show what's already in the AIME base image
+            if [ "$GUIDED" = true ] || [ "$SKIP_BASE_PACKAGES" != true ]; then
+                show_base_image_packages "$SELECTED_BASE_IMAGE"
+            fi
+        fi
     fi
 
-    # Base packages selection (new tier)
-    if [ -z "$BASE_PACKAGES_CHOICE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
+    # Phase 2: Core Python & Jupyter
+    if [ -z "$JUPYTER_CHOICE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
         if [ "$GUIDED" = true ]; then
             echo ""
-            echo -e "${BOLD}Base Data Science Packages${NC}"
+            echo -e "${BOLD}Phase 2: Core Python & Interactive (Jupyter)${NC}"
             echo ""
-            echo "These are core packages used in most data science workflows:"
+            echo "These enable notebook-based development:"
             echo ""
             echo "  ${CYAN}Default packages:${NC}"
-            echo "  • Jupyter Lab (interactive notebooks)"
-            echo "  • NumPy, Pandas (data manipulation)"
-            echo "  • Matplotlib, Seaborn (visualization)"
-            echo "  • Scikit-learn (traditional ML)"
-            echo "  • TensorBoard (experiment tracking)"
+            echo "  • jupyter - Jupyter ecosystem"
+            echo "  • jupyterlab - Web-based IDE (recommended interface)"
+            echo "  • ipykernel - Python kernel for notebooks"
+            echo "  • ipywidgets - Interactive widgets"
             echo ""
-            echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults unless you need minimal setup"
+            echo -e "${YELLOW}💡 Package Versions:${NC}"
+            echo "  • Without version: installs latest (e.g., 'pandas')"
+            echo "  • With version: installs specific (e.g., 'pandas==1.5.3', 'transformers>=4.30.0')"
+            echo ""
+            echo -e "${YELLOW}💡 Recommendation:${NC} Install if you use notebooks (most data scientists do)"
             echo ""
         fi
 
-        echo -e "\n${BOLD}Install base data science Python packages? (jupyter, ipykernel, etc.) ${NC}"
-        echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended${NC})"
-        echo -e "  ${BOLD}2)${NC} No - Skip Python base packages"
-        echo -e "  ${BOLD}3)${NC} Custom - Specify base Python packages manually"
-        read -p "Choice [1-3, default: 1]: " BASE_PKG_CHOICE
+        echo -e "${BOLD}Install Jupyter Lab & interactive tools?${NC}"
+        echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended for data science${NC})"
+        echo -e "  ${BOLD}2)${NC} No - Skip (use terminal/IDE only)"
+        echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
+        read -p "Choice [1-3, default: 1]: " JUPYTER_PKG_CHOICE
 
-        case $BASE_PKG_CHOICE in
+        case $JUPYTER_PKG_CHOICE in
             2)
-                BASE_PACKAGES_CHOICE="skip"
-                echo -e "${YELLOW}⚠ Skipping base packages${NC}"
+                JUPYTER_CHOICE="skip"
+                echo -e "${YELLOW}Skipped Jupyter packages${NC}"
                 ;;
             3)
-                BASE_PACKAGES_CHOICE="custom"
-                echo ""
-                echo -e "${BOLD}Specify base Python packages:${NC} (space-separated)"
-                read -p "> " CUSTOM_BASE_PACKAGES
+                JUPYTER_CHOICE="custom"
+                # Loop until no duplicates
+                while true; do
+                    echo ""
+                    echo -e "${BOLD}Specify Jupyter packages:${NC} (space-separated)"
+                    echo -e "${DIM}Examples: jupyterlab ipywidgets ipykernel==6.25.0${NC}"
+                    read -p "> " CUSTOM_JUPYTER_PACKAGES
+
+                    if [ -z "$CUSTOM_JUPYTER_PACKAGES" ]; then
+                        echo -e "${YELLOW}No packages entered${NC}"
+                        break
+                    fi
+
+                    # Check for duplicates (against AIME base packages)
+                    local aime_base="numpy pillow tqdm conda ipython psutil torch torchvision torchaudio"
+                    local duplicates=$(check_duplicate_packages "$CUSTOM_JUPYTER_PACKAGES" "$aime_base")
+
+                    if [ $? -eq 1 ]; then
+                        echo ""
+                        echo -e "${YELLOW}⚠  Warning: These packages are already in AIME base:${NC}"
+                        echo -e "   ${YELLOW}$duplicates${NC}"
+                        echo ""
+                        echo "Please enter different packages (or press Enter to go back):"
+                    else
+                        break
+                    fi
+                done
                 ;;
             *)
-                BASE_PACKAGES_CHOICE="default"
+                JUPYTER_CHOICE="default"
                 ;;
         esac
+        echo ""
     fi
 
-    # Use case
+    # Phase 3: Core Data Science
+    if [ -z "$DATA_SCIENCE_CHOICE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
+        if [ "$GUIDED" = true ]; then
+            echo ""
+            echo -e "${BOLD}Phase 3: Core Data Science${NC}"
+            echo ""
+            echo "Essential libraries for data analysis:"
+            echo ""
+            echo "  ${CYAN}Default packages:${NC}"
+            echo "  • pandas - DataFrames & data manipulation"
+            echo "  • scipy - Scientific computing"
+            echo "  • scikit-learn - Traditional ML algorithms"
+            echo "  • matplotlib, seaborn - Visualization"
+            echo ""
+            echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)"
+            echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults (needed for most DS work)"
+            echo ""
+        fi
+
+        echo -e "${BOLD}Install core data science packages?${NC}"
+        echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended${NC})"
+        echo -e "  ${BOLD}2)${NC} No - Skip (framework-only setup)"
+        echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
+        read -p "Choice [1-3, default: 1]: " DS_PKG_CHOICE
+
+        case $DS_PKG_CHOICE in
+            2)
+                DATA_SCIENCE_CHOICE="skip"
+                echo -e "${YELLOW}Skipped data science packages${NC}"
+                ;;
+            3)
+                DATA_SCIENCE_CHOICE="custom"
+                # Loop until no duplicates
+                while true; do
+                    echo ""
+                    echo -e "${BOLD}Specify data science packages:${NC} (space-separated)"
+                    read -p "> " CUSTOM_DS_PACKAGES
+
+                    if [ -z "$CUSTOM_DS_PACKAGES" ]; then
+                        echo -e "${YELLOW}No packages entered${NC}"
+                        break
+                    fi
+
+                    # Check for duplicates (against AIME base + Jupyter packages)
+                    local aime_base="numpy pillow tqdm conda ipython psutil torch torchvision torchaudio"
+                    local jupyter_pkgs=""
+                    if [ "$JUPYTER_CHOICE" = "default" ]; then
+                        jupyter_pkgs=$(get_jupyter_packages)
+                    elif [ "$JUPYTER_CHOICE" = "custom" ]; then
+                        jupyter_pkgs="$CUSTOM_JUPYTER_PACKAGES"
+                    fi
+
+                    local duplicates=$(check_duplicate_packages "$CUSTOM_DS_PACKAGES" "$aime_base" "$jupyter_pkgs")
+
+                    if [ $? -eq 1 ]; then
+                        echo ""
+                        echo -e "${YELLOW}⚠  Warning: These packages are already included:${NC}"
+                        echo -e "   ${YELLOW}$duplicates${NC}"
+                        echo ""
+                        echo "Please enter different packages (or press Enter to go back):"
+                    else
+                        break
+                    fi
+                done
+                ;;
+            *)
+                DATA_SCIENCE_CHOICE="default"
+                ;;
+        esac
+        echo ""
+    fi
+
+    # Phase 4: Use-Case Specific
     if [ -z "$USECASE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
         if [ "$GUIDED" = true ]; then
             echo ""
-            echo -e "${BOLD}Choosing a Use Case${NC}"
+            echo -e "${BOLD}Phase 4: Use-Case Specific Packages${NC}"
             echo ""
             echo "This determines which specialized packages get installed:"
             echo ""
@@ -358,15 +603,31 @@ interactive_mode() {
         echo -e "${CYAN}━━━ Packages To Be Installed ━━━${NC}"
         echo ""
 
-        # Base packages
-        if [ "$BASE_PACKAGES_CHOICE" = "default" ] || [ -z "$BASE_PACKAGES_CHOICE" ]; then
-            echo -e "${BOLD}Base Packages:${NC}"
-            echo "  jupyter, jupyterlab, ipykernel, numpy, pandas, matplotlib,"
-            echo "  seaborn, scikit-learn, scipy, tqdm, tensorboard, Pillow"
+        # Jupyter packages
+        if [ "$JUPYTER_CHOICE" = "default" ]; then
+            echo -e "${BOLD}Jupyter & Interactive:${NC}"
+            echo "  jupyter, jupyterlab, ipykernel, ipywidgets, notebook"
             echo ""
-        elif [ "$BASE_PACKAGES_CHOICE" = "custom" ]; then
-            echo -e "${BOLD}Base Packages (custom):${NC}"
-            echo "  $CUSTOM_BASE_PACKAGES"
+        elif [ "$JUPYTER_CHOICE" = "custom" ]; then
+            echo -e "${BOLD}Jupyter (custom):${NC}"
+            echo "  $CUSTOM_JUPYTER_PACKAGES"
+            echo ""
+        elif [ "$JUPYTER_CHOICE" = "skip" ]; then
+            echo -e "${BOLD}Jupyter:${NC} Skipped"
+            echo ""
+        fi
+
+        # Data Science packages
+        if [ "$DATA_SCIENCE_CHOICE" = "default" ]; then
+            echo -e "${BOLD}Data Science:${NC}"
+            echo "  pandas, scipy, scikit-learn, matplotlib, seaborn"
+            echo ""
+        elif [ "$DATA_SCIENCE_CHOICE" = "custom" ]; then
+            echo -e "${BOLD}Data Science (custom):${NC}"
+            echo "  $CUSTOM_DS_PACKAGES"
+            echo ""
+        elif [ "$DATA_SCIENCE_CHOICE" = "skip" ]; then
+            echo -e "${BOLD}Data Science:${NC} Skipped"
             echo ""
         fi
 
@@ -387,9 +648,51 @@ interactive_mode() {
 
     # Additional packages
     if [ -z "$ADDITIONAL_PACKAGES" ]; then
-        echo -e "${BOLD}Additional Python packages?${NC} (space-separated, or press Enter to skip)"
-        echo "Examples: wandb optuna pytorch-lightning tensorboardX"
-        read -p "> " ADDITIONAL_PACKAGES
+        while true; do
+            echo -e "${BOLD}Additional Python packages?${NC} (space-separated, or press Enter to skip)"
+            echo "Examples: wandb optuna pytorch-lightning pandas==1.5.3 transformers>=4.30.0"
+            read -p "> " ADDITIONAL_PACKAGES
+
+            if [ -z "$ADDITIONAL_PACKAGES" ]; then
+                break
+            fi
+
+            # Check for duplicates (against ALL previous selections)
+            local aime_base="numpy pillow tqdm conda ipython psutil torch torchvision torchaudio"
+            local jupyter_pkgs=""
+            local ds_pkgs=""
+            local usecase_pkgs=""
+
+            if [ "$JUPYTER_CHOICE" = "default" ]; then
+                jupyter_pkgs=$(get_jupyter_packages)
+            elif [ "$JUPYTER_CHOICE" = "custom" ]; then
+                jupyter_pkgs="$CUSTOM_JUPYTER_PACKAGES"
+            fi
+
+            if [ "$DATA_SCIENCE_CHOICE" = "default" ]; then
+                ds_pkgs=$(get_data_science_packages)
+            elif [ "$DATA_SCIENCE_CHOICE" = "custom" ]; then
+                ds_pkgs="$CUSTOM_DS_PACKAGES"
+            fi
+
+            if [ -n "$USECASE" ] && [ "$USECASE" != "custom" ]; then
+                usecase_pkgs=$(get_usecase_packages "$USECASE")
+            elif [ "$USECASE" = "custom" ] && [ -n "$CUSTOM_USECASE_PACKAGES" ]; then
+                usecase_pkgs="$CUSTOM_USECASE_PACKAGES"
+            fi
+
+            local duplicates=$(check_duplicate_packages "$ADDITIONAL_PACKAGES" "$aime_base" "$jupyter_pkgs" "$ds_pkgs" "$usecase_pkgs")
+
+            if [ $? -eq 1 ]; then
+                echo ""
+                echo -e "${YELLOW}⚠  Warning: These packages are already included:${NC}"
+                echo -e "   ${YELLOW}$duplicates${NC}"
+                echo ""
+                echo "Please enter different packages (or press Enter to skip):"
+            else
+                break
+            fi
+        done
     fi
 
     # System packages
@@ -407,10 +710,12 @@ create_dockerfile() {
     local additional="$4"
     local system_pkgs="$5"
     local custom_base="$6"
-    local base_pkg_choice="$7"
-    local custom_base_pkgs="$8"
-    local custom_usecase_pkgs="$9"
-    local skip_base="${10}"
+    local jupyter_choice="$7"          # NEW: jupyter/interactive packages
+    local custom_jupyter_pkgs="$8"     # NEW: custom jupyter packages
+    local data_science_choice="$9"     # NEW: data science packages
+    local custom_ds_pkgs="${10}"       # NEW: custom DS packages
+    local custom_usecase_pkgs="${11}"
+    local skip_base="${12}"
 
     local base_image=$(get_base_image "$framework" "$custom_base")
     local usecase_packages=$(get_usecase_packages "$usecase")
@@ -442,9 +747,9 @@ FROM $base_image
 
 LABEL maintainer="$USERNAME"
 LABEL maintainer.id="$USER_ID"
-LABEL ds01.image="$image_name"
-LABEL ds01.framework="$framework"
-LABEL ds01.created="$(date -Iseconds)"
+LABEL aime.mlc.DS01_IMAGE="$image_name"
+LABEL aime.mlc.DS01_FRAMEWORK="$framework"
+LABEL aime.mlc.DS01_CREATED="$(date -Iseconds)"
 
 WORKDIR /workspace
 
@@ -465,14 +770,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
 
 DOCKERFILEEOF
 
-        # Base Python packages
-        if [ "$base_pkg_choice" = "skip" ]; then
-            echo "# Base packages skipped by user" >> "$dockerfile"
-        elif [ "$base_pkg_choice" = "custom" ] && [ -n "$custom_base_pkgs" ]; then
-            # Convert custom packages to multi-line format
-            echo "# Core Python packages" >> "$dockerfile"
+        # Phase 2: Jupyter & Interactive packages
+        if [ "$jupyter_choice" = "skip" ]; then
+            echo "# Jupyter packages skipped by user" >> "$dockerfile"
+            echo "" >> "$dockerfile"
+        elif [ "$jupyter_choice" = "custom" ] && [ -n "$custom_jupyter_pkgs" ]; then
+            echo "# Jupyter & Interactive (Custom)" >> "$dockerfile"
             echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
-            local pkg_array=($custom_base_pkgs)
+            local pkg_array=($custom_jupyter_pkgs)
             local pkg_count=${#pkg_array[@]}
             local i=0
             for pkg in "${pkg_array[@]}"; do
@@ -484,12 +789,48 @@ DOCKERFILEEOF
                 fi
             done
             echo "" >> "$dockerfile"
-        else
-            # Default base packages - convert to one-per-line format
-            local base_packages=$(get_base_packages)
-            echo "# Core Python packages" >> "$dockerfile"
+        elif [ "$jupyter_choice" = "default" ]; then
+            local jupyter_packages=$(get_jupyter_packages)
+            echo "# Jupyter & Interactive" >> "$dockerfile"
             echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
-            local pkg_array=($base_packages)
+            local pkg_array=($jupyter_packages)
+            local pkg_count=${#pkg_array[@]}
+            local i=0
+            for pkg in "${pkg_array[@]}"; do
+                ((i++))
+                if [ $i -lt $pkg_count ]; then
+                    echo "    $pkg \\" >> "$dockerfile"
+                else
+                    echo "    $pkg" >> "$dockerfile"
+                fi
+            done
+            echo "" >> "$dockerfile"
+        fi
+
+        # Phase 3: Data Science packages
+        if [ "$data_science_choice" = "skip" ]; then
+            echo "# Data science packages skipped by user" >> "$dockerfile"
+            echo "" >> "$dockerfile"
+        elif [ "$data_science_choice" = "custom" ] && [ -n "$custom_ds_pkgs" ]; then
+            echo "# Core Data Science (Custom)" >> "$dockerfile"
+            echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+            local pkg_array=($custom_ds_pkgs)
+            local pkg_count=${#pkg_array[@]}
+            local i=0
+            for pkg in "${pkg_array[@]}"; do
+                ((i++))
+                if [ $i -lt $pkg_count ]; then
+                    echo "    $pkg \\" >> "$dockerfile"
+                else
+                    echo "    $pkg" >> "$dockerfile"
+                fi
+            done
+            echo "" >> "$dockerfile"
+        elif [ "$data_science_choice" = "default" ]; then
+            local ds_packages=$(get_data_science_packages)
+            echo "# Core Data Science" >> "$dockerfile"
+            echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+            local pkg_array=($ds_packages)
             local pkg_count=${#pkg_array[@]}
             local i=0
             for pkg in "${pkg_array[@]}"; do
@@ -549,10 +890,10 @@ DOCKERFILEEOF
         echo "" >> "$dockerfile"
     fi
 
-    # Jupyter configuration and environment (only if base packages included)
-    if [ "$skip_base" != true ] && [ "$base_pkg_choice" != "skip" ]; then
+    # Jupyter configuration (only if Jupyter was installed)
+    if [ "$skip_base" != true ] && [ "$jupyter_choice" = "default" ] || [ "$jupyter_choice" = "custom" ]; then
         cat >> "$dockerfile" << DOCKERFILEEOF
-# Configure Jupyter
+# Configure Jupyter Lab
 RUN jupyter lab --generate-config && \\
     echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \\
     echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_lab_config.py && \\
@@ -590,8 +931,10 @@ USECASE=""
 ADDITIONAL_PACKAGES=""
 SYSTEM_PACKAGES=""
 CUSTOM_BASE_IMAGE=""
-BASE_PACKAGES_CHOICE=""
-CUSTOM_BASE_PACKAGES=""
+JUPYTER_CHOICE=""
+CUSTOM_JUPYTER_PACKAGES=""
+DATA_SCIENCE_CHOICE=""
+CUSTOM_DS_PACKAGES=""
 CUSTOM_USECASE_PACKAGES=""
 SKIP_BASE_PACKAGES=false
 NO_BUILD=false
@@ -708,8 +1051,8 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${BOLD}Image vs Container:${NC}"
     echo ""
-    echo "  • ${CYAN}Image${NC} = Blueprint (like a recipe)"
-    echo "  • ${CYAN}Container${NC} = Running instance (like the cooked dish)"
+    echo -e "  • ${CYAN}Image${NC} = Blueprint (like a recipe)"
+    echo -e "  • ${CYAN}Container${NC} = Running instance (like the cooked dish)"
     echo "  • One image can create many containers"
     echo "  • Containers inherit everything from the image"
     echo ""
@@ -742,7 +1085,7 @@ check_user_limits
 
 # Create Dockerfile
 echo -e "\n${CYAN}Creating Dockerfile...${NC}"
-DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$BASE_PACKAGES_CHOICE" "$CUSTOM_BASE_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES")
+DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$JUPYTER_CHOICE" "$CUSTOM_JUPYTER_PACKAGES" "$DATA_SCIENCE_CHOICE" "$CUSTOM_DS_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES")
 echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
 
 # Guided explanation of Dockerfile
@@ -773,7 +1116,7 @@ fi
 # Phase 1: Dockerfile Created ✓
 echo ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Phase 1/3: Dockerfile Created${NC}"
+echo -e "${GREEN}${BOLD}✓ Phase 1/2: Dockerfile Created${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "Location: ${BLUE}$DOCKERFILE${NC}"
@@ -791,7 +1134,7 @@ if [ "$NO_BUILD" = true ]; then
     echo ""
 else
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Phase 2/3: Build Docker Image?${NC}"
+    echo -e "${BOLD}Phase 2/2: Build Docker Image?${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo "This will:"
@@ -844,7 +1187,7 @@ INFOEOF
 
         echo ""
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}${BOLD}✓ Phase 2/3: Docker Image Built${NC}"
+        echo -e "${GREEN}${BOLD}✓ Phase 2/2: Docker Image Built${NC}"
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
         echo -e "Image: ${CYAN}$FULL_IMAGE_NAME${NC}"
@@ -862,7 +1205,7 @@ INFOEOF
     else
         echo ""
         echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${RED}${BOLD}✗ Phase 2/3: Build Failed${NC}"
+        echo -e "${RED}${BOLD}✗ Phase 2/2: Build Failed${NC}"
         echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
         echo "Check Dockerfile: $DOCKERFILE"
@@ -871,76 +1214,52 @@ INFOEOF
     fi
 fi
 
-# Phase 3: Create Container?
+# Image creation complete - suggest next steps
 if [ "$IMAGE_BUILT" = true ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Phase 3/3: Create Container?${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "A container is a running instance of your image where you'll"
-    echo "actually do your work (run code, train models, etc.)."
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✓ Image Built Successfully${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "This will:"
-    echo "  • Create container: $IMAGE_NAME"
-    echo "  • Allocate GPU resources"
-    echo "  • Mount your workspace directory"
-    echo "  • Apply resource limits"
+    echo -e "Image: ${CYAN}$FULL_IMAGE_NAME${NC}"
     echo ""
-    read -p "Create container now? [Y/n]: " CONTAINER_CONFIRM </dev/tty
-    CONTAINER_CONFIRM=${CONTAINER_CONFIRM:-Y}
-    echo ""
-
-    if [[ "$CONTAINER_CONFIRM" =~ ^[Yy]$ ]]; then
-        echo -e "${CYAN}Creating container...${NC}"
-        echo ""
-
-        if command -v container-create &>/dev/null; then
-            if container-create "$IMAGE_NAME"; then
-                echo ""
-                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo -e "${GREEN}${BOLD}✓ Phase 3/3: Container Created${NC}"
-                echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo ""
-                echo -e "${BOLD}All Done! 🎉${NC}"
-                echo ""
-                echo "Start working:"
-                echo -e "  ${GREEN}container-run $IMAGE_NAME${NC}"
-                echo ""
-            else
-                echo ""
-                echo -e "${YELLOW}Container creation failed${NC}"
-                echo "You can create it manually later:"
-                echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
-                echo ""
-            fi
-        else
-            echo -e "${RED}✗ container-create command not found${NC}"
-            echo "Create container manually:"
-            echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
-            echo ""
-        fi
-    else
-        echo "Container creation skipped."
-        echo ""
-        echo "Create container later:"
-        echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
-        echo ""
-    fi
 
     if [ "$GUIDED" = true ]; then
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}Remember:${NC}"
+        echo -e "${BOLD}What Just Happened?${NC}"
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
-        echo "  • ${CYAN}Dockerfile${NC} = Recipe (text file with instructions)"
-        echo "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile)"
-        echo "  • ${CYAN}Container${NC} = Running instance (where you work)"
+        echo "You've created a Docker image - a blueprint for containers."
         echo ""
-        echo -e "${BOLD}Useful Commands:${NC}"
-        echo -e "  ${GREEN}image-list${NC}          List all images"
+        echo "  • ${CYAN}Dockerfile${NC} = Recipe (text file with build instructions)"
+        echo "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)"
+        echo "  • ${CYAN}Container${NC} = Running instance (where you actually work)"
+        echo ""
+        echo "Think of it like: Recipe → Executable Program → Running Process"
+        echo ""
+        echo -e "${BOLD}Next Step: Create a Container${NC}"
+        echo ""
+        echo "An image is just a blueprint. To actually use it, you need to"
+        echo "create a container - a running instance where you'll do your work."
+        echo ""
+        echo "Create container:"
+        echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo ""
+        echo "This will:"
+        echo "  • Create a container from your image"
+        echo "  • Allocate GPU resources"
+        echo "  • Mount your workspace directory"
+        echo "  • Apply resource limits"
+        echo ""
+        echo -e "${BOLD}Other Useful Commands:${NC}"
+        echo -e "  ${GREEN}image-list${NC}          List all your images"
+        echo -e "  ${GREEN}image-update${NC}        Update Dockerfile & rebuild this image"
         echo -e "  ${GREEN}container-list${NC}      List all containers"
         echo -e "  ${GREEN}container-run${NC}       Enter a container"
-        echo -e "  ${GREEN}image-update${NC}        Update Dockerfile & rebuild image"
+        echo ""
+    else
+        echo -e "${BOLD}Next Step:${NC}"
+        echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
         echo ""
     fi
 fi
