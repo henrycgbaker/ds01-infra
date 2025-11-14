@@ -520,7 +520,7 @@ ds01-status
 
 ```bash
 # GPU allocations
-tail -f /var/logs/ds01/gpu-allocations.log
+tail -f /var/log/ds01/gpu-allocations.log
 
 # Container metadata
 ls /var/lib/ds01/container-metadata/
