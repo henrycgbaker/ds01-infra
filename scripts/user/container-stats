@@ -165,7 +165,6 @@ show_gpu_stats() {
 show_container_stats() {
     local container_name="$1"
     local watch_mode="$2"
-    local show_gpu="$3"
 
     # Get running containers using docker ps with filter
     local ps_filter=""
@@ -307,7 +306,6 @@ show_container_stats() {
 CONTAINER_NAME=""
 GUIDED=false
 WATCH_MODE=false
-SHOW_GPU=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -317,10 +315,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         -w|--watch)
             WATCH_MODE=true
-            shift
-            ;;
-        -g|--gpu)
-            SHOW_GPU=true
             shift
             ;;
         --no-trunc)
@@ -352,9 +346,9 @@ done
 # Watch mode
 if [ "$WATCH_MODE" = true ]; then
     while true; do
-        show_container_stats "$CONTAINER_NAME" "true" "$SHOW_GPU"
+        show_container_stats "$CONTAINER_NAME" "true"
         sleep 2
     done
 else
-    show_container_stats "$CONTAINER_NAME" "false" "$SHOW_GPU"
+    show_container_stats "$CONTAINER_NAME" "false"
 fi
