@@ -89,23 +89,43 @@ user_overrides:
 gpu_allocation:
   strategy: least_allocated         # Options: least_allocated, round_robin, priority_aware
   allocation_method: dynamic        # Allocate on container start, not permanent assignment
-  
+
   # MIG (Multi-Instance GPU) configuration for A100s
   enable_mig: true                  # Enable MIG partitioning
   mig_strategy: auto                # auto, manual, disabled
   mig_profile: 2g.20gb              # MIG profile (3 instances per A100)
                                     # Options: 1g.10gb (7 instances), 2g.20gb (3 instances), 3g.40gb (2 instances)
-  
+
+  # MIG Hardware Configuration (which GPUs to partition)
+  mig_gpus:
+    # GPU 0: Leave as full GPU (no MIG)
+    0:
+      enable: false
+      profile: null
+    # GPUs 1-3: Enable MIG with 4 instances each (using 1g.10gb profile)
+    1:
+      enable: true
+      profile: 1g.10gb              # 7 instances per GPU (we'll create 4)
+      instances: 4                  # Number of instances to create
+    2:
+      enable: true
+      profile: 1g.10gb
+      instances: 4
+    3:
+      enable: true
+      profile: 1g.10gb
+      instances: 4
+
   # When to use full GPU vs MIG:
   # - Students: Always get MIG instances
   # - Researchers: Get MIG instances unless requesting full GPU explicitly
   # - Admins: Can request full GPU or MIG instances
-  
+
   # Priority-aware allocation:
   # 1. Check for active reservations (priority 100)
   # 2. Allocate by user priority (admin=90, researcher=50, student=10)
   # 3. Within same priority, use least_allocated strategy
-  
+
   respect_reservations: true        # Honor user_override reservations
   
 # Container lifecycle policies
