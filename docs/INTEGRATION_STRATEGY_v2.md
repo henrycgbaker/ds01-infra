@@ -115,8 +115,11 @@ KEY PRINCIPLES:
 
 ### Unified Workflow
 
-CRITICAL: WHAT THIS NEEDS TO INCLUDE BUT DOESN'T ALREADY 
-- i want to use AIME'S mlc.py as the engine, but I just want to be able to pass it custom images (that are customised using ds01's `image create` and/or `image update`, and that use AIME image frameworks as the base, on top of which have additional customisable packages installed - as ds01 currently does). THIS IS CRUCIAL POINT OF RESOLUTION.
+✅ RESOLVED: Custom Image Support via mlc-patched.py
+- See docs/MLC_PATCH_STRATEGY.md for complete solution
+- Create mlc-patched.py with ~50 line patch (2.2% change) to add --image flag
+- Preserves 97.8% of AIME v2 logic unchanged
+- Custom images: FROM aimehub/pytorch + DS01 package customization
 ```
 USER: image-create my-cv-project
 ┌─────────────────────────────────────────────────────────┐

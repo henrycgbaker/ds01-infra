@@ -50,8 +50,8 @@ THIS IS WRONG - THEY HAVE UUIDs
 
 ```
 /var/lib/ds01/           → State (current allocations)
-/var/logs/ds01/          → All logs
-/opt/ds01-infra/logs/    → Symlink to /var/logs/ds01/
+/var/log/ds01/          → All logs
+/opt/ds01-infra/logs/    → Symlink to /var/log/ds01/
 ```
 
 ---
@@ -105,7 +105,7 @@ python3 scripts/docker/gpu_allocator.py status
 
 ```bash
 # GPU allocations (includes priority info)
-tail /var/logs/ds01/gpu-allocations.log
+tail /var/log/ds01/gpu-allocations.log
 
 # Format: timestamp|event|user|container|gpu_id|priority=X|reason
 ```
@@ -315,7 +315,7 @@ python3 scripts/docker/gpu_allocator.py release <container>  # If needed
 
 # Priority not working?
 python3 scripts/docker/get_resource_limits.py <user> --priority
-tail /var/logs/ds01/gpu-allocations.log | grep priority
+tail /var/log/ds01/gpu-allocations.log | grep priority
 ```
 
 ---

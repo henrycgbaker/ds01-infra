@@ -367,7 +367,7 @@ num_gpus = "all"  # All GPUs available to container!
 **DS01 Impact:** Must continue maintaining:
 - `/var/lib/ds01/gpu-state.json`
 - `/var/lib/ds01/container-metadata/`
-- `/var/logs/ds01/gpu-allocations.log`
+- `/var/log/ds01/gpu-allocations.log`
 
 ---
 

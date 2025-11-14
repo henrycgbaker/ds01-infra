@@ -21,21 +21,30 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 
 ### Four-Tier Hierarchical Design
 
-**TIER 1: Base System** (`aime-ml-containers` v1 at `/opt/aime-ml-containers`)
-- **9 Core Commands**: `mlc-create`, `mlc-open`, `mlc-list`, `mlc-stats`, `mlc-start`, `mlc-stop`, `mlc-remove`, `mlc-update-sys`, `mlc-upgrade-sys`
-- **Container Image Repository**: Framework versions (PyTorch, TensorFlow, MXNet) via `ml_images.repo`
+**TIER 1: Base System** (`aime-ml-containers` **v2** at `/opt/aime-ml-containers`)
+- **11 Core Commands**: `mlc create`, `mlc open`, `mlc list`, `mlc stats`, `mlc start`, `mlc stop`, `mlc remove`, `mlc export`, `mlc import`, `mlc update-sys`, `mlc -v/--version`
+- **Python-based**: All logic in `mlc.py` (~2,400 lines), commands are thin wrappers
+- **Container Image Repository**: 150+ framework versions (PyTorch, Tensorflow) via `ml_images.repo`
+  - **Architectures**: CUDA_BLACKWELL, CUDA_ADA, CUDA_AMPERE, ROCM6, ROCM5
+  - **Latest versions**: PyTorch 2.8.0, Tensorflow 2.16.1
 - **Container Lifecycle**: Creation, starting, stopping, removal with framework-focused workflow
 - **Naming Convention**: `$CONTAINER_NAME._.$USER_ID` for multi-user isolation
-- **Label System**: Uses `aime.mlc.*` labels for container identification
+- **Label System**: Uses `aime.mlc.*` labels for container identification (v4: adds models directory)
 
-**DS01 Usage of Base System (3 of 9 commands):**
-- ✅ **`mlc-create`** - WRAPPED by `/opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh`
-  - Adds: Resource limits from YAML, GPU allocation, systemd slice integration
-  - Called by: `container-create`
-- ✅ **`mlc-open`** - CALLED DIRECTLY by `container-run`
+**DS01 Integration with AIME v2:**
+- ✅ **`mlc-patched.py`** - DS01-ENHANCED version of AIME's mlc.py
+  - Location: `/opt/ds01-infra/scripts/docker/mlc-patched.py`
+  - **Preserves 97.5%** of AIME v2 logic unchanged
+  - **Adds:** `--image` flag for custom Docker images (bypasses catalog)
+  - **Adds:** DS01 labels (`aime.mlc.DS01_MANAGED`, `aime.mlc.CUSTOM_IMAGE`)
+  - **Adds:** Local image check (prevents pulling custom images from Docker Hub)
+  - **Wrapped by:** `mlc-create-wrapper.sh` (adds resource limits, GPU allocation)
+  - **Called by:** `container-create`
+  - **Tested:** E2E workflow verified (Nov 13, 2025)
+- ✅ **`mlc open`** - CALLED DIRECTLY by `container-run`
   - Works perfectly as-is (uses `docker exec`, auto-starts container)
-  - No wrapping needed
-- ✅ **`mlc-stats`** - WRAPPED by `/opt/ds01-infra/scripts/monitoring/mlc-stats-wrapper.sh`
+  - Compatible with both AIME catalog and DS01 custom images
+- ✅ **`mlc stats`** - WRAPPED by `/opt/ds01-infra/scripts/monitoring/mlc-stats-wrapper.sh`
   - Adds: GPU process information, resource limit display
   - Called by: `container-stats`
 
@@ -56,11 +65,20 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
 - ✅ **Symlinks configured** in `/usr/local/bin/` for 2 wrapped commands
 
 **TIER 2: Modular Unit Commands** (Single-purpose, reusable)
-- **Container Management** (7 commands): `container-create`, `container-run`, `container-stop`, `container-list`, `container-stats`, `container-cleanup`, `container-exit`
-  - `container-create` → calls `mlc-create-wrapper.sh`
+- **Container Management** (8 commands): `container-create`, `container-run`, `container-start`, `container-stop`, `container-list`, `container-stats`, `container-cleanup`, `container-exit`
+  - `container-create` → calls `mlc-create-wrapper.sh` → `mlc-patched.py`
   - `container-run` → calls `mlc-open`
-  - Others use Docker API directly for fine-grained DS01 control
+  - `container-start` → calls `mlc-start` (NEW - Nov 2025)
+  - `container-stop` → calls `mlc-stop` (refactored Nov 2025)
+  - `container-list` → calls `mlc-list` (refactored Nov 2025)
+  - `container-cleanup` → calls `mlc-remove` + GPU cleanup (refactored Nov 2025)
+  - `container-stats` → calls `mlc-stats-wrapper.sh`
+  - All wrap AIME Tier 1 commands with DS01 UX (interactive GUI, --guided mode, GPU management)
 - **Image Management** (4 commands): `image-create`, `image-list`, `image-update`, `image-delete`
+  - `image-create` → 4-phase workflow (Framework, Jupyter, Data Science, Use Case)
+  - `image-update` → categorized package display (Jupyter, Data Science, Use Case, Custom)
+  - Both show AIME base contents before prompting for additions
+  - **Package versioning**: Supports pip version specifiers (e.g., `pandas`, `pandas==1.5.3`, `pandas>=2.0.0`, `pandas~=1.5.0`)
 - **Project Setup Modules** (5 commands): `dir-create`, `git-init`, `readme-create`, `ssh-setup`, `vscode-setup`
 - **All support `--guided` flag** for educational mode with detailed explanations
 
@@ -85,6 +103,75 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
 - Systemd cgroup slices per user group
 - Container lifecycle automation (idle detection, auto-cleanup)
 - Monitoring and metrics collection
+- **Custom image workflow** built on AIME v2 base images
+
+### AIME v2 Integration Strategy
+
+**Problem Solved:** AIME v2's `mlc.py` only accepts framework+version from catalog, not custom images.
+
+**Solution:** `mlc-patched.py` - A minimally modified version (2.5% change):
+- Adds `--image` flag to bypass catalog and accept custom Docker images
+- Validates image exists locally before container creation
+- Preserves all AIME v2 container setup (UID/GID matching, labels, volumes)
+- **97.5% of AIME logic unchanged** - easy to update with future AIME releases
+
+**Custom Image Workflow (4-Phase):**
+```
+1. image-create my-project
+   ↓
+   Phase 1: Framework Selection
+     → PyTorch (latest from AIME catalog)
+     → Displays: aimehub/pytorch-2.8.0-aime-cuda12.6.3
+     → Shows AIME base packages (torch, numpy, conda, etc.)
+   ↓
+   Phase 2: Core Python & Jupyter
+     → jupyter, jupyterlab, ipykernel, ipywidgets (5 packages)
+     → Default: Install (recommended)
+   ↓
+   Phase 3: Core Data Science
+     → pandas, scipy, scikit-learn, matplotlib, seaborn (5 packages)
+     → Default: Install (recommended)
+   ↓
+   Phase 4: Use-Case Specific
+     → Computer Vision, NLP, RL, General ML, or Custom
+     → Adds domain-specific packages
+   ↓
+   Generates Dockerfile:
+     FROM aimehub/pytorch-2.8.0-aime-cuda12.6.3  # AIME base
+     RUN pip install jupyter jupyterlab ...       # Phase 2: Jupyter
+     RUN pip install pandas scipy ...             # Phase 3: Data Science
+     RUN pip install timm opencv-python ...       # Phase 4: Use Case
+     # Custom additional packages                 # Phase 5: User additions
+   ↓
+   Builds: my-project-{username}
+   ↓
+   Suggests: container-create my-project (doesn't auto-call)
+
+2. container-create my-project
+   ↓
+   Selects existing image: my-project-{username}
+   ↓
+   mlc-create-wrapper.sh calls mlc-patched.py:
+     python3 mlc-patched.py create my-project pytorch \
+             --image my-project-{username} \         # Custom image
+             -s -w ~/workspace
+   ↓
+   mlc-patched.py creates container with:
+     - AIME setup (user creation, labels, volumes)
+     - DS01 labels (DS01_MANAGED, CUSTOM_IMAGE)
+   ↓
+   wrapper applies resource limits via docker update
+   ↓
+   Container ready: AIME base + DS01 packages + Resource limits + GPU
+   ↓
+   Suggests: container-run my-project (doesn't auto-call)
+```
+
+**Key Benefit:** Users get AIME's 150+ pre-tested framework images PLUS DS01's package customization.
+
+**Documentation:**
+- Strategy: `/opt/ds01-infra/docs/MLC_PATCH_STRATEGY.md`
+- Test Results: `/opt/ds01-infra/docs/INTEGRATION_TEST_RESULTS.md`
 
 ### Core Components
 
@@ -243,6 +330,7 @@ python3 scripts/docker/gpu_allocator.py user-status <username>
 - `max_cpus`, `memory`, `shm_size`: Per-container compute limits
 - `max_containers_per_user`: Max simultaneous containers
 - `idle_timeout`: Auto-stop after X hours of GPU inactivity (e.g., "48h")
+- `gpu_hold_after_stop`: How long to hold GPU after container stopped (e.g., "24h", null = indefinite)
 - `priority`: Allocation priority (1-100, higher = more priority)
 - `max_tasks`: Systemd task limit for the group's cgroup slice
 
@@ -296,6 +384,7 @@ scripts/
 
 ### GPU Allocation Flow
 
+**On Container Creation:**
 1. User runs `mlc-create` (wrapper) or `ds01-run`
 2. `get_resource_limits.py` reads user's group/overrides from YAML
 3. Wrapper calls `gpu_allocator.py allocate <user> <container> <max_gpus> <priority>`
@@ -305,7 +394,38 @@ scripts/
    - Available GPUs/MIG instances
 5. Allocator scores GPUs by (priority_diff, container_count, memory_percent)
 6. Best GPU is allocated, state saved to `/var/lib/ds01/gpu-state.json`
-7. Container launched with `--gpus device=X` or `--gpus device=X:Y` (MIG)
+7. Container metadata saved with allocation timestamp
+8. Container launched with `--gpus device=X` or `--gpus device=X:Y` (MIG)
+
+**On Container Stop:**
+1. User runs `container-stop <name>`
+2. Container stopped via `mlc-stop`
+3. `gpu_allocator.py mark-stopped <container>` called
+4. Stopped timestamp recorded in metadata (`/var/lib/ds01/container-metadata/<container>.json`)
+5. GPU remains allocated, hold timer starts
+6. User shown warning about GPU hold time and cleanup option
+
+**On Container Restart:**
+1. User runs `container-run <name>`
+2. Container starts via `mlc-open`
+3. GPU allocator clears `stopped_at` timestamp
+4. GPU allocation continues normally
+
+**Automatic GPU Release (Stale Cleanup):**
+1. Cron job runs hourly: `/opt/ds01-infra/scripts/maintenance/cleanup-stale-gpu-allocations.sh`
+2. Calls `gpu_allocator.py release-stale`
+3. For each stopped container:
+   - Checks if container still exists (releases if deleted)
+   - Checks if container restarted (clears stopped timestamp)
+   - Compares elapsed time vs `gpu_hold_after_stop` from config
+   - Releases GPU if hold timeout exceeded
+4. Logs releases to `/var/log/ds01/gpu-stale-cleanup.log`
+
+**Manual GPU Release:**
+1. User runs `container-cleanup <name>`
+2. Container removed via `mlc-remove`
+3. `gpu_allocator.py release <container>` called
+4. GPU immediately freed, metadata deleted
 
 ### Resource Limit Application
 
@@ -331,11 +451,13 @@ scripts/
 - Cron jobs run metric collection scripts every 5 minutes
 - `check-idle-containers.sh` detects containers with no GPU activity
 - Idle timeout enforced by `cleanup-idle-containers.sh` (runs daily)
+- Stale GPU cleanup runs hourly via `cleanup-stale-gpu-allocations.sh`
 
 **Cleanup:**
-- Manual: `mlc-remove <name>` (from base system)
-- Automatic: `cleanup-idle-containers.sh` stops containers exceeding idle_timeout
-- GPU release: `gpu_allocator.py release <container>` updates state
+- Manual container removal: `container-cleanup <name>` (releases GPU immediately)
+- Automatic idle stop: `cleanup-idle-containers.sh` stops containers exceeding idle_timeout (GPU held per config)
+- Automatic GPU release: `cleanup-stale-gpu-allocations.sh` releases GPUs after hold timeout
+- Manual GPU release: `gpu_allocator.py release <container>` updates state
 
 ## Testing Changes
 
@@ -418,6 +540,86 @@ When modifying resource allocation logic:
 - Users must be added to `docker` group for Docker socket access
 
 ## Recent Changes (November 2025)
+
+**GPU Hold After Stop - Hybrid Allocation Strategy (November 13, 2025):** ✅ **COMPLETE**
+- **Problem**: GPUs were released immediately on container stop, forcing users to re-compete for allocation on restart
+- **Solution**: Implemented hybrid strategy - hold GPU for configurable time after stop, then auto-release
+- **Added** `gpu_hold_after_stop` parameter to `resource-limits.yaml`:
+  - Students: 1h (default)
+  - Researchers: 2h
+  - Admins: 3h (configurable, can be set to `null` for indefinite hold)
+- **Enhanced** `gpu_allocator.py` with timestamp tracking:
+  - New `mark_stopped(container)` function - records stop timestamp in metadata
+  - New `release_stale_allocations()` function - auto-releases GPUs after timeout expires
+  - Handles edge cases: restarted containers (clears timestamp), deleted containers (immediate release)
+  - Duration parsing: Supports `24h`, `48h`, `null` (indefinite) formats
+- **Updated** `container-stop` script:
+  - Calls `mark-stopped` after successful container stop
+  - Shows GPU hold warning with user's specific timeout
+  - Encourages cleanup to free GPU immediately (good citizenship message)
+- **Created** automated cleanup infrastructure:
+  - Script: `/opt/ds01-infra/scripts/maintenance/cleanup-stale-gpu-allocations.sh`
+  - Cron job: `/etc/cron.d/ds01-gpu-cleanup` (runs hourly at :15 past the hour)
+  - Logs to: `/var/log/ds01/gpu-stale-cleanup.log`
+- **Updated** `get_resource_limits.py` to parse and display new parameter
+- **Benefits**:
+  - Users can restart containers without losing GPU allocation (within timeout window)
+  - Fair sharing - GPUs automatically released if not restarted within timeout
+  - Configurable per user group - admins get longer hold, students get shorter
+  - Transparent - users see clear warnings about hold duration and cleanup options
+- **Documentation**: Updated CLAUDE.md GPU allocation flow, monitoring, and cleanup sections
+
+**Image Workflow Redesign (November 12, 2025):** ✅ **COMPLETE**
+- **Redesigned** `image-create` with 4-phase package selection (Jupyter, Data Science, Use Case, Additional)
+- **Added** `show_base_image_packages()` - displays what's pre-installed in AIME base images
+- **Split** package functions: `get_jupyter_packages()` + `get_data_science_packages()`
+- **Updated** `image-update` to match new package categorization
+- **Fixed** Tier 2 isolation - removed all cross-calls between commands
+  - `image-create` no longer calls `container-create` (suggests it instead)
+  - `container-create` no longer calls `image-create` (suggests it instead)
+- **Verified** orchestrators (`project-init`, `user-setup`) still work correctly
+- **Key insight:** AIME base images are framework-focused (PyTorch + CUDA + minimal deps)
+  - Only 8 key packages: conda, numpy, pillow, tqdm, torch, torchvision, torchaudio, ipython
+  - Missing: jupyter, pandas, scipy, sklearn, matplotlib, seaborn, opencv, transformers
+  - DS01's package installation workflow is ESSENTIAL (not redundant)
+
+**AIME v2 Integration (November 12, 2025):** ✅ **COMPLETE**
+- **Upgraded** from AIME v1 (bash-based) to AIME v2 (Python-based, 150+ images)
+- **Created** `mlc-patched.py` - DS01-enhanced version of AIME's mlc.py
+  - Adds `--image` flag for custom Docker images (bypasses catalog)
+  - Preserves 97.5% of AIME v2 logic unchanged (~60 lines added to 2,400-line script)
+  - Validates custom images exist before container creation
+  - Adds DS01 labels: `aime.mlc.DS01_MANAGED`, `aime.mlc.CUSTOM_IMAGE`
+- **Updated** `image-create` to use AIME v2 catalog (`ml_images.repo`)
+  - Now looks up 150+ pre-built framework images (PyTorch 2.8.0, TensorFlow 2.16.1)
+  - Supports CUDA_BLACKWELL, CUDA_ADA, CUDA_AMPERE, ROCM6, ROCM5
+  - Dockerfiles: `FROM aimehub/pytorch-...` (AIME base) + DS01 packages
+- **Updated** `mlc-create-wrapper.sh` to call `mlc-patched.py`
+  - Changed: `bash mlc-create` → `python3 mlc-patched.py`
+  - Passes `--image` flag when custom image exists
+  - Maintains resource limits & GPU allocation integration
+- **Tested** E2E on live GPU server - all integration points working
+- **Key benefit:** Users get AIME's pre-tested images + DS01's package customization
+- **Documentation:** `docs/MLC_PATCH_STRATEGY.md`, `docs/INTEGRATION_TEST_RESULTS.md`
+
+**Tier 2 Command Refactor (November 12, 2025):** ✅ **COMPLETE**
+- **Refactored 3 existing commands** to wrap AIME Tier 1:
+  - `container-list` → now calls `mlc-list` for container discovery
+  - `container-stop` → now calls `mlc-stop` for stopping containers
+  - `container-cleanup` → now calls `mlc-remove` for removal + GPU state cleanup
+  - All preserve DS01 UX: interactive GUI selection, --guided mode, colors, safety checks
+  - Graceful fallback to docker commands if mlc-* unavailable
+- **Created 1 new wrapper command**:
+  - `container-start` → wraps `mlc-start` to start stopped containers
+  - Interactive selection GUI when no args provided
+  - --guided mode with layer architecture explanation
+- **Architecture achieved**:
+  - AIME Tier 1 (`mlc-*`) = Core container lifecycle operations
+  - DS01 Tier 2 (`container-*`) = Lightweight wrappers adding DS01-specific UX
+  - Design principle: Call AIME for core functionality, add DS01 value-adds (GPU management, interactive menus, safety checks)
+- **Coverage**: 7/9 functional AIME commands now wrapped (100% of user-facing commands)
+- **Skipped**: `mlc-export`/`mlc-import` (exist as wrappers but no Python implementation in AIME v2)
+- **Documentation:** `docs/TODO_CONSOLIDATED.md` (TODO-14), updated `scripts/system/update-symlinks.sh`
 
 **Dockerfile Storage & Phased Workflows (November 11, 2025):**
 - **Directory Migration**: Renamed `~/docker-images/` → `~/dockerfiles/` for accurate terminology
