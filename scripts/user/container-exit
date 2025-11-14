@@ -2,6 +2,11 @@
 # Information about exiting containers - accurate for docker exec behavior
 # DS01 uses docker exec, not docker attach, so Ctrl+P, Ctrl+Q does NOT work
 
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
+
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -52,18 +57,15 @@ done
 # Helper function to get user's resource limits
 get_user_lifecycle_limits() {
     local username="$1"
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local infra_root="$(dirname "$script_dir")"
-    local resource_parser="$infra_root/scripts/docker/get_resource_limits.py"
 
-    if [ ! -f "$resource_parser" ]; then
+    if [ ! -f "$RESOURCE_PARSER" ]; then
         echo "None|None|None"
         return
     fi
 
-    local idle_timeout=$(python3 "$resource_parser" "$username" --idle-timeout 2>/dev/null || echo "None")
-    local max_runtime=$(python3 "$resource_parser" "$username" --max-runtime 2>/dev/null || echo "None")
-    local gpu_hold=$(python3 "$resource_parser" "$username" --gpu-hold-time 2>/dev/null || echo "None")
+    local idle_timeout=$(python3 "$RESOURCE_PARSER" "$username" --idle-timeout 2>/dev/null || echo "None")
+    local max_runtime=$(python3 "$RESOURCE_PARSER" "$username" --max-runtime 2>/dev/null || echo "None")
+    local gpu_hold=$(python3 "$RESOURCE_PARSER" "$username" --gpu-hold-time 2>/dev/null || echo "None")
 
     echo "${idle_timeout}|${max_runtime}|${gpu_hold}"
 }

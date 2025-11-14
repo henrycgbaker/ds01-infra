@@ -5,8 +5,8 @@
 set -e
 
 # Script paths
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 MLC_OPEN="$INFRA_ROOT/aime-ml-containers/mlc-open"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
@@ -327,7 +327,7 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "  ${BOLD}2) Stop the Container (Pause for a Bit)${NC}"
     echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
-    echo "     Halts processes, but GPU is held temporarily (1h)"
+    echo -e "     Halts processes, but GPU is held temporarily ($gpu_hold)"
     echo -e "     ${DIM}Use this if you plan to restart soon (within 1h).${NC}"
     echo ""
     echo -e "  ${BOLD}3) Cleanup the Container (Free Resources)${NC}"
@@ -347,8 +347,8 @@ if [ "$GUIDED" = true ]; then
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Important Reminders:${NC}"
     echo ""
-    echo  -e "  • ${CYAN}Running containers${NC} = GPU is allocated (running timeout: 12h idle timeout: 1h)"
-    echo  -e "  • ${CYAN}Stopped container${NC} = GPU is held (timeout: 1h)"
+    echo  -e "  • ${CYAN}Running containers${NC} = GPU is allocated (runtime: $max_runtime, idle timeout: $idle_timeout)"
+    echo  -e "  • ${CYAN}Stopped container${NC} = GPU is temporarily held (timeout: $gpu_hold)"
     echo  -e "  • ${CYAN}Cleanup container${NC} = Frees GPU for others immediately" 
     echo  -e "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
     echo  -e "  • ${GREEN}You can restart${NC} anytime without losing work"
