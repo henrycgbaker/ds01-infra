@@ -1,6 +1,15 @@
 #!/bin/bash
-# List containers with beautiful formatting
+# DS01 Container List - Lists containers via mlc-list with DS01 UX
+# Tier 2 Command - Wraps AIME mlc-list with interactive GUI and formatting
 
+set -e
+
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+MLC_LIST="$INFRA_ROOT/aime-ml-containers/mlc-list"
+
+# Colors
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -15,7 +24,7 @@ USER_ID=$(id -u)
 
 usage() {
     echo ""
-    echo -e "${BOLD}Container List${NC}"
+    echo -e "${BOLD}DS01 Container List${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-list [options]"
@@ -31,6 +40,8 @@ usage() {
     echo "  container-list               # Show running containers"
     echo "  container-list --all         # Show all containers (including stopped)"
     echo "  container-list --detailed    # Show detailed info"
+    echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-list for container discovery"
     echo ""
 }
 
@@ -61,13 +72,47 @@ format_uptime() {
     echo "$status" | sed 's/Up //' | sed 's/Exited.*/stopped/'
 }
 
+get_container_list_via_mlc() {
+    local show_all="$1"
+
+    # Check if mlc-list exists
+    if [ ! -f "$MLC_LIST" ]; then
+        # Fallback to docker directly if mlc-list not available
+        local filter_args=""
+        if [ "$show_all" != "true" ]; then
+            filter_args="--filter status=running"
+        fi
+        docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null
+        return
+    fi
+
+    # Call mlc-list to get containers
+    # mlc-list automatically filters by current user via aime.mlc.USER label
+    local mlc_output
+    if [ "$show_all" = "true" ]; then
+        mlc_output=$(bash "$MLC_LIST" 2>/dev/null || true)
+    else
+        # mlc-list shows all by default, we filter for running only
+        mlc_output=$(bash "$MLC_LIST" 2>/dev/null || true)
+    fi
+
+    # Parse mlc-list output to extract container names
+    # mlc-list output format typically shows container names with ._.UID suffix
+    # We extract the full container name (with ._.UID)
+    echo "$mlc_output" | grep "._.$USER_ID" | awk '{print $1}' | grep -v "^$" || true
+
+    # If mlc-list failed or returned nothing, fallback to docker
+    if [ -z "$mlc_output" ] || [ "$(echo "$mlc_output" | grep -c "._.$USER_ID" || true)" -eq 0 ]; then
+        local filter_args=""
+        if [ "$show_all" != "true" ]; then
+            filter_args="--filter status=running"
+        fi
+        docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null || true
+    fi
+}
+
 show_simple() {
     local show_all="$1"
-    local filter_args=""
-
-    if [ "$show_all" != "true" ]; then
-        filter_args="--filter status=running"
-    fi
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}${BOLD}    Your Containers${NC}"
@@ -85,10 +130,13 @@ show_simple() {
         echo -e "  • Time - How long container has been running (or when it stopped)"
         echo -e "  • GPU - Whether a GPU is allocated to this container"
         echo ""
+        echo -e "${CYAN}ℹ ${NC}${BOLD}Behind the scenes:${NC}"
+        echo -e "  • Containers are filtered using AIME labels (${DIM}aime.mlc.USER${NC})"
+        echo ""
     fi
 
-    # Get containers
-    local containers=$(docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null)
+    # Get containers via mlc-list (or docker fallback)
+    local containers=$(get_container_list_via_mlc "$show_all")
 
     if [ -z "$containers" ]; then
         if [ "$show_all" = "true" ]; then
@@ -104,8 +152,31 @@ show_simple() {
         return
     fi
 
+    # Filter for running only if needed
+    local filtered_containers=""
+    if [ "$show_all" = "true" ]; then
+        filtered_containers="$containers"
+    else
+        # Only show running containers
+        while IFS= read -r full_name; do
+            [ -z "$full_name" ] && continue
+            local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
+            if [[ "$status" == Up* ]]; then
+                filtered_containers="${filtered_containers}${full_name}\n"
+            fi
+        done <<< "$containers"
+        filtered_containers=$(echo -e "$filtered_containers" | grep -v "^$")
+    fi
+
+    if [ -z "$filtered_containers" ]; then
+        echo -e "${YELLOW}No running containers${NC}\n"
+        echo -e "${DIM}Show all containers: ${GREEN}container-list --all${NC}"
+        echo ""
+        return
+    fi
+
     # Count
-    local total=$(echo "$containers" | wc -l | tr -d ' ')
+    local total=$(echo "$filtered_containers" | grep -v "^$" | wc -l | tr -d ' ')
     local running=$(docker ps --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null | wc -l | tr -d ' ')
 
     # Display each container
@@ -117,7 +188,7 @@ show_simple() {
         # Extract short name
         local name=$(echo "$full_name" | sed "s/\._\.$USER_ID//")
 
-        # Get info
+        # Get info via docker inspect (DS01-specific display)
         local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
         local image=$(docker inspect --format "{{.Config.Image}}" "$full_name" 2>/dev/null | cut -d: -f1)
         local uptime=$(format_uptime "$status")
@@ -137,7 +208,7 @@ show_simple() {
         fi
 
         echo ""
-    done <<< "$containers"
+    done <<< "$filtered_containers"
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Total:${NC} $total container(s)  •  ${GREEN}$running running${NC}"
@@ -152,32 +223,53 @@ show_simple() {
     echo ""
 
     # Tips
-    echo -e "${YELLOW}💡 Quick Commands:${NC}"
-    echo -e "   Start:    ${GREEN}container-run <name>${NC}"
-    echo -e "   Stop:     ${GREEN}container-stop <name>${NC}"
-    echo -e "   Stats:    ${GREEN}container-stats${NC}"
-    echo -e "   Cleanup:  ${GREEN}container-cleanup${NC}"
+    echo -e "${YELLOW}💡 For More Info:${NC}"
+    echo -e "   Also stopped:           ${GREEN}container list -all${NC}"
+    echo -e "   Detailed metadata:      ${GREEN}container list -detailed${NC}"
+    echo -e "   With walkthrough:       ${GREEN}container list -guided${NC}"
     echo ""
+
+    if [ "$GUIDED" = true ]; then
+        echo ""
+
+        # Tips
+        echo -e "${YELLOW}💡 Further Quick Commands:${NC}"
+        echo -e "   Start:    ${GREEN}container-run <name>${NC}"
+        echo -e "   Stop:     ${GREEN}container-stop <name>${NC}"
+        echo -e "   Stats:    ${GREEN}container-stats${NC}"
+        echo -e "   Cleanup:  ${GREEN}container-cleanup${NC}"
+        echo ""
+    fi
 }
 
 show_detailed() {
     local show_all="$1"
-    local filter_args=""
-
-    if [ "$show_all" != "true" ]; then
-        filter_args="--filter status=running"
-    fi
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${CYAN}${BOLD}    Detailed Container Information${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
-    # Get containers
-    local containers=$(docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null)
+    # Get containers via mlc-list
+    local containers=$(get_container_list_via_mlc "$show_all")
 
     if [ -z "$containers" ]; then
         echo -e "${YELLOW}No containers found${NC}\n"
         return
+    fi
+
+    # Filter for running only if needed
+    local filtered_containers=""
+    if [ "$show_all" = "true" ]; then
+        filtered_containers="$containers"
+    else
+        while IFS= read -r full_name; do
+            [ -z "$full_name" ] && continue
+            local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
+            if [[ "$status" == Up* ]]; then
+                filtered_containers="${filtered_containers}${full_name}\n"
+            fi
+        done <<< "$containers"
+        filtered_containers=$(echo -e "$filtered_containers" | grep -v "^$")
     fi
 
     local count=0
@@ -189,7 +281,7 @@ show_detailed() {
 
         echo -e "${BOLD}━━━ Container #$count: ${CYAN}$name${NC} ${BOLD}━━━${NC}\n"
 
-        # Basic info
+        # Basic info (all via docker inspect - DS01 specific)
         local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
         local image=$(docker inspect --format "{{.Config.Image}}" "$full_name" 2>/dev/null)
         local created=$(docker inspect --format "{{.Created}}" "$full_name" 2>/dev/null | cut -d. -f1 | sed 's/T/ /')
@@ -202,6 +294,12 @@ show_detailed() {
         echo -e "  Status:     $(format_status "$status")"
         echo -e "  Created:    ${DIM}$created${NC}"
         echo -e "  Image:      $image"
+
+        # Check for AIME labels (verify mlc-list integration)
+        local aime_framework=$(docker inspect --format "{{index .Config.Labels \"aime.mlc.FRAMEWORK\"}}" "$full_name" 2>/dev/null)
+        if [ -n "$aime_framework" ] && [ "$aime_framework" != "<no value>" ]; then
+            echo -e "  Framework:  ${GREEN}$aime_framework${NC} ${DIM}(via AIME)${NC}"
+        fi
 
         # Resources
         echo -e "\n${BOLD}Resources:${NC}"
@@ -233,6 +331,10 @@ show_detailed() {
             if [ -n "$data" ]; then
                 echo -e "  Data:       ${BLUE}$data${NC}"
             fi
+            local models=$(docker inspect --format "{{range .Mounts}}{{if eq .Destination \"/models\"}}{{.Source}}{{end}}{{end}}" "$full_name" 2>/dev/null)
+            if [ -n "$models" ]; then
+                echo -e "  Models:     ${BLUE}$models${NC} ${DIM}(AIME v2)${NC}"
+            fi
         fi
 
         # Ports
@@ -255,7 +357,7 @@ show_detailed() {
         fi
 
         echo ""
-    done <<< "$containers"
+    done <<< "$filtered_containers"
 }
 
 # Parse arguments
