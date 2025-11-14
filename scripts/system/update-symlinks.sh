@@ -68,9 +68,10 @@ echo ""
 echo -e "${BOLD}TIER 2: Modular Unit Commands${NC}"
 echo ""
 
-echo -e "${BOLD}Container Management (7 commands):${NC}"
+echo -e "${BOLD}Container Management (8 commands):${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/container-create" "container-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-run" "container-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-list" "container-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stats" "container-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
