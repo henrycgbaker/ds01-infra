@@ -102,10 +102,10 @@ if systemctl status ds01.slice &>/dev/null; then
 fi
 
 # Recent Allocation Logs
-if [ -f /var/logs/ds01/gpu-allocations.log ]; then
+if [ -f /var/log/ds01/gpu-allocations.log ]; then
     echo -e "${BOLD}RECENT GPU ALLOCATIONS (Last 5)${NC}"
     echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
-    tail -5 /var/logs/ds01/gpu-allocations.log | while read -r line; do
+    tail -5 /var/log/ds01/gpu-allocations.log | while read -r line; do
         echo -e "  ${line}"
     done
     echo ""
