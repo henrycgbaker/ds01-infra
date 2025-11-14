@@ -137,21 +137,75 @@ if [ -z "$CONTAINER_NAME" ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    # Step 1: Image source (CHANGED: now comes first!)
-    echo -e "---${BOLD}Step 1: Docker Image${NC} (required)---"
+    if [ "$GUIDED" = true ]; then
+        echo -e "${BOLD}What is container-create?${NC}"
+        echo ""
+        echo "This command creates containers from Docker images."
+        echo ""
+        echo "If you don't have a custom image yet, create one first:"
+        echo -e "  ${GREEN}image-create my-project${NC}"
+        echo ""
+        echo "Then come back and run:"
+        echo -e "  ${GREEN}container-create my-project${NC}"
+        echo ""
+        echo -e "  ${CYAN}Workflow:${NC}"
+        echo -e "    1. ${BOLD}image-create${NC} → Build a custom Docker image (with packages)"
+        echo -e "    2. ${BOLD}container-create${NC} → Create a container from that image"
+        echo -e "    3. ${BOLD}container-run${NC} → Enter and use the container"
+        echo ""
+        echo ""
+        read -p "Press Enter to continue..." </dev/tty
+        echo ""
+
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Understanding Containers${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${BOLD}What is a Container?${NC}"
+        echo "  A container is your computing environment that includes:"
+        echo "  • Operating system (Ubuntu Linux)"
+        echo "  • Software pre-installed (Python, PyTorch, TensorFlow, etc.)"
+        echo "  • GPU access for machine learning"
+        echo "  • Tools like Jupyter, Git, and more"
+        echo ""
+        echo -e "${BOLD}Container vs Image:${NC}"
+        echo -e "  ${CYAN}Image${NC}     = Template (like a blueprint; build once, reuse many times)"
+        echo -e "  ${CYAN}Container${NC} = Running instance (where you do your work)"
+        echo ""
+        echo -e "${BOLD}Container vs Workspace:${NC}"
+        echo -e "  ${CYAN}Container${NC}  = Your computing environment (can be stopped/restarted)"
+        echo -e "  ${CYAN}Workspace${NC} = Your files (permanent storage)"
+        echo ""
+        echo "  Think of it like:"
+        echo "  • Container = The computer you work on"
+        echo "  • Workspace = Your hard drive with all your files"
+        echo ""
+        echo -e "${BOLD}Resource Allocation:${NC}"
+        echo "  DS01 automatically assigns resources to your container:"
+        echo "  • CPUs for computation"
+        echo "  • Memory (RAM)"
+        echo "  • GPU/MIG instances for training"
+        echo "  • Shared memory for data loading"
+        echo ""
+        echo "  These limits are based on your user group and ensure fair"
+        echo "  resource sharing among all users."
+        echo ""
+        read -p "Press Enter to continue..." </dev/tty
+        echo ""
+    fi
+
+    # Step 1: Image source
+    echo -e "---${BOLD}Step 1: Select Docker Image${NC} (required)---"
     echo ""
-    echo "Containers are created from Docker images as blueprints. Choose an image option:"
+    echo "Containers are created from Docker images as blueprints."
     echo ""
-    echo -e "  ${BOLD}1) Use existing image${NC}"
-    echo "     Select from images already built on this system"
+    echo -e "  ${BOLD}1) Use existing custom image${NC}"
+    echo "     Select from images you've built with image-create"
     echo ""
-    echo -e "  ${BOLD}2) Create custom image${NC}"
-    echo "     Build a new image with your choice of framework and packages"
-    echo ""
-    echo -e "  ${BOLD}3) Use base framework${NC} (PyTorch/TensorFlow)"
+    echo -e "  ${BOLD}2) Use base framework${NC} (PyTorch/TensorFlow from AIME catalog)"
     echo "     Quick start with standard frameworks (no customisation)"
     echo ""
-    read -p "Choice [1-3, default: 1]: " IMAGE_CHOICE </dev/tty
+    read -p "Choice [1-2, default: 1]: " IMAGE_CHOICE </dev/tty
     IMAGE_CHOICE=${IMAGE_CHOICE:-1}
     echo ""
 
@@ -163,19 +217,15 @@ if [ -z "$CONTAINER_NAME" ]; then
 
             # List available images
             if command -v docker &>/dev/null; then
-                # Get all images with username prefix or standard frameworks
-                AVAILABLE_IMAGES=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep -E "$USERNAME-|pytorch|tensorflow" | grep -v "<none>" | sort)
+                # Get only user's custom images (using maintainer label, same as image-list)
+                mapfile -t IMAGE_ARRAY < <(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" 2>/dev/null | grep -v "^<none>$" | sort -u)
+                IMAGE_COUNT=${#IMAGE_ARRAY[@]}
 
-                if [ -n "$AVAILABLE_IMAGES" ]; then
+                if [ "$IMAGE_COUNT" -gt 0 ]; then
 
-                    # Create array and display with numbers
-                    mapfile -t IMAGE_ARRAY <<< "$AVAILABLE_IMAGES"
-                    IMAGE_COUNT=${#IMAGE_ARRAY[@]}
-
+                    # Display with numbers
                     for i in "${!IMAGE_ARRAY[@]}"; do
-                        IMG="${IMAGE_ARRAY[$i]}"
-                        # Extract just the repository name (remove tag)
-                        IMG_REPO="${IMG%:*}"
+                        IMG_REPO="${IMAGE_ARRAY[$i]}"
                         echo -e "  ${BOLD}$((i+1)))${NC} $IMG_REPO"
                     done
                     echo ""
@@ -183,19 +233,18 @@ if [ -z "$CONTAINER_NAME" ]; then
                     read -p "Select image [1-$IMAGE_COUNT]: " IMG_SELECTION </dev/tty
 
                     if [[ "$IMG_SELECTION" =~ ^[0-9]+$ ]] && [ "$IMG_SELECTION" -ge 1 ] && [ "$IMG_SELECTION" -le "$IMAGE_COUNT" ]; then
-                        SELECTED_IMAGE="${IMAGE_ARRAY[$((IMG_SELECTION-1))]}"
-                        # Extract repository name only (no tag)
-                        IMAGE_OR_FRAMEWORK="${SELECTED_IMAGE%:*}"
+                        IMAGE_OR_FRAMEWORK="${IMAGE_ARRAY[$((IMG_SELECTION-1))]}"
 
                         echo ""
                         echo -e "${GREEN}✓${NC} Selected image: ${CYAN}$IMAGE_OR_FRAMEWORK${NC}"
                         echo ""
 
                         # Derive container name from image name
-                        # Remove username prefix and -image suffix if present
+                        # Images are named: ${IMAGE_NAME}-${USERNAME} (e.g., test-2-datasciencelab)
+                        # Remove username suffix to get container name
                         CONTAINER_NAME="$IMAGE_OR_FRAMEWORK"
-                        CONTAINER_NAME="${CONTAINER_NAME#$USERNAME-}"  # Remove username prefix
-                        CONTAINER_NAME="${CONTAINER_NAME%-image}"      # Remove -image suffix
+                        CONTAINER_NAME="${CONTAINER_NAME%-$USERNAME}"  # Remove -username suffix
+                        CONTAINER_NAME="${CONTAINER_NAME%-image}"      # Remove -image suffix if present
 
                         echo -e "${BOLD}Step 2: Container Name${NC}"
                         echo ""
@@ -206,6 +255,38 @@ if [ -z "$CONTAINER_NAME" ]; then
                         if [ -n "$CUSTOM_NAME" ]; then
                             CONTAINER_NAME="$CUSTOM_NAME"
                         fi
+
+                        # Check if container with this name already exists
+                        TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
+                        while docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; do
+                            echo ""
+                            echo -e "${YELLOW}⚠ Container '$CONTAINER_NAME' already exists${NC}"
+                            echo ""
+                            echo -e "A container with this name is already created. You can:"
+                            echo -e "  • Use the existing container (type 'n' below)"
+                            echo -e "  • Choose a different name (type 'y' below)"
+                            echo ""
+                            read -p "Choose a different name? [Y/n]: " RENAME </dev/tty
+                            if [[ ! "$RENAME" =~ ^[Nn]$ ]]; then
+                                echo ""
+                                read -p "New container name: " NEW_NAME </dev/tty
+                                if [ -n "$NEW_NAME" ]; then
+                                    CONTAINER_NAME=$(echo "$NEW_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+                                    TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
+                                    echo ""
+                                else
+                                    echo -e "${RED}✗ Invalid name${NC}"
+                                    exit 1
+                                fi
+                            else
+                                echo ""
+                                echo "Using existing container '$CONTAINER_NAME'"
+                                echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
+                                echo ""
+                                exit 0
+                            fi
+                        done
+
                         echo ""
                     else
                         echo -e "${RED}✗ Invalid selection${NC}"
@@ -237,170 +318,79 @@ if [ -z "$CONTAINER_NAME" ]; then
             ;;
 
         2)
-            # Create custom image
-            echo -e "${CYAN}━━━ Creating Custom Image ━━━${NC}"
+            # Use base framework from AIME catalog
+            echo -e "${CYAN}━━━ Base Framework Selection ━━━${NC}"
             echo ""
-
-            # Image name (ask first!)
-            echo -e "${BOLD}Image Name${NC}"
-            echo ""
-            echo "Choose a name for your image (e.g., my-project, thesis-cv, nlp-exp)"
-            echo ""
-            read -p "Image name: " IMAGE_BASE_NAME </dev/tty
-
-            if [ -z "$IMAGE_BASE_NAME" ]; then
-                echo -e "${RED}✗ Image name cannot be empty${NC}"
-                exit 1
-            fi
-
-            # Sanitize image name
-            IMAGE_BASE_NAME=$(echo "$IMAGE_BASE_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-            echo ""
-
-            # Framework selection
             echo -e "${BOLD}Select Framework:${NC}"
             echo ""
-            echo -e "  ${BOLD}1)${NC} PyTorch 2.5.1 + CUDA 11.8 ${GREEN}(recommended)${NC}"
-            echo -e "  ${BOLD}2)${NC} TensorFlow 2.14.0 + CUDA 11.8"
+            echo -e "  ${BOLD}1)${NC} PyTorch (latest from AIME catalog) ${GREEN}(recommended)${NC}"
+            echo -e "  ${BOLD}2)${NC} TensorFlow (latest from AIME catalog)"
             echo ""
             read -p "Framework [1-2, default: 1]: " FW_CHOICE </dev/tty
             FW_CHOICE=${FW_CHOICE:-1}
 
-            FRAMEWORK_NAME="pytorch"
-            if [ "$FW_CHOICE" = "2" ]; then
-                FRAMEWORK_NAME="tensorflow"
-            fi
-            echo ""
-
-            # Use case selection
-            echo -e "${BOLD}Select Use Case:${NC}"
-            echo ""
-            echo -e "  ${BOLD}1)${NC} General ML (scikit-learn, xgboost, lightgbm) ${GREEN}(default)${NC}"
-            echo -e "  ${BOLD}2)${NC} Computer Vision (timm, albumentations, opencv)"
-            echo -e "  ${BOLD}3)${NC} NLP (transformers, datasets, tokenizers)"
-            echo -e "  ${BOLD}4)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
-            echo -e "  ${BOLD}5)${NC} Minimal (just basics, add packages later)"
-            echo ""
-            read -p "Use case [1-5, default: 1]: " UC_CHOICE </dev/tty
-            UC_CHOICE=${UC_CHOICE:-1}
-
-            USE_CASE_TYPE="ml"
-            case $UC_CHOICE in
-                2) USE_CASE_TYPE="cv" ;;
-                3) USE_CASE_TYPE="nlp" ;;
-                4) USE_CASE_TYPE="rl" ;;
-                5) USE_CASE_TYPE="custom" ;;
-                *) USE_CASE_TYPE="ml" ;;
-            esac
-            echo ""
-
-            # Additional packages
-            echo -e "${BOLD}Additional Python Packages?${NC} ${DIM}(optional)${NC}"
-            echo "Examples: wandb optuna pytorch-lightning tensorboardX"
-            echo ""
-            read -p "Extra packages (space-separated, or Enter to skip): " EXTRA_PACKAGES </dev/tty
-            echo ""
-
-            # Build the image
-            echo -e "${CYAN}Building custom image...${NC}"
-            echo ""
-
-            IMAGE_BUILD_ARGS=("${IMAGE_BASE_NAME}-image" "-f" "$FRAMEWORK_NAME" "-t" "$USE_CASE_TYPE")
-
-            if [ -n "$EXTRA_PACKAGES" ]; then
-                IMAGE_BUILD_ARGS+=("-p" "$EXTRA_PACKAGES")
-            fi
-
-            # Check if image-create exists
-            if [ -x "$SCRIPT_DIR/image-create" ]; then
-                if "$SCRIPT_DIR/image-create" "${IMAGE_BUILD_ARGS[@]}"; then
-                    IMAGE_OR_FRAMEWORK="$USERNAME-${IMAGE_BASE_NAME}-image"
-                    echo ""
-                    echo -e "${GREEN}✓${NC} Image created: ${CYAN}$IMAGE_OR_FRAMEWORK${NC}"
-                    echo ""
-
-                    # Derive container name from image name
-                    CONTAINER_NAME="$IMAGE_BASE_NAME"
-
-                    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                    echo -e "${BOLD}Create Container from Image?${NC}"
-                    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                    echo ""
-                    echo "Your custom image is ready! Would you like to create"
-                    echo "a container from it now?"
-                    echo ""
-                    echo -e "Default container name: ${CYAN}$CONTAINER_NAME${NC}"
-                    echo ""
-                    echo -e "  ${BOLD}Y)${NC} Yes, create container ${GREEN}(recommended)${NC}"
-                    echo -e "  ${BOLD}N)${NC} No, I'll create it later"
-                    echo -e "  ${BOLD}C)${NC} Choose a different container name"
-                    echo ""
-                    read -p "Continue with container creation? [Y/n/c]: " CREATE_CONTAINER </dev/tty
-                    CREATE_CONTAINER=${CREATE_CONTAINER:-Y}
-                    echo ""
-
-                    if [[ "$CREATE_CONTAINER" =~ ^[Cc]$ ]]; then
-                        read -p "Enter container name: " CUSTOM_CONTAINER_NAME </dev/tty
-                        if [ -n "$CUSTOM_CONTAINER_NAME" ]; then
-                            CONTAINER_NAME="$CUSTOM_CONTAINER_NAME"
-                        fi
-                        echo ""
-                    elif [[ ! "$CREATE_CONTAINER" =~ ^[Yy]$ ]]; then
-                        echo -e "${YELLOW}Container creation skipped${NC}"
-                        echo ""
-                        echo -e "${BOLD}To create a container later, run:${NC}"
-                        echo -e "  ${GREEN}container-create $CONTAINER_NAME $IMAGE_OR_FRAMEWORK${NC}"
-                        echo ""
-                        exit 0
-                    fi
-                else
-                    echo -e "${RED}✗ Image creation failed${NC}"
-                    exit 1
-                fi
-            else
-                echo -e "${RED}✗ image-create command not found${NC}"
-                echo "Falling back to PyTorch framework"
-                IMAGE_OR_FRAMEWORK="pytorch"
-                # Still need to ask for container name if falling back
-                read -p "Container name: " CONTAINER_NAME </dev/tty
-                if [ -z "$CONTAINER_NAME" ]; then
-                    echo -e "${RED}✗ Container name required${NC}"
-                    exit 1
-                fi
-            fi
-            ;;
-
-        3)
-            # Use base framework
-            echo -e "${CYAN}━━━ Base Framework ━━━${NC}"
-            echo ""
-
-            echo -e "${BOLD}Select Framework:${NC}"
-            echo ""
-            echo -e "  ${BOLD}1)${NC} PyTorch (default)"
-            echo -e "  ${BOLD}2)${NC} TensorFlow"
-            echo ""
-            read -p "Framework [1-2, default: 1]: " FW_CHOICE </dev/tty
-            FW_CHOICE=${FW_CHOICE:-1}
-
-            IMAGE_OR_FRAMEWORK="pytorch"
             if [ "$FW_CHOICE" = "2" ]; then
                 IMAGE_OR_FRAMEWORK="tensorflow"
+            else
+                IMAGE_OR_FRAMEWORK="pytorch"
             fi
             echo ""
 
             # Ask for container name
-            echo -e "${BOLD}Step 2: Container Name${NC}"
-            echo ""
-            echo "Choose a name for your container (e.g., my-project, preprocessing)"
+            echo -e "${BOLD}Container Name${NC}"
             echo ""
             read -p "Container name: " CONTAINER_NAME </dev/tty
-
             if [ -z "$CONTAINER_NAME" ]; then
                 echo -e "${RED}✗ Container name cannot be empty${NC}"
                 exit 1
             fi
+
+            # Sanitize name
+            CONTAINER_NAME=$(echo "$CONTAINER_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+
+            # Check if container with this name already exists
+            TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
+            while docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; do
+                echo ""
+                echo -e "${YELLOW}⚠ Container '$CONTAINER_NAME' already exists${NC}"
+                echo ""
+                echo -e "A container with this name is already created. You can:"
+                echo -e "  • Use the existing container (type 'n' below)"
+                echo -e "  • Choose a different name (type 'y' below)"
+                echo ""
+                read -p "Choose a different name? [Y/n]: " RENAME </dev/tty
+                if [[ ! "$RENAME" =~ ^[Nn]$ ]]; then
+                    echo ""
+                    read -p "New container name: " NEW_NAME </dev/tty
+                    if [ -n "$NEW_NAME" ]; then
+                        CONTAINER_NAME=$(echo "$NEW_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
+                        TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
+                        echo ""
+                    else
+                        echo -e "${RED}✗ Invalid name${NC}"
+                        exit 1
+                    fi
+                else
+                    echo ""
+                    echo "Using existing container '$CONTAINER_NAME'"
+                    echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
+                    echo ""
+                    exit 0
+                fi
+            done
             echo ""
+
+            if [ "$GUIDED" = true ]; then
+                echo -e "${YELLOW}💡 Note:${NC} You're using a base framework without customisation."
+                echo ""
+                echo "For custom packages (jupyter, pandas, transformers, etc.), create"
+                echo "a custom image first:"
+                echo -e "  ${GREEN}image-create $CONTAINER_NAME${NC}"
+                echo ""
+                echo "Then create container from that image:"
+                echo -e "  ${GREEN}container-create $CONTAINER_NAME${NC}"
+                echo ""
+            fi
             ;;
 
         *)
@@ -435,46 +425,6 @@ if [ -z "$WORKSPACE_DIR" ]; then
     WORKSPACE_DIR="$HOME/workspace/$CONTAINER_NAME"
 fi
 
-# Show guided introduction
-if [ "$GUIDED" = true ]; then
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Understanding Containers${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "${BOLD}What is a Container?${NC}"
-    echo "  A container is your computing environment that includes:"
-    echo "  • Operating system (Ubuntu Linux)"
-    echo "  • Software pre-installed (Python, PyTorch, TensorFlow, etc.)"
-    echo "  • GPU access for machine learning"
-    echo "  • Tools like Jupyter, Git, and more"
-    echo ""
-    echo -e "${BOLD}Container vs Image:${NC}"
-    echo -e "  ${CYAN}Image${NC}     = Template (like a blueprint)"
-    echo -e "  ${CYAN}Container${NC} = Running instance (like a building from that blueprint)"
-    echo ""
-    echo -e "${BOLD}Container vs Workspace:${NC}"
-    echo -e "  ${CYAN}Container${NC}  = Your computing environment (can be stopped/restarted)"
-    echo -e "  ${CYAN}Workspace${NC} = Your files (permanent storage)"
-    echo ""
-    echo "  Think of it like:"
-    echo "  • Container = The computer you work on"
-    echo "  • Workspace = Your hard drive with all your files"
-    echo ""
-    echo -e "${BOLD}Resource Allocation:${NC}"
-    echo "  DS01 automatically assigns resources to your container:"
-    echo "  • CPUs for computation"
-    echo "  • Memory (RAM)"
-    echo "  • GPU/MIG instances for training"
-    echo "  • Shared memory for data loading"
-    echo ""
-    echo "  These limits are based on your user group and ensure fair"
-    echo "  resource sharing among all users."
-    echo ""
-    read -p "Press Enter to continue..." </dev/tty
-    echo ""
-fi
-
 # Check if wrapper exists
 if [ ! -f "$MLC_WRAPPER" ]; then
     echo -e "${RED}✗ mlc-create-wrapper not found${NC}"
@@ -491,75 +441,24 @@ if [ ! -f "$MLC_WRAPPER" ]; then
     exit 1
 fi
 
-# Check if container already exists
+# Check if container already exists (for non-interactive mode with args)
+# Note: Interactive mode already checks for duplicates earlier
 if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+    echo ""
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}⚠  Container '${CONTAINER_NAME}' already exists${NC}"
+    echo -e "${YELLOW}⚠  Container '$CONTAINER_NAME' already exists${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "What would you like to do?"
+    echo "A container with this name is already created."
     echo ""
-    echo -e "  ${BOLD}1)${NC} Use existing container ${GREEN}(recommended)${NC}"
-    echo "     Continue using the container that already exists"
+    echo -e "${BOLD}Your options:${NC}"
+    echo -e "  • Start existing container: ${GREEN}container-run $CONTAINER_NAME${NC}"
+    echo -e "  • Remove and recreate:      ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
+    echo -e "  • Choose different name:    ${GREEN}container-create <new-name> ...${NC}"
     echo ""
-    echo -e "  ${BOLD}2)${NC} Remove and recreate it"
-    echo "     Delete the old container and create a new one"
-    echo "     ${RED}⚠ WARNING: This will delete the container (workspace files are safe)${NC}"
+    echo -e "${CYAN}ℹ ${NC}Your workspace files are always safe - removing a container doesn't delete them."
     echo ""
-    echo -e "  ${BOLD}3)${NC} Create with a different name"
-    echo "     Choose a new name for this container"
-    echo ""
-    echo -e "  ${BOLD}4)${NC} Cancel"
-    echo "     Exit without doing anything"
-    echo ""
-    read -p "Choice [1-4, default: 1]: " RECOVERY_CHOICE </dev/tty
-    RECOVERY_CHOICE=${RECOVERY_CHOICE:-1}
-
-    case $RECOVERY_CHOICE in
-        1)
-            echo ""
-            echo -e "${GREEN}✓${NC} Using existing container"
-            echo ""
-            echo -e "${BOLD}Next steps:${NC}"
-            echo -e "  Start container: ${GREEN}container-run $CONTAINER_NAME${NC}"
-            echo ""
-            exit 0
-            ;;
-        2)
-            echo ""
-            echo -e "${YELLOW}Removing existing container...${NC}"
-            # Stop if running
-            docker stop "$CONTAINER_TAG" 2>/dev/null || true
-            # Remove container
-            docker rm "$CONTAINER_TAG" 2>/dev/null || true
-            echo -e "${GREEN}✓${NC} Container removed"
-            echo ""
-            echo "Continuing with creation..."
-            echo ""
-            ;;
-        3)
-            echo ""
-            read -p "New container name: " NEW_NAME </dev/tty
-            if [ -n "$NEW_NAME" ]; then
-                CONTAINER_NAME=$(echo "$NEW_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
-                CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
-                if [ -z "$WORKSPACE_DIR" ] || [ "$WORKSPACE_DIR" == "$HOME/workspace/$CONTAINER_NAME" ]; then
-                    WORKSPACE_DIR="$HOME/workspace/$CONTAINER_NAME"
-                fi
-                echo ""
-                echo "Creating with name: $CONTAINER_NAME"
-                echo ""
-            else
-                echo -e "${RED}✗ Invalid name${NC}"
-                exit 1
-            fi
-            ;;
-        4|*)
-            echo ""
-            echo "Cancelled"
-            exit 0
-            ;;
-    esac
+    exit 1
 fi
 
 # Determine framework/image
@@ -581,7 +480,7 @@ if [ -n "$IMAGE_OR_FRAMEWORK" ]; then
             if docker image inspect "$IMAGE_OR_FRAMEWORK" &>/dev/null; then
                 IMAGE_NAME="$IMAGE_OR_FRAMEWORK"
                 # Try to detect framework from image labels
-                FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "ds01.framework"}}' "$IMAGE_NAME" 2>/dev/null || echo "pytorch")
+                FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "aime.mlc.DS01_FRAMEWORK"}}' "$IMAGE_NAME" 2>/dev/null || echo "pytorch")
                 if [ -z "$FRAMEWORK" ]; then
                     FRAMEWORK="pytorch"
                 fi
@@ -671,19 +570,19 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo "The system will now:"
     echo ""
-    echo "  1. ${BOLD}Check your resource limits${NC}"
+    echo -e "  1. ${BOLD}Check your resource limits${NC}"
     echo "     Based on your user group configuration"
     echo ""
-    echo "  2. ${BOLD}Allocate GPU resources${NC}"
+    echo -e "  2. ${BOLD}Allocate GPU resources${NC}"
     echo "     Assign GPU/MIG instances if available"
     echo ""
-    echo "  3. ${BOLD}Download/prepare the Docker image${NC}"
-    echo "     Get the $FRAMEWORK image (may take a few minutes first time)"
+    echo -e "  3. ${BOLD}Download/prepare the Docker image${NC}"
+    echo -e "     Get the $FRAMEWORK image (may take a few minutes first time)"
     echo ""
-    echo "  4. ${BOLD}Create the container${NC}"
+    echo -e "  4. ${BOLD}Create the container${NC}"
     echo "     Set up your computing environment with all software"
     echo ""
-    echo "  5. ${BOLD}Apply resource limits${NC}"
+    echo -e "  5. ${BOLD}Apply resource limits${NC}"
     echo "     Ensure fair resource sharing"
     echo ""
     echo -e "${DIM}This may take 3-5 minutes on first run (downloading base image)${NC}"
@@ -715,22 +614,22 @@ if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
         echo ""
         echo -e "${BOLD}Next Steps:${NC}"
         echo ""
-        echo "  1. ${BOLD}Start the container${NC}"
+        echo -e "  1. ${BOLD}Start the container${NC}"
         echo -e "     ${GREEN}container-run $CONTAINER_NAME${NC}"
         echo "     This starts the container and opens a shell inside"
         echo ""
-        echo "  2. ${BOLD}Inside the container${NC}"
+        echo -e "  2. ${BOLD}Inside the container${NC}"
         echo "     • Your workspace is at: /workspace"
         echo "     • Run Python scripts: python train.py"
         echo "     • Start Jupyter: jlab"
         echo "     • Check GPU: gpu"
         echo ""
-        echo "  3. ${BOLD}Exit the container${NC}"
+        echo -e "  3. ${BOLD}Exit the container${NC}"
         echo "     • Type 'exit' or press Ctrl+D"
         echo "     • Container keeps running in background"
-        echo "     • Re-enter anytime: container-run $CONTAINER_NAME"
+        echo -e "     • Re-enter anytime: container-run $CONTAINER_NAME"
         echo ""
-        echo "  4. ${BOLD}Stop the container (when done)${NC}"
+        echo -e "  4. ${BOLD}Stop the container (when done)${NC}"
         echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
         echo "     Frees up GPU and resources for others"
         echo ""
