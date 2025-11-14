@@ -145,6 +145,7 @@ class ResourceLimitParser:
         output += f"    Tmp (/tmp in container):  {limits.get('storage_tmp', 'N/A')}\n"
         output += f"\n  Lifecycle:\n"
         output += f"    Idle timeout:             {limits.get('idle_timeout', 'N/A')}\n"
+        output += f"    GPU hold after stop:      {limits.get('gpu_hold_after_stop', 'N/A')}\n"
         output += f"    Max runtime:              {limits.get('max_runtime', 'unlimited')}\n"
         output += f"\n  Enforcement:\n"
         output += f"    Systemd slice:            ds01-{group}.slice\n"
@@ -155,12 +156,12 @@ class ResourceLimitParser:
 def main():
     """CLI interface for testing"""
     if len(sys.argv) < 2:
-        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--priority]")
+        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--priority|--gpu-hold-time|--idle-timeout]")
         sys.exit(1)
-    
+
     username = sys.argv[1]
     parser = ResourceLimitParser()
-    
+
     if '--docker-args' in sys.argv:
         args = parser.get_docker_args(username)
         print(' '.join(args))
@@ -173,6 +174,14 @@ def main():
     elif '--priority' in sys.argv:
         limits = parser.get_user_limits(username)
         print(limits.get('priority', 10))
+    elif '--gpu-hold-time' in sys.argv:
+        limits = parser.get_user_limits(username)
+        hold_time = limits.get('gpu_hold_after_stop')
+        print(hold_time if hold_time is not None else "indefinite")
+    elif '--idle-timeout' in sys.argv:
+        limits = parser.get_user_limits(username)
+        idle_timeout = limits.get('idle_timeout')
+        print(idle_timeout if idle_timeout is not None else "None")
     else:
         print(parser.format_for_display(username))
 

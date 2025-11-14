@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 
 class GPUAllocationManager:
-    def __init__(self, state_dir="/var/lib/ds01", log_dir="/var/logs/ds01", config_path="/opt/ds01-infra/config/resource-limits.yaml"):
+    def __init__(self, state_dir="/var/lib/ds01", log_dir="/var/log/ds01", config_path="/opt/ds01-infra/config/resource-limits.yaml"):
         self.state_dir = Path(state_dir)
         self.log_dir = Path(log_dir)
         self.config_path = Path(config_path)
@@ -65,14 +65,21 @@ class GPUAllocationManager:
                         ['nvidia-smi', 'mig', '-lgi', '-i', gpu_id],
                         capture_output=True, text=True
                     )
-                    # Parse MIG instance IDs (simplified, would need proper parsing)
-                    # For now, assume 3 instances per GPU (2g.20gb profile)
-                    for instance in range(3):
-                        mig_gpus.append({
-                            'physical_gpu': gpu_id,
-                            'mig_instance': instance,
-                            'id': f"{gpu_id}:{instance}"  # e.g., "0:0", "0:1", "0:2"
-                        })
+                    # Only add MIG instances if they actually exist
+                    if result2.returncode == 0 and "No GPU instances found" not in result2.stdout:
+                        # Parse actual MIG instance IDs from output
+                        # Format: "| GPU  GI  CI  MIG |..."
+                        for line in result2.stdout.split('\n'):
+                            if '|' in line and line.strip().startswith('|') and not line.strip().startswith('|='):
+                                parts = [p.strip() for p in line.split('|') if p.strip()]
+                                if len(parts) >= 2 and parts[0].isdigit():
+                                    instance_id = parts[1]  # GI (GPU Instance) ID
+                                    mig_gpus.append({
+                                        'physical_gpu': gpu_id,
+                                        'mig_instance': instance_id,
+                                        'id': f"{gpu_id}:{instance_id}"
+                                    })
+                    # If no instances found, this GPU will be treated as whole GPU in standard mode
             
             return mig_gpus
         except:
@@ -147,7 +154,7 @@ class GPUAllocationManager:
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
     
-    def _save_container_metadata(self, container: str, user: str, gpu_id: str, priority: int):
+    def _save_container_metadata(self, container: str, user: str, gpu_id: str, priority: int, stopped_at: Optional[str] = None):
         """Save container metadata"""
         metadata = {
             "container": container,
@@ -156,18 +163,21 @@ class GPUAllocationManager:
             "priority": priority,
             "allocated_at": datetime.now().isoformat(),
         }
-        
+
+        if stopped_at:
+            metadata["stopped_at"] = stopped_at
+
         metadata_file = self.metadata_dir / f"{container}.json"
         with open(metadata_file, 'w') as f:
             json.dump(metadata, f, indent=2)
     
     def _check_reservations(self, username: str) -> List[str]:
         """Check for active reservations and return reserved GPU IDs for this user"""
-        user_overrides = self.config.get('user_overrides', {})
+        user_overrides = self.config.get('user_overrides') or {}
         now = datetime.now()
-        
+
         reserved_gpus = []
-        
+
         if username in user_overrides:
             override = user_overrides[username]
             
@@ -424,7 +434,173 @@ class GPUAllocationManager:
                 return gpu_id, "SUCCESS"
         
         return None, "NOT_ALLOCATED"
-    
+
+    def mark_stopped(self, container: str) -> Tuple[Optional[str], str]:
+        """Mark container as stopped (records timestamp for GPU hold timeout)"""
+        metadata_file = self.metadata_dir / f"{container}.json"
+
+        if not metadata_file.exists():
+            return None, "NO_METADATA"
+
+        # Load existing metadata
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+        # Add stopped timestamp
+        metadata["stopped_at"] = datetime.now().isoformat()
+
+        # Save updated metadata
+        with open(metadata_file, 'w') as f:
+            json.dump(metadata, f, indent=2)
+
+        self._log_event("MARKED_STOPPED", metadata.get("user", "unknown"), container,
+                       metadata.get("gpu_id"), "Container stopped, GPU hold timer started")
+
+        return metadata.get("gpu_id"), "SUCCESS"
+
+    def release_stale_allocations(self, username: str = None) -> List[Tuple[str, str]]:
+        """
+        Release GPU allocations for stopped containers that exceeded hold timeout
+
+        Args:
+            username: Optional - only check this user's containers (None = all users)
+
+        Returns:
+            List of (container, reason) tuples for released allocations
+        """
+        from datetime import timedelta
+
+        def parse_duration(duration_str: str) -> Optional[timedelta]:
+            """Parse duration string like '24h', '48h', '1d' to timedelta"""
+            if not duration_str or duration_str == "null" or duration_str == "indefinite":
+                return None
+
+            duration_str = duration_str.strip().lower()
+            value = int(''.join(c for c in duration_str if c.isdigit()))
+
+            if 'h' in duration_str:
+                return timedelta(hours=value)
+            elif 'd' in duration_str:
+                return timedelta(days=value)
+            elif 'm' in duration_str:
+                return timedelta(minutes=value)
+            else:
+                # Default to hours
+                return timedelta(hours=value)
+
+        released = []
+        now = datetime.now()
+
+        # Get all containers with GPU allocations from state file
+        state = self._load_state()
+        allocated_containers = set()
+
+        for gpu_id, gpu_info in state.get("gpus", {}).items():
+            for container in gpu_info.get("containers", []):
+                allocated_containers.add(container)
+
+        # Check each allocated container
+        for container in allocated_containers:
+            # Try to load metadata
+            metadata_file = self.metadata_dir / f"{container}.json"
+
+            if not metadata_file.exists():
+                # No metadata - check if container exists
+                try:
+                    result = subprocess.run(
+                        ['docker', 'inspect', '--format', '{{.State.Running}}', container],
+                        capture_output=True, text=True
+                    )
+                    if result.returncode != 0:
+                        # Container doesn't exist - release immediately
+                        gpu_id, msg = self.release_gpu(container)
+                        released.append((container, f"Container no longer exists (no metadata)"))
+                        continue
+                except Exception:
+                    # Container doesn't exist - release
+                    gpu_id, msg = self.release_gpu(container)
+                    released.append((container, f"Container no longer exists (no metadata)"))
+                    continue
+
+            # Metadata exists - check for stopped containers with timeout
+            try:
+                with open(metadata_file, 'r') as f:
+                    metadata = json.load(f)
+
+                user = metadata.get("user")
+                stopped_at_str = metadata.get("stopped_at")
+
+                # Skip if filtering by username and this isn't their container
+                if username and user != username:
+                    continue
+
+                # Skip if container not stopped
+                if not stopped_at_str:
+                    continue
+
+                # Check if container actually exists and is stopped
+                try:
+                    result = subprocess.run(
+                        ['docker', 'inspect', '--format', '{{.State.Running}}', container],
+                        capture_output=True, text=True
+                    )
+                    if result.returncode != 0:
+                        # Container doesn't exist - release immediately
+                        gpu_id, msg = self.release_gpu(container)
+                        released.append((container, f"Container no longer exists"))
+                        continue
+
+                    is_running = result.stdout.strip() == 'true'
+                    if is_running:
+                        # Container is running again - clear stopped timestamp
+                        metadata.pop("stopped_at", None)
+                        with open(metadata_file, 'w') as f:
+                            json.dump(metadata, f, indent=2)
+                        continue
+
+                except Exception:
+                    # Container doesn't exist - release
+                    gpu_id, msg = self.release_gpu(container)
+                    released.append((container, f"Container no longer exists"))
+                    continue
+
+                # Get user's GPU hold timeout from config
+                # Import here to avoid circular dependency
+                import sys
+                from pathlib import Path
+                script_dir = Path(__file__).resolve().parent
+                sys.path.insert(0, str(script_dir))
+
+                try:
+                    from get_resource_limits import ResourceLimitParser
+                    parser = ResourceLimitParser(self.config_path)
+                    limits = parser.get_user_limits(user)
+                    hold_time_str = limits.get('gpu_hold_after_stop', '24h')
+                except:
+                    hold_time_str = '24h'  # default
+
+                hold_duration = parse_duration(hold_time_str)
+
+                # If hold time is null/indefinite, don't release
+                if hold_duration is None:
+                    continue
+
+                # Check if hold timeout exceeded
+                stopped_at = datetime.fromisoformat(stopped_at_str)
+                elapsed = now - stopped_at
+
+                if elapsed > hold_duration:
+                    gpu_id, msg = self.release_gpu(container)
+                    if msg == "SUCCESS":
+                        released.append((container, f"Hold timeout exceeded ({hold_time_str})"))
+
+            except Exception as e:
+                # Log error but continue
+                print(f"Error processing {metadata_file}: {e}", file=sys.stderr)
+                continue
+
+        return released
+
     def get_status(self) -> Dict:
         """Get current GPU allocation status"""
         state = self._load_state()
@@ -479,6 +655,8 @@ def main():
         print("  status                                    - Show GPU allocations")
         print("  allocate <user> <container> <max_gpus> <priority> - Allocate GPU")
         print("  release <container>                       - Release GPU")
+        print("  mark-stopped <container>                  - Mark container as stopped (start hold timer)")
+        print("  release-stale [user]                      - Release stale GPU allocations (optional: for specific user)")
         print("  user-status <user>                        - Show user's allocations")
         print("  user-count <user>                         - Show GPU count for user")
         sys.exit(1)
@@ -506,10 +684,12 @@ def main():
         container = sys.argv[3]
         max_gpus = int(sys.argv[4])
         priority = int(sys.argv[5])
-        
+
         gpu_id, reason = manager.allocate_gpu(user, container, max_gpus, priority)
-        if gpu_id:
+        if gpu_id and reason not in ["ALREADY_ALLOCATED", "USER_AT_LIMIT"]:
             print(f"✓ Allocated GPU/MIG {gpu_id} to {container}")
+        elif reason == "ALREADY_ALLOCATED":
+            print(f"⚠ Container {container} already has GPU/MIG {gpu_id} allocated")
         else:
             print(f"✗ Allocation failed: {reason}")
     
@@ -532,7 +712,28 @@ def main():
     elif command == "user-count" and len(sys.argv) == 3:
         user = sys.argv[2]
         print(manager.get_user_gpu_count(user))
-    
+
+    elif command == "mark-stopped" and len(sys.argv) == 3:
+        container = sys.argv[2]
+        gpu_id, reason = manager.mark_stopped(container)
+        if reason == "SUCCESS":
+            print(f"✓ Marked {container} as stopped (GPU {gpu_id} hold timer started)")
+        elif reason == "NO_METADATA":
+            print(f"✗ No metadata found for {container}")
+        else:
+            print(f"✗ Failed: {reason}")
+
+    elif command == "release-stale":
+        user = sys.argv[2] if len(sys.argv) >= 3 else None
+        released = manager.release_stale_allocations(user)
+
+        if released:
+            print(f"\n✓ Released {len(released)} stale GPU allocation(s):\n")
+            for container, reason in released:
+                print(f"  {container}: {reason}")
+        else:
+            print("\n✓ No stale allocations found")
+
     else:
         print("Invalid command")
         sys.exit(1)
