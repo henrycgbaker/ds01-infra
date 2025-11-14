@@ -5,8 +5,8 @@
 set -e
 
 # Script paths
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 MLC_STOP="$INFRA_ROOT/aime-ml-containers/mlc-stop"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
