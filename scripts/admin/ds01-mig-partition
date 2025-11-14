@@ -1,0 +1,353 @@
+#!/bin/bash
+# DS01 MIG Partition Manager
+# Configures MIG partitioning based on resource-limits.yaml
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
+PARSER_SCRIPT="$INFRA_ROOT/scripts/docker/mig-config-parser.py"
+
+# Check if running as root
+if [ "$EUID" -ne 0 ]; then
+    echo -e "${RED}Error: This script must be run as root (sudo)${NC}"
+    echo "MIG configuration requires root privileges"
+    exit 1
+fi
+
+# Check if nvidia-smi is available
+if ! command -v nvidia-smi &>/dev/null; then
+    echo -e "${RED}Error: nvidia-smi not found${NC}"
+    echo "NVIDIA drivers may not be installed properly"
+    exit 1
+fi
+
+# Parse arguments
+DRY_RUN=false
+FORCE=false
+RESET=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        --reset)
+            RESET=true
+            shift
+            ;;
+        -h|--help)
+            echo "DS01 MIG Partition Manager"
+            echo ""
+            echo "Usage: sudo ds01-mig-partition [OPTIONS]"
+            echo ""
+            echo "Configures MIG partitioning based on resource-limits.yaml"
+            echo ""
+            echo "Options:"
+            echo "  --dry-run     Show what would be done without making changes"
+            echo "  --force       Skip confirmations"
+            echo "  --reset       Disable all MIG and remove all instances"
+            echo "  -h, --help    Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  sudo ds01-mig-partition                # Apply config from YAML"
+            echo "  sudo ds01-mig-partition --dry-run      # Preview changes"
+            echo "  sudo ds01-mig-partition --reset        # Disable all MIG"
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}Unknown option: $1${NC}"
+            exit 1
+            ;;
+    esac
+done
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}           DS01 MIG PARTITION MANAGER${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+if [ "$DRY_RUN" = true ]; then
+    echo -e "${YELLOW}DRY RUN MODE - No changes will be made${NC}"
+    echo ""
+fi
+
+# Handle reset mode
+if [ "$RESET" = true ]; then
+    echo -e "${YELLOW}RESET MODE: Disabling all MIG instances${NC}"
+    echo ""
+
+    # Get list of GPUs
+    GPU_COUNT=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -1)
+
+    for ((i=0; i<GPU_COUNT; i++)); do
+        MIG_MODE=$(nvidia-smi --query-gpu=mig.mode.current --format=csv,noheader -i $i)
+
+        if [ "$MIG_MODE" = "Enabled" ]; then
+            echo -e "${CYAN}GPU $i:${NC} Disabling MIG..."
+
+            if [ "$DRY_RUN" = false ]; then
+                # Destroy all instances first
+                nvidia-smi mig -dci -i $i 2>/dev/null || true
+                nvidia-smi mig -dgi -i $i 2>/dev/null || true
+
+                # Disable MIG mode
+                nvidia-smi -i $i -mig 0
+            fi
+
+            echo -e "  ${GREEN}✓${NC} MIG disabled on GPU $i"
+        else
+            echo -e "${CYAN}GPU $i:${NC} Already disabled"
+        fi
+    done
+
+    echo ""
+    echo -e "${YELLOW}Note: Changes require a system reboot to take full effect${NC}"
+    exit 0
+fi
+
+# Check if config file exists
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo -e "${RED}Error: Config file not found: $CONFIG_FILE${NC}"
+    exit 1
+fi
+
+# Create the MIG config parser if it doesn't exist
+if [ ! -f "$PARSER_SCRIPT" ]; then
+    echo -e "${YELLOW}Creating MIG config parser...${NC}"
+    mkdir -p "$(dirname "$PARSER_SCRIPT")"
+
+    cat > "$PARSER_SCRIPT" << 'PYTHON_SCRIPT'
+#!/usr/bin/env python3
+"""Parse MIG configuration from resource-limits.yaml"""
+
+import yaml
+import sys
+import json
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: mig-config-parser.py <config-file>", file=sys.stderr)
+        sys.exit(1)
+
+    config_file = sys.argv[1]
+
+    try:
+        with open(config_file, 'r') as f:
+            config = yaml.safe_load(f)
+
+        mig_config = config.get('gpu_allocation', {}).get('mig_gpus', {})
+
+        # Convert to list format for easier bash processing
+        result = []
+        for gpu_id, settings in mig_config.items():
+            result.append({
+                'gpu_id': int(gpu_id),
+                'enable': settings.get('enable', False),
+                'profile': settings.get('profile'),
+                'instances': settings.get('instances', 0)
+            })
+
+        print(json.dumps(result, indent=2))
+
+    except Exception as e:
+        print(f"Error parsing config: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()
+PYTHON_SCRIPT
+
+    chmod +x "$PARSER_SCRIPT"
+fi
+
+# Parse MIG configuration from YAML
+echo -e "${BOLD}Reading configuration from:${NC} $CONFIG_FILE"
+echo ""
+
+MIG_CONFIG=$(python3 "$PARSER_SCRIPT" "$CONFIG_FILE")
+
+if [ -z "$MIG_CONFIG" ] || [ "$MIG_CONFIG" = "[]" ]; then
+    echo -e "${YELLOW}No MIG configuration found in YAML${NC}"
+    echo "Add mig_gpus section to gpu_allocation in config file"
+    exit 1
+fi
+
+echo -e "${BOLD}Planned MIG Configuration:${NC}"
+echo "$MIG_CONFIG" | python3 -c "
+import sys, json
+config = json.load(sys.stdin)
+for gpu in config:
+    gpu_id = gpu['gpu_id']
+    if gpu['enable']:
+        print(f'  GPU {gpu_id}: Enable MIG - {gpu[\"instances\"]} x {gpu[\"profile\"]}')
+    else:
+        print(f'  GPU {gpu_id}: Disable MIG (full GPU)')
+"
+echo ""
+
+# Confirmation
+if [ "$FORCE" = false ] && [ "$DRY_RUN" = false ]; then
+    echo -e "${YELLOW}WARNING: This will reconfigure GPU partitioning${NC}"
+    echo "All existing MIG instances will be destroyed and recreated"
+    echo ""
+    read -p "Continue? (yes/no): " CONFIRM
+
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "Aborted"
+        exit 0
+    fi
+    echo ""
+fi
+
+# Map profile names to nvidia-smi profile IDs
+# For A100: 1g.10gb=14, 2g.20gb=9, 3g.40gb=5, 4g.40gb=0
+declare -A PROFILE_MAP=(
+    ["1g.10gb"]="14"
+    ["1g.5gb"]="19"
+    ["2g.20gb"]="9"
+    ["3g.40gb"]="5"
+    ["4g.40gb"]="0"
+    ["7g.80gb"]="0"
+)
+
+# Apply configuration
+echo -e "${BOLD}Applying MIG Configuration:${NC}"
+echo ""
+
+REBOOT_REQUIRED=false
+
+echo "$MIG_CONFIG" | python3 -c "
+import sys, json
+config = json.load(sys.stdin)
+for gpu in config:
+    print(json.dumps(gpu))
+" | while IFS= read -r gpu_json; do
+    GPU_ID=$(echo "$gpu_json" | python3 -c "import sys, json; print(json.load(sys.stdin)['gpu_id'])")
+    ENABLE=$(echo "$gpu_json" | python3 -c "import sys, json; print(str(json.load(sys.stdin)['enable']).lower())")
+    PROFILE=$(echo "$gpu_json" | python3 -c "import sys, json; print(json.load(sys.stdin)['profile'] or '')")
+    INSTANCES=$(echo "$gpu_json" | python3 -c "import sys, json; print(json.load(sys.stdin)['instances'])")
+
+    echo -e "${CYAN}━━━ GPU $GPU_ID ━━━${NC}"
+
+    # Get current MIG mode
+    CURRENT_MODE=$(nvidia-smi --query-gpu=mig.mode.current --format=csv,noheader -i $GPU_ID)
+
+    if [ "$ENABLE" = "true" ]; then
+        # Enable MIG
+        echo "Target: MIG enabled with $INSTANCES x $PROFILE instances"
+
+        if [ "$CURRENT_MODE" != "Enabled" ]; then
+            echo -e "${YELLOW}  → Enabling MIG mode...${NC}"
+
+            if [ "$DRY_RUN" = false ]; then
+                nvidia-smi -i $GPU_ID -mig 1
+                REBOOT_REQUIRED=true
+            fi
+
+            echo -e "    ${GREEN}✓${NC} MIG mode enabled (reboot required)"
+        else
+            echo -e "  ${GREEN}✓${NC} MIG mode already enabled"
+
+            # Destroy existing instances before creating new ones
+            echo "  → Removing existing MIG instances..."
+            if [ "$DRY_RUN" = false ]; then
+                nvidia-smi mig -dci -i $GPU_ID 2>/dev/null || true
+                nvidia-smi mig -dgi -i $GPU_ID 2>/dev/null || true
+            fi
+        fi
+
+        # Create MIG instances (only if MIG was already enabled, otherwise needs reboot)
+        if [ "$CURRENT_MODE" = "Enabled" ] && [ "$DRY_RUN" = false ]; then
+            PROFILE_ID="${PROFILE_MAP[$PROFILE]}"
+
+            if [ -z "$PROFILE_ID" ]; then
+                echo -e "  ${RED}✗${NC} Unknown profile: $PROFILE"
+                continue
+            fi
+
+            echo "  → Creating $INSTANCES MIG instances (profile $PROFILE, ID $PROFILE_ID)..."
+
+            # Build comma-separated list of profile IDs
+            PROFILE_LIST=""
+            for ((j=0; j<INSTANCES; j++)); do
+                if [ $j -eq 0 ]; then
+                    PROFILE_LIST="$PROFILE_ID"
+                else
+                    PROFILE_LIST="$PROFILE_LIST,$PROFILE_ID"
+                fi
+            done
+
+            # Create GPU instances
+            nvidia-smi mig -cgi $PROFILE_LIST -i $GPU_ID
+
+            # Create compute instances for each GPU instance
+            nvidia-smi mig -cci -i $GPU_ID
+
+            echo -e "  ${GREEN}✓${NC} Created $INSTANCES MIG instances"
+        elif [ "$CURRENT_MODE" != "Enabled" ]; then
+            echo -e "  ${YELLOW}⚠${NC}  MIG instances will be created after reboot"
+        fi
+
+    else
+        # Disable MIG
+        echo "Target: MIG disabled (full GPU)"
+
+        if [ "$CURRENT_MODE" = "Enabled" ]; then
+            echo -e "${YELLOW}  → Disabling MIG mode...${NC}"
+
+            if [ "$DRY_RUN" = false ]; then
+                # Destroy instances first
+                nvidia-smi mig -dci -i $GPU_ID 2>/dev/null || true
+                nvidia-smi mig -dgi -i $GPU_ID 2>/dev/null || true
+
+                # Disable MIG
+                nvidia-smi -i $GPU_ID -mig 0
+                REBOOT_REQUIRED=true
+            fi
+
+            echo -e "  ${GREEN}✓${NC} MIG mode disabled (reboot required)"
+        else
+            echo -e "  ${GREEN}✓${NC} MIG already disabled"
+        fi
+    fi
+
+    echo ""
+done
+
+# Summary
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+
+if [ "$DRY_RUN" = true ]; then
+    echo -e "${YELLOW}DRY RUN COMPLETE - No changes were made${NC}"
+elif [ "$REBOOT_REQUIRED" = true ]; then
+    echo -e "${YELLOW}⚠  REBOOT REQUIRED${NC}"
+    echo ""
+    echo "MIG mode changes require a system reboot to take effect."
+    echo ""
+    echo "After reboot, run this command again to create MIG instances:"
+    echo "  sudo ds01-mig-partition"
+else
+    echo -e "${GREEN}✓ MIG configuration applied successfully${NC}"
+fi
+
+echo ""
+echo "To view current MIG status:"
+echo "  nvidia-smi mig -lgi"
+echo "  ds01-dashboard"
+echo ""

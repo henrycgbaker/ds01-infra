@@ -104,14 +104,14 @@
 - [x] clean up output from docker audit
 - [x] pull the CPU & GPU & Memory audit stuff about processes & usage into an an improved GPU & CPU & Memory logger (which is then turned into a daily report by the log_analysis_.sh script)
     - idea would be that logger is dynamic stuff, audit tells you general state of the system (a bit more static)
-- [ ] log containers being spun up / down, 
+- [x] log containers being spun up / down, 
     - incl resource allocation, user ID, name, etc
     - this will be the basis of the intelligent resource allocation
-- [ ] set up workflow that monitors which containers have been allocated which GPUs currently
+- [x] set up workflow that monitors which containers have been allocated which GPUs currently
     - plan for this fully documented [here](../docs-admin/gpu-allocation-implementation.md)
-    - incl resource allocation, user ID, name, etc
+    - [ ] incl resource allocation, user ID, name, etc
     - this will be the basis of the intelligent resource allocation
-- [ ] set up workflow that monitors which containers have been allocated which GPUs currently
+- [x] set up workflow that monitors which containers have been allocated which GPUs currently
     - plan for this fully documented [here](../docs-admin/gpu-allocation-implementation.md)
 - [ ] once have worked out how users are added / recorded -> update the system audit that tracks users 
     - [ ] + add a tracking of users logging in 
@@ -129,40 +129,6 @@
     - incl all the config files in /etc/ and others
 
 # Containers
-
-CHECK: 
-  ⎿  ☐ Add lifecycle explanation to container-run --guided
-     ☐ Add lifecycle explanation to container-exit --guided
-     ☐ Add lifecycle explanation to container-stop --guided
-     ☐ Add lifecycle explanation to container-cleanup --guided
-     -> MAKE SURE THIS ALL MAKES SENSE!
-      1. container-run --guided
-  - Added Option 3: Cleanup (remove & free GPU immediately)
-  - Added System Automation section:
-    - Idle containers auto-stopped after 24h GPU inactivity
-    - GPUs held for 1h after stop, then auto-released
-    - Restart within hold time → GPU still allocated
-
-  2. container-exit --guided
-  - Updated "Exit vs. Stop" → "Exit vs. Stop vs. Cleanup"
-  - Added cleanup option explanation
-  - Added System Automation section with same timings
-
-  3. container-stop --guided
-  - Added "GPU allocation after stop" section:
-    - GPU held for 1h after stopping
-    - Restart within 1h → GPU still yours (no re-competing)
-    - After 1h → GPU auto-released
-    - Need immediate release? Use container-cleanup
-  - Added System automation timing details
-
-  4. container-cleanup --guided
-  - Added "Cleanup vs. Stop - When to use each" comparison
-  - Clarified cleanup releases GPU immediately (good citizenship)
-  - Added System automation section
-  - Explained when to use stop (taking break) vs cleanup (completely done)
-
-
 
 
   
@@ -485,8 +451,9 @@ Creating container via mlc-create-wrapper...
 # Container starts
 - [ ] a new command from AIME v2 -> test + add to documentation around CLI ecosystem (esp to alias-listcont)
 
-### GPU allocation logs 
-- [ ] Check this all works
+### GPU allocation  
+- [x] Check logging all works
+
 
 ### for all dockerfile > image > container workflow
 - [ ] make more modular at same-tier level:
@@ -510,8 +477,143 @@ Creating container via mlc-create-wrapper...
     - admin is too broad -> it should be dissagregated by functionality
 
 
-# Resource Allocation
+# Container Resource Allocation Design Change: from Create-time → to Runtime
+
+  ARCHITECTURE CHANGES
+
+  Core Allocation Flow:
+  1. ✅ Remove GPU allocation from container-create
+  2. ✅ Add GPU allocation to container-run and container-start
+  3. ✅ Release GPU immediately on container-stop (no hold timer)
+  4. ✅ Remove GPU release from container-cleanup (already released)
+  5. ✅ Implement CUDA_VISIBLE_DEVICES injection into container
+
+  Technical Implementation:
+  - Create containers with --gpus all (or --gpus count=MAX_GPUS)
+  - Allocate GPU when user runs container-run/container-start
+  - Set CUDA_VISIBLE_DEVICES via docker exec -e when entering
+  - Release GPU when container-stop (no hold period)
+
+  ---
+  DETAILED CHECKLIST
+
+  1. Core Scripts - Allocation Logic
+
+  - /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh
+    - Remove gpu_allocator.py allocate call
+    - Change from --gpus device=$GPU_ID to --gpus count=$MAX_GPUS or --gpus all
+    - Keep resource limits enforcement (CPU, memory, etc.)
+  - /opt/ds01-infra/scripts/user/container-run
+    - Add gpu_allocator.py allocate call before entering container
+    - Replace mlc-open with custom docker exec -e CUDA_VISIBLE_DEVICES=$GPU_ID
+    - Handle auto-start if container stopped
+    - Update guided mode explanations (GPU allocated now, not at create)
+  - /opt/ds01-infra/scripts/user/container-start
+    - Add gpu_allocator.py allocate call
+    - Store GPU allocation in metadata
+    - Update guided explanations
+  - /opt/ds01-infra/scripts/user/container-stop
+    - Add gpu_allocator.py release call (immediate release)
+    - Remove all "GPU hold" messaging
+    - Update guided explanations (GPU freed immediately on stop)
+  - /opt/ds01-infra/scripts/user/container-cleanup
+    - Remove gpu_allocator.py release call (already released on stop)
+    - Update "Cleanup vs Stop" explanations
+    - Remove gpu_hold from comparison messaging
+
+  2. GPU Allocator State Management
+
+  - /opt/ds01-infra/scripts/docker/gpu_allocator.py
+    - Remove mark_stopped() function (no longer needed)
+    - Remove release_stale() function (GPUs released on stop)
+    - Remove stopped_at timestamp logic
+    - Simplify to: allocate (on run), release (on stop)
+    - Keep orphan cleanup (for crashed/deleted containers)
+  - /opt/ds01-infra/scripts/maintenance/cleanup-stale-gpu-allocations.sh
+    - Simplify to only clean orphaned allocations (container deleted but allocation remains)
+    - Remove hold timeout logic
+    - Or delete entirely if not needed
+  - /etc/cron.d/ds01-gpu-cleanup (if exists)
+    - Update or remove depending on cleanup script changes
+
+  3. Configuration
+
+  - /opt/ds01-infra/config/resource-limits.yaml
+    - Remove gpu_hold_after_stop parameter from all groups
+    - Keep idle_timeout (still auto-stops idle running containers)
+    - Keep max_runtime (absolute max running time)
+  - /opt/ds01-infra/scripts/docker/get_resource_limits.py
+    - Remove --gpu-hold-time flag
+    - Update get_user_lifecycle_limits() to only return 2 values (idle_timeout, max_runtime)
+
+  4. User-Facing Scripts - Update Messaging
+
+  - /opt/ds01-infra/scripts/user/container-exit
+    - Remove gpu_hold from get_user_lifecycle_limits() call
+    - Remove GPU hold messaging from output
+    - Update resource limits display (only show idle_timeout, max_runtime)
+    - Update "Exit vs Stop vs Cleanup" section
+  - /opt/ds01-infra/scripts/user/get-limits
+    - Remove gpu_hold_after_stop from display
+    - Update resource limits section
+  - /opt/ds01-infra/scripts/user/container-list
+    - Update GPU status display (only show "Allocated" for running containers)
+    - Stopped containers show "None" for GPU
+
+  5. Monitoring & Dashboard
+
+  - /opt/ds01-infra/scripts/monitoring/gpu-status-dashboard.py
+    - Update to show allocations only for running containers
+    - Remove stopped container GPU tracking
+  - /opt/ds01-infra/scripts/monitoring/mlc-stats-wrapper.sh
+    - Should work as-is (shows actual GPU usage)
+  - /opt/ds01-infra/scripts/monitoring/container-dashboard.sh
+    - Update GPU allocation display if needed
+
+  6. Documentation
+
+  - /opt/ds01-infra/CLAUDE.md
+    - Rewrite "GPU Allocation Flow" section (allocate at run, not create)
+    - Update "On Container Stop" (immediate release, no hold)
+    - Update "Automatic GPU Release" (orphan cleanup only)
+    - Remove "GPU Hold After Stop" from recent changes
+    - Update all lifecycle documentation
+  - /opt/ds01-infra/docs/gpu-allocation-implementation.md (if exists)
+    - Update allocation strategy documentation
+  - /opt/ds01-infra/README.md
+    - Update GPU allocation description if mentioned
+
+  7. Testing & Validation
+
+  - Test container-create (should work without GPU allocation)
+  - Test container-run (should allocate GPU dynamically)
+  - Test container-stop (should release GPU immediately)
+  - Test container-start (should allocate GPU)
+  - Test container-cleanup (should work without GPU release)
+  - Test competing for scarce GPUs (multiple users)
+  - Test CUDA_VISIBLE_DEVICES inside containers (nvidia-smi, pytorch)
+  - Verify no orphaned allocations in /var/lib/ds01/gpu-state.json
+
+  ---
+  CRITICAL TECHNICAL DECISION
+
+  How to inject CUDA_VISIBLE_DEVICES?
+
+  Option 1: Replace mlc-open with custom docker exec
+  docker exec -it -e CUDA_VISIBLE_DEVICES=$GPU_ID $CONTAINER_TAG bash
+
+  Option 2: Modify container env via docker update before entering
+  docker update --env CUDA_VISIBLE_DEVICES=$GPU_ID $CONTAINER_TAG
+  docker exec -it $CONTAINER_TAG bash  # env persists
+
+  Recommendation: Option 1 (per-session env var, cleaner, more flexible)
+
+
+# Resource Allocation (priority)!!!
+- [ ] work on MIG instance partitioning script 
 - [ ] update container allocation based on UUID system (see `/docs-admin/gpu-allocation-implementation.md`)
+- [ ] eventually update design so that resource allocation happens at `container start / run` not `container create`
+    - this will require quite a lot of refactoring + moving away from `mlc-open` -> `mlc-open-patched` OR direct docker command that also replicates as much of `mlc-open` as possible.
 
 # Robustness Checks
 - [ ] test for local / admin / student / researcher users
