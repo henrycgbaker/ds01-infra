@@ -23,7 +23,9 @@ echo ""
 
 echo -e "${BOLD}Setup & Configuration:${NC}"
 echo -e "  ${GREEN}user setup${NC}             Educational first-time user onboarding wizard"
-echo -e "       ${GREEN}also: user new${NC} "          
+echo -e "       ${GREEN}also: user new${NC}"
+echo -e "  ${GREEN}user get-limits${NC}        Show your resource limits and usage dashboard"
+echo -e "       ${GREEN}also: user limits, get-limits${NC}"
 echo -e "  ${GREEN}project init${NC}           Create new project"
 echo ""
 
