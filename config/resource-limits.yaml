@@ -10,7 +10,7 @@ defaults:
   gpu_memory: null                  # GPU memory limit in GB (null = no limit, already enforced by MIG)
   
   # Compute limits (per container)
-  max_cpus: 16                          # CPU cores per container
+  max_cpus: 16                      # CPU cores per container
   memory: 32g                       # RAM limit per container
   memory_swap: 32g                  # Swap limit (should match memory to prevent swap)
   shm_size: 16g                     # Shared memory (important for PyTorch DataLoader)
@@ -23,8 +23,9 @@ defaults:
   
   # Container lifecycle
   max_containers_per_user: 3        # Max simultaneous containers
-  idle_timeout: 48h                 # Auto-stop after X hours of GPU inactivity
+  idle_timeout: 24h                 # Auto-stop after X hours of GPU inactivity
   max_runtime: null                 # Max walltime (null = no limit)
+  gpu_hold_after_stop: 1h          # How long to hold GPU after container stopped (null = indefinite)
   
   max_tasks: 512                    # Max tasks for systemd slice
   
@@ -36,18 +37,11 @@ default_group: student
 # User group definitions
 groups:
   student:
-    members: []  # TO DO: autopopulate from LDAP group 'ds01-students'
-    max_mig_instances: 2            # Can use max 2 MIG instances simultaneously
-    max_cpus: 16
-    memory: 32g
-    storage_workspace: 100G
-    storage_data: 200G
-    idle_timeout: 48h
-    max_runtime: 168h               # 1 week max
+    members: []  # TO DO: autopopulate from LDAP group 'ds01-students'          
     priority: 10                    # Low priority
     
   researcher:
-    members: []  
+    members: []
     max_mig_instances: 8            # Can use up to 4 MIG instances or 1 full GPU
     max_cpus: 32
     memory: 64g
@@ -55,14 +49,14 @@ groups:
     shm_size: 32g
     storage_workspace: 500G
     storage_data: 1T
-    idle_timeout: 48h              # 1 week
+    idle_timeout: 48h               # 2 days
     max_runtime: null               # No limit
     max_tasks: 2048
     max_containers_per_user: 5
     priority: 50                    # Medium priority
     
   admin:
-    members: [datasciencelab]  
+    members: [datasciencelab]
     max_mig_instances: null         # Unlimited (can use all GPUs)
     max_cpus: 64
     memory: 128g
