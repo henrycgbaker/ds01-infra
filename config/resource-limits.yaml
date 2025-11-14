@@ -23,9 +23,9 @@ defaults:
   
   # Container lifecycle
   max_containers_per_user: 3        # Max simultaneous containers
-  idle_timeout: 1h                 # Auto-stop after X hours of GPU inactivity
-  max_runtime: null                 # Max walltime (null = no limit)
-  gpu_hold_after_stop: 1h          # How long to hold GPU after container stopped (null = indefinite)
+  idle_timeout: 1.5h                 # Auto-stop after X hours of GPU inactivity
+  max_runtime: 12h                 # Max walltime (null = no limit)
+  gpu_hold_after_stop: 0.5h          # How long to hold GPU after container stopped (null = indefinite)
   
   max_tasks: 512                    # Max tasks for systemd slice
   
@@ -51,6 +51,7 @@ groups:
     storage_data: 1T
     idle_timeout: 48h               # 2 days
     max_runtime: null               # No limit
+    gpu_hold_after_stop: 2h         # Hold GPU for 2h after stop
     max_tasks: 2048
     max_containers_per_user: 5
     priority: 50                    # Medium priority
@@ -64,8 +65,9 @@ groups:
     shm_size: 64g
     storage_workspace: 2T
     storage_data: 5T
-    idle_timeout: null              # No timeout
-    max_runtime: null               # No limit
+    #idle_timeout: null              # No timeout
+    #max_runtime: null               # No limit
+    #gpu_hold_after_stop: 1h         # Hold GPU for 1h after stop (or set to null for indefinite)
     max_containers_per_user: 10
     max_tasks: null
     priority: 90                    # High priority
