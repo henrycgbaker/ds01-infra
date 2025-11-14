@@ -13,7 +13,7 @@ NC='\033[0m'
 echo -e "${GREEN}${BOLD}━━━ Container Statistics for $USERNAME ━━━${NC}\n"
 
 # Get containers
-containers=$(docker ps -a --filter "label=ds01.user=$USERNAME" --format "{{.Names}}")
+containers=$(docker ps -a --filter "label=aime.mlc.DS01_USER=$USERNAME" --format "{{.Names}}")
 
 if [ -z "$containers" ]; then
     echo "No containers found for user: $USERNAME"
@@ -23,7 +23,7 @@ fi
 for container in $containers; do
     short_name=$(echo "$container" | cut -d'.' -f1)
     status=$(docker inspect "$container" --format='{{.State.Status}}' 2>/dev/null)
-    image=$(docker inspect "$container" --format='{{index .Config.Labels "ds01.image"}}' 2>/dev/null)
+    image=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_IMAGE"}}' 2>/dev/null)
     created=$(docker inspect "$container" --format='{{.Created}}' 2>/dev/null | cut -d'T' -f1)
     
     echo -e "${BOLD}Container: ${CYAN}$short_name${NC}"
