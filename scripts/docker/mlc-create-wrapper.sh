@@ -338,6 +338,11 @@ else
             MAX_GPUS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --max-gpus 2>/dev/null || echo "1")
             PRIORITY=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --priority 2>/dev/null || echo "10")
 
+            # Convert "unlimited" to a large number for allocator
+            if [ "$MAX_GPUS" = "unlimited" ] || [ "$MAX_GPUS" = "null" ]; then
+                MAX_GPUS=999
+            fi
+
             log_info "Allocating GPU via gpu_allocator.py (priority: $PRIORITY, max: $MAX_GPUS)..."
 
             # Allocate GPU
