@@ -268,7 +268,7 @@ monitor_containers() {
     log_color "Starting idle container monitoring" "$BLUE"
     
     # Get all running DS01 containers
-    local containers=$(docker ps --filter "label=ds01.user" --format "{{.Names}}")
+    local containers=$(docker ps --filter "label=aime.mlc.DS01_USER" --format "{{.Names}}")
     
     if [ -z "$containers" ]; then
         log "No DS01 containers running"
@@ -277,8 +277,8 @@ monitor_containers() {
     
     for container in $containers; do
         # Extract username and user ID
-        local username=$(docker inspect "$container" --format='{{index .Config.Labels "ds01.user"}}' 2>/dev/null)
-        local user_id=$(docker inspect "$container" --format='{{index .Config.Labels "ds01.user_id"}}' 2>/dev/null)
+        local username=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER"}}' 2>/dev/null)
+        local user_id=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER_ID"}}' 2>/dev/null)
         
         if [ -z "$username" ]; then
             continue

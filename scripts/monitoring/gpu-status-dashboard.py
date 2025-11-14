@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, List
 
 class GPUStatusDashboard:
-    def __init__(self, state_dir="/var/lib/ds01", log_dir="/var/logs/ds01", output_dir="/tmp"):
+    def __init__(self, state_dir="/var/lib/ds01", log_dir="/var/log/ds01", output_dir="/tmp"):
         self.state_dir = Path(state_dir)
         self.log_dir = Path(log_dir)
         self.state_file = self.state_dir / "gpu-state.json"

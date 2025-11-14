@@ -93,7 +93,7 @@ draw_containers() {
     
     # Get current user's containers
     local current_user=$(whoami)
-    local containers=$(docker ps -a --filter "label=ds01.user=$current_user" --format "{{.Names}}")
+    local containers=$(docker ps -a --filter "label=aime.mlc.DS01_USER=$current_user" --format "{{.Names}}")
     
     if [ -z "$containers" ]; then
         echo "No containers found"
@@ -103,7 +103,7 @@ draw_containers() {
     for container in $containers; do
         # Get container info
         local short_name=$(echo "$container" | cut -d'.' -f1)
-        local username=$(docker inspect "$container" --format='{{index .Config.Labels "ds01.user"}}' 2>/dev/null)
+        local username=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER"}}' 2>/dev/null)
         local status=$(docker inspect "$container" --format='{{.State.Status}}' 2>/dev/null)
         
         if [ "$status" = "running" ]; then
@@ -177,8 +177,8 @@ draw_summary() {
     
     # Count containers by status
     local current_user=$(whoami)
-    local total=$(docker ps -a --filter "label=ds01.user=$current_user" --format "{{.Names}}" | wc -l)
-    local running=$(docker ps --filter "label=ds01.user=$current_user" --format "{{.Names}}" | wc -l)
+    local total=$(docker ps -a --filter "label=aime.mlc.DS01_USER=$current_user" --format "{{.Names}}" | wc -l)
+    local running=$(docker ps --filter "label=aime.mlc.DS01_USER=$current_user" --format "{{.Names}}" | wc -l)
     local stopped=$((total - running))
     
     echo "  Containers: $total total  |  ${GREEN}$running running${NC}  |  ${YELLOW}$stopped stopped${NC}"
