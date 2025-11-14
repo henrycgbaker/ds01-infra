@@ -8,6 +8,7 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 USERNAME=$(whoami)
@@ -90,10 +91,10 @@ show_base_image_packages() {
     echo -e "${YELLOW}💡 Note:${NC} AIME base images are framework-focused (133 packages total)."
     echo "    They include the ML framework + CUDA, but NOT data science packages."
     echo ""
-    echo -e "${BOLD}Still MISSING (we can add these next):${NC}"
+    echo -e "${CYAN}Currently missing (we can add next):${NC}"
     echo "    • Jupyter Lab (for notebooks)"
     echo "    • pandas, scipy, scikit-learn (data science)"
-    echo "    • matplotlib, seaborn (visualization)"
+    echo "    • matplotlib, seaborn (visualisation)"
     echo "    • Domain-specific: opencv, transformers, etc."
     echo ""
 
@@ -312,19 +313,26 @@ get_usecase_packages() {
 }
 
 interactive_mode() {
-    echo -e "${CYAN}━━━ Image Creation Wizard ━━━${NC}\n"
+    if [ "$GUIDED" = false ]; then
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Create a Custom Docker Image${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
 
     # Image name
     if [ -z "$IMAGE_NAME" ]; then
         read -p "Image name (e.g., my-project, thesis-cv): " IMAGE_NAME
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     fi
+    echo ""
     FULL_IMAGE_NAME="${IMAGE_NAME}-${USERNAME}"
 
     # Check if exists
     if docker images --format "{{.Repository}}" | grep -q "^${FULL_IMAGE_NAME}$"; then
         echo -e "${YELLOW}⚠ Image '$FULL_IMAGE_NAME' already exists${NC}"
+        echo ""
         read -p "Overwrite? [y/N]: " OVERWRITE
+        echo ""
         if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
             echo "Cancelled."
             exit 0
@@ -340,18 +348,18 @@ interactive_mode() {
             echo ""
             echo "A framework is the foundation for your ML/DL work:"
             echo ""
-            echo "• ${CYAN}PyTorch${NC} - Most popular, great community, PyTorch + torchvision"
+            echo -e "• ${CYAN}PyTorch${NC} - Most popular, great community, PyTorch + torchvision"
             echo "  Used by: Most research, computer vision, NLP"
             echo ""
-            echo "• ${CYAN}TensorFlow${NC} - Google's framework, production-ready"
+            echo -e "• ${CYAN}TensorFlow${NC} - Google's framework, production-ready"
             echo "  Used by: Industry applications, deployment"
             echo ""
-            echo "• ${CYAN}JAX${NC} - High-performance, functional approach"
+            echo -e "• ${CYAN}JAX${NC} - High-performance, functional approach"
             echo "  Used by: Research, custom algorithms"
             echo ""
-            echo "• ${CYAN}PyTorch CPU${NC} - No GPU, for testing or CPU-only work"
+            echo -e "• ${CYAN}PyTorch CPU${NC} - No GPU, for testing or CPU-only work"
             echo ""
-            echo "• ${CYAN}Custom${NC} - Specify your own base image (advanced)"
+            echo -e "• ${CYAN}Custom${NC} - Specify your own base image (advanced)"
             echo "  Use any Docker image as base (e.g., ubuntu:22.04, python:3.11)"
             echo ""
             echo -e "${YELLOW}💡 Recommendation:${NC} Choose PyTorch unless you have specific needs"
@@ -364,6 +372,7 @@ interactive_mode() {
         echo -e "  ${BOLD}3)${NC} JAX + CUDA (if available)"
         echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
         echo -e "  ${BOLD}5)${NC} Custom (specify base image)"
+        echo -e ""
         read -p "Choice [1-5, default: 1]: " FW_CHOICE
 
         case $FW_CHOICE in
@@ -408,9 +417,9 @@ interactive_mode() {
             echo ""
             echo "These enable notebook-based development:"
             echo ""
-            echo "  ${CYAN}Default packages:${NC}"
+            echo -e "  ${CYAN}Default packages:${NC}"
             echo "  • jupyter - Jupyter ecosystem"
-            echo "  • jupyterlab - Web-based IDE (recommended interface)"
+            echo "  • jupyterlab - Web-based IDE"
             echo "  • ipykernel - Python kernel for notebooks"
             echo "  • ipywidgets - Interactive widgets"
             echo ""
@@ -418,7 +427,12 @@ interactive_mode() {
             echo "  • Without version: installs latest (e.g., 'pandas')"
             echo "  • With version: installs specific (e.g., 'pandas==1.5.3', 'transformers>=4.30.0')"
             echo ""
-            echo -e "${YELLOW}💡 Recommendation:${NC} Install if you use notebooks (most data scientists do)"
+            echo -e "${YELLOW}💡 Recommendation:${NC} Install if you use notebooks"
+            echo ""
+        fi
+
+        if [ "$GUIDED" = false ]; then
+            echo -e "${CYAN}━━━━ Choose Defaults ━━━━${NC}"
             echo ""
         fi
 
@@ -426,6 +440,7 @@ interactive_mode() {
         echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended for data science${NC})"
         echo -e "  ${BOLD}2)${NC} No - Skip (use terminal/IDE only)"
         echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
+        echo ""
         read -p "Choice [1-3, default: 1]: " JUPYTER_PKG_CHOICE
 
         case $JUPYTER_PKG_CHOICE in
@@ -477,21 +492,21 @@ interactive_mode() {
             echo ""
             echo "Essential libraries for data analysis:"
             echo ""
-            echo "  ${CYAN}Default packages:${NC}"
+            echo -e "  ${CYAN}Default packages:${NC}"
             echo "  • pandas - DataFrames & data manipulation"
             echo "  • scipy - Scientific computing"
             echo "  • scikit-learn - Traditional ML algorithms"
-            echo "  • matplotlib, seaborn - Visualization"
+            echo "  • matplotlib, seaborn - Visualisation"
             echo ""
             echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)"
             echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults (needed for most DS work)"
             echo ""
         fi
-
         echo -e "${BOLD}Install core data science packages?${NC}"
         echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended${NC})"
         echo -e "  ${BOLD}2)${NC} No - Skip (framework-only setup)"
         echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
+        echo ""
         read -p "Choice [1-3, default: 1]: " DS_PKG_CHOICE
 
         case $DS_PKG_CHOICE in
@@ -547,49 +562,49 @@ interactive_mode() {
             echo ""
             echo -e "${BOLD}Phase 4: Use-Case Specific Packages${NC}"
             echo ""
-            echo "This determines which specialized packages get installed:"
+            echo "This determines which specialised packages get installed:"
             echo ""
-            echo "• ${CYAN}Computer Vision (CV)${NC} - Images, videos, object detection"
-            echo "  Packages: timm, albumentations, opencv, torchvision"
-            echo "  Example: Image classification, object detection, segmentation"
-            echo ""
-            echo "• ${CYAN}NLP${NC} - Text, language models, transformers"
-            echo "  Packages: transformers, datasets, tokenizers, accelerate"
-            echo "  Example: Text classification, translation, chatbots"
-            echo ""
-            echo "• ${CYAN}Reinforcement Learning${NC} - Agents, environments, decision making"
-            echo "  Packages: gymnasium, stable-baselines3"
-            echo "  Example: Game AI, robotics, optimization"
-            echo ""
-            echo "• ${CYAN}General ML${NC} - Advanced ML with boosting algorithms"
+            echo -e "• ${CYAN}General ML${NC} - Advanced ML with boosting algorithms"
             echo "  Packages: xgboost, lightgbm, catboost, optuna"
             echo "  Example: Classification, regression, hyperparameter tuning"
             echo ""
-            echo "• ${CYAN}Custom${NC} - Skip use case packages or specify manually"
+            echo -e "• ${CYAN}Computer Vision (CV)${NC} - Images, videos, object detection"
+            echo "  Packages: timm, albumentations, opencv, torchvision"
+            echo "  Example: Image classification, object detection, segmentation"
+            echo ""
+            echo -e "• ${CYAN}NLP${NC} - Text, language models, transformers"
+            echo "  Packages: transformers, datasets, tokenizers, accelerate"
+            echo "  Example: Text classification, translation, chatbots"
+            echo ""
+            echo -e "• ${CYAN}Reinforcement Learning${NC} - Agents, environments, decision making"
+            echo "  Packages: gymnasium, stable-baselines3"
+            echo "  Example: Game AI, robotics, optimization"
+            echo ""
+            echo -e "• ${CYAN}Custom${NC} - Skip use case packages or specify manually"
             echo ""
         fi
 
-        echo -e "\n${BOLD}Select use case (additional domain-specific packages):${NC}"
-        echo -e "  ${BOLD}1)${NC} None/Custom (skip or specify manually)"
-        echo -e "  ${BOLD}2)${NC} General ML (xgboost, lightgbm, catboost) (${GREEN}default${NC})"
-        echo -e "  ${BOLD}3)${NC} Computer Vision (timm, albumentations, opencv)"
-        echo -e "  ${BOLD}4)${NC} NLP (transformers, datasets, tokenizers)"
-        echo -e "  ${BOLD}5)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
-
-        read -p "Choice [1-5, default: 2]: " UC_CHOICE
+        echo -e "${BOLD}Select use case (additional domain-specific packages):${NC}"
+        echo -e "  ${BOLD}1)${NC} General ML (xgboost, lightgbm, catboost, optuna) (${GREEN}default${NC})"
+        echo -e "  ${BOLD}2)${NC} Computer Vision (timm, albumentations, opencv)"
+        echo -e "  ${BOLD}3)${NC} NLP (transformers, datasets, tokenizers)"
+        echo -e "  ${BOLD}4)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
+        echo -e "  ${BOLD}5)${NC} Custom - specify packages manually"
+        echo ""
+        read -p "Choice [1-5, default: 1]: " UC_CHOICE
 
         case $UC_CHOICE in
-            1)
+            2) USECASE="cv" ;;
+            3) USECASE="nlp" ;;
+            4) USECASE="rl" ;;
+            5)
                 USECASE="custom"
                 echo ""
                 echo -e "${BOLD}Custom Use Case Packages${NC}"
                 echo "Specify packages (space-separated), or press Enter to skip:"
                 read -p "> " CUSTOM_USECASE_PACKAGES
                 ;;
-            3) USECASE="cv" ;;
-            4) USECASE="nlp" ;;
-            5) USECASE="rl" ;;
-            2|"") USECASE="ml" ;;
+            1|"") USECASE="ml" ;;
             *)
                 echo "Invalid choice. Setting to default: General ML."
                 USECASE="ml"
@@ -598,7 +613,7 @@ interactive_mode() {
     fi
 
     # Display included packages before asking for additional
-    if [ "$SKIP_BASE_PACKAGES" != true ]; then
+    if [ -z "$USECASE" ] && [ "$SKIP_BASE_PACKAGES" != "true" ]; then
         echo ""
         echo -e "${CYAN}━━━ Packages To Be Installed ━━━${NC}"
         echo ""
@@ -649,8 +664,11 @@ interactive_mode() {
     # Additional packages
     if [ -z "$ADDITIONAL_PACKAGES" ]; then
         while true; do
-            echo -e "${BOLD}Additional Python packages?${NC} (space-separated, or press Enter to skip)"
-            echo "Examples: wandb optuna pytorch-lightning pandas==1.5.3 transformers>=4.30.0"
+            echo ""
+            echo -e "${CYAN}━━━ Add Custom-specified packages? ━━━${NC}"
+            echo ""
+            echo -e "${BOLD}Space-separated${NC} (or press Enter to skip)"
+            echo -e "${DIM}Examples: wandb pytorch-lightning==1.5.3${NC}"
             read -p "> " ADDITIONAL_PACKAGES
 
             if [ -z "$ADDITIONAL_PACKAGES" ]; then
@@ -698,8 +716,9 @@ interactive_mode() {
     # System packages
     if [ -z "$SYSTEM_PACKAGES" ]; then
         echo -e "\n${BOLD}System packages (apt)?${NC} (or press Enter to skip)"
-        echo "Examples: htop tmux vim git-lfs"
+        echo -e "${DIM}Examples: htop tmux vim git-lfs${NC}"
         read -p "> " SYSTEM_PACKAGES
+        echo ""
     fi
 }
 
@@ -1065,7 +1084,7 @@ if [ "$GUIDED" = true ]; then
     echo "  5. Create containers from this image"
     echo ""
     echo -e "${YELLOW}💡 Pro Tip:${NC} Start with a simple setup first."
-    echo "   You can always create more specialized images later!"
+    echo "   You can always create more specialised images later!"
     echo ""
     read -p "Press Enter to start creating your image..." </dev/tty
     echo ""
@@ -1128,7 +1147,7 @@ if [ "$NO_BUILD" = true ]; then
     BUILD_IMAGE=false
     echo -e "${YELLOW}Build skipped (--no-build flag)${NC}"
     echo ""
-    local build_context=$(dirname "$DOCKERFILE")
+    build_context=$(dirname "$DOCKERFILE")
     echo "Build later with:"
     echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $build_context/${NC}"
     echo ""
@@ -1153,7 +1172,7 @@ else
         BUILD_IMAGE=false
         echo "Build skipped."
         echo ""
-        local build_context=$(dirname "$DOCKERFILE")
+        build_context=$(dirname "$DOCKERFILE")
         echo "Build later with:"
         echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $build_context/${NC}"
         echo ""
@@ -1166,7 +1185,7 @@ if [ "$BUILD_IMAGE" = true ]; then
     echo -e "${CYAN}Building image... (this takes 3-5 minutes)${NC}\n"
 
     # Use the directory containing the Dockerfile as build context
-    local build_context=$(dirname "$DOCKERFILE")
+    build_context=$(dirname "$DOCKERFILE")
     if docker build -t "$FULL_IMAGE_NAME" -f "$DOCKERFILE" "$build_context/"; then
         IMAGE_BUILT=true
 
@@ -1231,9 +1250,9 @@ if [ "$IMAGE_BUILT" = true ]; then
         echo ""
         echo "You've created a Docker image - a blueprint for containers."
         echo ""
-        echo "  • ${CYAN}Dockerfile${NC} = Recipe (text file with build instructions)"
-        echo "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)"
-        echo "  • ${CYAN}Container${NC} = Running instance (where you actually work)"
+        echo -e "  • ${CYAN}Dockerfile${NC} = Recipe (text file with build instructions)"
+        echo -e "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)"
+        echo -e "  • ${CYAN}Container${NC} = Running instance (where you actually work)"
         echo ""
         echo "Think of it like: Recipe → Executable Program → Running Process"
         echo ""
