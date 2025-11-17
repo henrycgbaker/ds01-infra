@@ -189,7 +189,7 @@ usage() {
     echo -e "${YELLOW}💡 After updating:${NC}"
     echo "   Recreate containers to use the new image:"
     echo -e "   ${GREEN}container-stop my-project${NC}"
-    echo -e "   ${GREEN}container-cleanup${NC}"
+    echo -e "   ${GREEN}container-remove${NC}"
     echo -e "   ${GREEN}container-create my-project${NC}"
     echo ""
 }

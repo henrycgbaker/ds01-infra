@@ -237,7 +237,7 @@ show_simple() {
         echo -e "   Start:    ${GREEN}container-run <name>${NC}"
         echo -e "   Stop:     ${GREEN}container-stop <name>${NC}"
         echo -e "   Stats:    ${GREEN}container-stats${NC}"
-        echo -e "   Cleanup:  ${GREEN}container-cleanup${NC}"
+        echo -e "   Cleanup:  ${GREEN}container-remove${NC}"
         echo ""
     fi
 }

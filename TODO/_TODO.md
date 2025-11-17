@@ -380,17 +380,18 @@ Creating container via mlc-create-wrapper...
 
 
 ### Container-stop
-- [ ] the current design problem: resource allocation happens at container create (assigned GPU/MIG) ==> if after a task/work done, user keeps same container (but not running, just stopped), then it still has the same GPU/MIG ID allocated. The problem is that that GPU/MIG may no longer be available (if keeping container around just to reload it another day). I.e. the resource availability landscape may have changed. This might lead to failure to re-start/re-run the container? 
-    - Refactor: What is best prctice here in industry?
-    - one option: move resource allocation to the container start /sop stage?
-        - plus, force / automate / encourage removal of containers after a work task complete?
-            - e.g. at the end of the `container stop` GUI (give y/n option to remove container with default=y)
-            - e.g. as a crontab job (just as GPU is removed after 0.5h (resource yaml: `gpu_hold_after_stop: 0.25h `) -> automate container removal (add in `container_remove_after_stop`)after e.g. 0.5h of being stopped)
+- [ ] the current design problem: resource allocation happens at container create (assigned GPU/MIG) ==> if after a task/work is done, the user (unwisely) decides to keep the same container (but not running, just stopped), then it still has the same GPU/MIG ID allocated. The problem is that that GPU/MIG may no longer be available (if keeping container around just to reload it another day). I.e. the resource availability landscape may have changed. This might lead to failure to re-start/re-run the container? 
+    - strategise the Refactor: What is best practice here in industry?
+    - one option: move resource allocation to the container start /stop stage? - this seems to be standard in SLURM / Kubernetes, but is quite a big refactor?
+        - another (perhaps complimentary option): force / automate / encourage removal of containers after a work task complete?
+            - e.g. at the end of the `container stop` GUI (give y/n option to call `container remove` with default=y)
+            - e.g. as a crontab job (just as GPU is removed after 0.25h (resource yaml: `gpu_hold_after_stop: 0.25h `) -> automate container removal (add in `container_remove_after_stop`)after e.g. 0.5h of being stopped)
             - e.g. as a warning message when a user ties to restart an old container and (if resource no longer available) they get a resource allocation problem notification -> instructs them to remove container and recreate it.
             - or add in a --rm flag into the docker call? or does this stop it being interactive?
         - SLURM / K8s?
-    - [ ] "Stopping gracefully (timeout: 10s)..." -> is it actually stoppin gthem properly? or is it timeout-ing. 
+    - [ ] [once have resolved whether to allocate resources at start / stop] resolve this: it `container stop currently prints: "Stopping gracefully (timeout: 10s)..." -> is it actually stopping them properly? or is it timeout-ing. 
         - add GPU release info messages (if that's what's happening?) because i thought it wasn't initially releaseing the gpu at stop, but then you look at ds01 dashboard and it seems ther are 
+        - similarly, for container start add gpu allocation message
 
 ### Container-cleanup
 - [x] container-cleanup → calls mlc-remove + GPU cleanup ==> need to check this GPU cleanup logic is safe!
@@ -398,16 +399,13 @@ Creating container via mlc-create-wrapper...
     - container cleanup --volumes => goes to GUI to select stopped containers, instead get it to open up all volumes to select (gracefully loop back after each deletion, to be able to reselect more)
     - container cleanup --volumes --all => first deletes containers, THEN deletes volumes (change it to only delete volumes)
     - also when deleting all (container cleanup --volumes --all), list the found volumes (and their number) first, so user can confirm to continue or not
-- [ ] REFACTOR BUT FIRST CHECK WHAT'S THERE & HOW IT BEHAVES
-    - keep `container stop` as is 
-    - then `container cleanup` -> `container remove` (rename all scripts cmd aliases, dependencies etc),
+- [x] REFACTOR
+    - rename `container cleanup` -> `container remove` (rename all scripts, cmd aliases, and dependencies / references in other scripts etc),
     - `container remove` with arguments -> acts directly as a script (e.g. <container-name> --images --volumes)
-    - `container remove` currently also removes images (and maybe also volumes??). 
-        - Default GUI behaviour should remove JUST container by default -> but presents user with a choice (with yellow warning) -> y/n also remove 1) image, 2) volumes ('no' by default). 
+    - `container remove` currently by default this also removes images (and maybe also volumes??). 
+        - Default GUI behaviour should remove JUST container by default -> but presents user with a choice (with yellow warning motice) -> y/n also remove 1) image, 2) volumes ('no' by default). 
         - in the --guided mode, include explanation (.e.g if remove images then still have dockerfille + explain what happens if remove volumes, etc)
         - if comes with arguments --images and --volumes, unless the -f / --force flag there, then flash warnings -> require: y/n confirmation
-    - 
-    - for both GUI / as script: include prompt to 
 
 
 # Container starts

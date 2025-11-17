@@ -75,7 +75,7 @@ create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && (
 create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-list" "container-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stats" "container-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-cleanup" "container-cleanup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-remove" "container-remove" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-exit" "container-exit" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 

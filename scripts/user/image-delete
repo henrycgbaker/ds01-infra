@@ -196,7 +196,7 @@ if [ "$CONTAINER_COUNT" -gt 0 ]; then
         echo ""
         echo "Options:"
         echo "  1. Stop and remove containers first:"
-        echo "     ${GREEN}container-stop <name> && container-cleanup${NC}"
+        echo "     ${GREEN}container-stop <name> && container-remove${NC}"
         echo ""
         echo "  2. Force delete (stops/removes containers):"
         echo "     ${YELLOW}image-delete $IMAGE_NAME --force${NC}"

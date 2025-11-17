@@ -248,7 +248,7 @@ check_user_limits() {
                 echo ""
                 echo -e "View containers: ${GREEN}container-list${NC}"
                 echo -e "Stop container:  ${GREEN}container-stop <name>${NC}"
-                echo -e "Remove container: ${GREEN}container-cleanup <name>${NC}"
+                echo -e "Remove container: ${GREEN}container-remove <name>${NC}"
                 echo ""
                 read -p "Continue creating image anyway? [y/N]: " CONTINUE
                 if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then

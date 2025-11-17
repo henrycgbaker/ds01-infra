@@ -53,7 +53,7 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
   - Why: Needs DS01-specific labels (`ds01.*`), custom formatting, project names
 - ❌ **`mlc-stop`** → DS01's `container-stop` uses `docker stop` directly
   - Why: Custom warnings, force/timeout options, process count display
-- ❌ **`mlc-remove`** → DS01's `container-cleanup` uses `docker rm` directly
+- ❌ **`mlc-remove`** → DS01's `container-remove` uses `docker rm` directly
   - Why: Bulk operations, GPU state cleanup, safety checks
 - ❌ **`mlc-start`** → DS01 uses `docker start` directly when needed
   - Why: Rarely used (container-run handles starting via mlc-open)
@@ -65,13 +65,13 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
 - ✅ **Symlinks configured** in `/usr/local/bin/` for 2 wrapped commands
 
 **TIER 2: Modular Unit Commands** (Single-purpose, reusable)
-- **Container Management** (8 commands): `container-create`, `container-run`, `container-start`, `container-stop`, `container-list`, `container-stats`, `container-cleanup`, `container-exit`
+- **Container Management** (8 commands): `container-create`, `container-run`, `container-start`, `container-stop`, `container-list`, `container-stats`, `container-remove`, `container-exit`
   - `container-create` → calls `mlc-create-wrapper.sh` → `mlc-patched.py`
   - `container-run` → calls `mlc-open`
   - `container-start` → calls `mlc-start` (NEW - Nov 2025)
   - `container-stop` → calls `mlc-stop` (refactored Nov 2025)
   - `container-list` → calls `mlc-list` (refactored Nov 2025)
-  - `container-cleanup` → calls `mlc-remove` + GPU cleanup (refactored Nov 2025)
+  - `container-remove` → calls `mlc-remove` + GPU cleanup (refactored Nov 2025)
   - `container-stats` → calls `mlc-stats-wrapper.sh`
   - All wrap AIME Tier 1 commands with DS01 UX (interactive GUI, --guided mode, GPU management)
 - **Image Management** (4 commands): `image-create`, `image-list`, `image-update`, `image-delete`
@@ -460,7 +460,7 @@ scripts/
 4. Logs releases to `/var/log/ds01/gpu-stale-cleanup.log`
 
 **Manual GPU Release:**
-1. User runs `container-cleanup <name>`
+1. User runs `container-remove <name>`
 2. Container removed via `mlc-remove`
 3. `gpu_allocator.py release <container>` called
 4. GPU immediately freed, metadata deleted
@@ -492,7 +492,7 @@ scripts/
 - Stale GPU cleanup runs hourly via `cleanup-stale-gpu-allocations.sh`
 
 **Cleanup:**
-- Manual container removal: `container-cleanup <name>` (releases GPU immediately)
+- Manual container removal: `container-remove <name>` (releases GPU immediately)
 - Automatic idle stop: `cleanup-idle-containers.sh` stops containers exceeding idle_timeout (GPU held per config)
 - Automatic GPU release: `cleanup-stale-gpu-allocations.sh` releases GPUs after hold timeout
 - Manual GPU release: `gpu_allocator.py release <container>` updates state
@@ -685,7 +685,7 @@ When modifying resource allocation logic:
 - **Refactored 3 existing commands** to wrap AIME Tier 1:
   - `container-list` → now calls `mlc-list` for container discovery
   - `container-stop` → now calls `mlc-stop` for stopping containers
-  - `container-cleanup` → now calls `mlc-remove` for removal + GPU state cleanup
+  - `container-remove` → now calls `mlc-remove` for removal + GPU state cleanup
   - All preserve DS01 UX: interactive GUI selection, --guided mode, colors, safety checks
   - Graceful fallback to docker commands if mlc-* unavailable
 - **Created 1 new wrapper command**:
@@ -721,11 +721,33 @@ When modifying resource allocation logic:
 - **Scripts Updated**: `image-create`, `image-update`, `image-delete` use `DOCKERFILES_DIR`
 - **Empty pip install Protection**: `image-update` now detects and removes empty RUN blocks to prevent build errors
 
+**Container Cleanup → Remove Refactor (November 18, 2025):** ✅ **COMPLETE**
+- **Renamed** `container-cleanup` → `container-remove` for clarity and consistency
+- **Enhanced removal workflow** with granular control:
+  - Default: Removes only container (preserves images and volumes)
+  - Optional: `--images` flag to also remove Docker images
+  - Optional: `--volumes` flag to also remove anonymous volumes
+  - Interactive mode: Prompts user with yellow warnings for image/volume removal
+- **Safety features**:
+  - Warnings displayed when using `--images`/`--volumes` without `--force`
+  - Clear explanations that Dockerfiles are always preserved
+  - Confirmation prompts for all destructive operations
+- **Enhanced --guided mode**:
+  - Explains Docker hierarchy: Dockerfile (recipe) → Image (blueprint) → Container (instance)
+  - Clarifies what gets removed vs. what's preserved
+  - Educates users on when to use "remove" vs. "stop"
+- **Updated references**:
+  - All scripts: `container-cleanup` → `container-remove`
+  - Command dispatcher: Updated `container cleanup` → `container remove`
+  - Symlinks: Updated in `update-symlinks.sh`
+  - Documentation: Updated CLAUDE.md, help messages, examples
+- **Backward compatibility**: Command name change only (all functionality preserved)
+
 **CLI Ecosystem Overhaul (November 10, 2025):**
 - Added `--info` flag support: All dispatchers and Tier 2 commands now accept `--info` as alias for `--help`
 - Completed `--guided` flag coverage: All 16 Tier 2 commands now support educational beginner mode
 - New interactive GUI library: Commands prompt user to select containers/images when no argument provided
-- Interactive selection: `image-update`, `image-delete`, `container-run`, `container-stop`, `container-cleanup`
+- Interactive selection: `image-update`, `image-delete`, `container-run`, `container-stop`, `container-remove`
 - Deprecated redundant scripts: Moved `create-custom-image.sh`, `manage-images.sh`, `student-setup.sh` to `_deprecated/`
 - Updated symlinks: Added 14 new commands (container-dashboard, gpu-dashboard, audit-*, etc.)
 - Fixed documentation: Corrected alias-list errors, removed misleading Ctrl+P/Ctrl+Q references

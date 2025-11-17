@@ -878,7 +878,7 @@ if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
         echo ""
         echo -e "  4. ${BOLD}Stop & Remove the container${NC}"
         echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
-        echo -e "     ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
+        echo -e "     ${GREEN}container-remove $CONTAINER_NAME${NC}"
         echo "     Frees up GPU and resources for others"
         echo ""
         echo -e "${YELLOW}💡 Remember:${NC} Treat containers as ephemeral compute environments; your files in /workspace are safe and persist!"
