@@ -115,6 +115,26 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
 - Preserves all AIME v2 container setup (UID/GID matching, labels, volumes)
 - **97.5% of AIME logic unchanged** - easy to update with future AIME releases
 
+**Docker Image Naming Convention:**
+DS01 uses industry-standard Docker naming with namespacing:
+- **Repository:** `ds01-{user-id}/{project-name}`
+- **Tag:** `latest` (plus optional version tags)
+- **Full name:** `ds01-1001/my-project:latest`
+
+**Docker Labels for Metadata:**
+All DS01 images include comprehensive labels for tracking:
+```dockerfile
+LABEL maintainer="username"
+LABEL maintainer.id="1001"
+LABEL aime.mlc.base_image="aimehub/pytorch-2.8.0-aime-cuda12.6.3"
+LABEL aime.mlc.project="my-project"
+LABEL aime.mlc.user_id="1001"
+LABEL aime.mlc.username="username"
+LABEL aime.mlc.DS01_MANAGED="true"
+LABEL aime.mlc.DS01_FRAMEWORK="pytorch"
+LABEL aime.mlc.DS01_CREATED="2025-11-17T10:30:00Z"
+```
+
 **Custom Image Workflow (4-Phase):**
 ```
 1. image-create my-project
@@ -143,26 +163,29 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
      RUN pip install timm opencv-python ...       # Phase 4: Use Case
      # Custom additional packages                 # Phase 5: User additions
    ↓
-   Builds: my-project-{username}
+   Builds: ds01-1001/my-project:latest
    ↓
    Suggests: container-create my-project (doesn't auto-call)
 
 2. container-create my-project
    ↓
-   Selects existing image: my-project-{username}
+   Selects existing image: ds01-1001/my-project:latest
    ↓
    mlc-create-wrapper.sh calls mlc-patched.py:
      python3 mlc-patched.py create my-project pytorch \
-             --image my-project-{username} \         # Custom image
+             --image ds01-1001/my-project:latest \   # Custom image
              -s -w ~/workspace
    ↓
    mlc-patched.py creates container with:
      - AIME setup (user creation, labels, volumes)
      - DS01 labels (DS01_MANAGED, CUSTOM_IMAGE)
+     - Inherits all labels from image (base_image, project, etc.)
    ↓
    wrapper applies resource limits via docker update
    ↓
    Container ready: AIME base + DS01 packages + Resource limits + GPU
+   ↓
+   Container name: my-project._.1001  # AIME convention for multi-user
    ↓
    Suggests: container-run my-project (doesn't auto-call)
 ```
@@ -197,6 +220,12 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
 - GPU state: `/var/lib/ds01/gpu-state.json` (JSON file tracking allocations)
 - Container metadata: `/var/lib/ds01/container-metadata/{container}.json`
 - Allocation logs: `/var/logs/ds01/gpu-allocations.log`
+
+**Naming Conventions:**
+- **Docker Images**: `ds01-{user-id}/{project-name}:latest` (e.g., `ds01-1001/my-thesis:latest`)
+- **Docker Containers**: `{project-name}._.{user-id}` (e.g., `my-thesis._.1001`) - AIME convention
+- **Dockerfiles**: `~/dockerfiles/{project-name}.Dockerfile` (centralized storage)
+- **Metadata**: `~/ds01-config/images/ds01-{user-id}_{project-name}.info` (sanitized filename)
 
 **User Onboarding:**
 - `scripts/user/user-setup` - Educational onboarding wizard (accessible via `new-user`, `user-setup`, `user setup`, `user new`)

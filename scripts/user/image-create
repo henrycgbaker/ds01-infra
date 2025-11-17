@@ -325,11 +325,12 @@ interactive_mode() {
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     fi
     echo ""
-    FULL_IMAGE_NAME="${IMAGE_NAME}-${USERNAME}"
+    # New naming convention: ds01-{user-id}/{project-name}:latest
+    FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
 
     # Check if exists
-    if docker images --format "{{.Repository}}" | grep -q "^${FULL_IMAGE_NAME}$"; then
-        echo -e "${YELLOW}⚠ Image '$FULL_IMAGE_NAME' already exists${NC}"
+    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${FULL_IMAGE_NAME}:latest$"; then
+        echo -e "${YELLOW}⚠ Image '$FULL_IMAGE_NAME:latest' already exists${NC}"
         echo ""
         read -p "Overwrite? [y/N]: " OVERWRITE
         echo ""
@@ -339,7 +340,7 @@ interactive_mode() {
         fi
     fi
 
-    echo -e "\n${BOLD}Image will be named: ${CYAN}${FULL_IMAGE_NAME}${NC}\n"
+    echo -e "\n${BOLD}Image will be named: ${CYAN}${FULL_IMAGE_NAME}:latest${NC}\n"
 
     # Framework
     if [ -z "$FRAMEWORK" ]; then
@@ -753,10 +754,12 @@ create_dockerfile() {
     fi
 
     mkdir -p "$dockerfile_dir"
-    local dockerfile="$dockerfile_dir/${image_name}.Dockerfile"
+    # Extract project name from full image name (ds01-1001/test-project -> test-project)
+    local project_name="${image_name##*/}"  # Remove everything before the last /
+    local dockerfile="$dockerfile_dir/${project_name}.Dockerfile"
 
     cat > "$dockerfile" << DOCKERFILEEOF
-# DS01 Custom Image: $image_name
+# DS01 Custom Image: $project_name
 # Created: $(date)
 # Framework: $framework
 # Use case: $usecase
@@ -766,7 +769,12 @@ FROM $base_image
 
 LABEL maintainer="$USERNAME"
 LABEL maintainer.id="$USER_ID"
-LABEL aime.mlc.DS01_IMAGE="$image_name"
+LABEL aime.mlc.base_image="$base_image"
+LABEL aime.mlc.project="$project_name"
+LABEL aime.mlc.user_id="$USER_ID"
+LABEL aime.mlc.username="$USERNAME"
+LABEL aime.mlc.DS01_MANAGED="true"
+LABEL aime.mlc.DS01_IMAGE="$project_name"
 LABEL aime.mlc.DS01_FRAMEWORK="$framework"
 LABEL aime.mlc.DS01_CREATED="$(date -Iseconds)"
 
@@ -784,8 +792,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     wget \\
     vim \\
     htop \\
-    $([ -n "$system_pkgs" ] && echo "$system_pkgs \\")
     && rm -rf /var/lib/apt/lists/*
+    $([ -n "$system_pkgs" ] && echo "$system_pkgs \\")
 
 DOCKERFILEEOF
 
@@ -922,8 +930,8 @@ RUN jupyter lab --generate-config && \\
 
 # IPython kernel
 RUN python -m ipykernel install --user \\
-    --name=$image_name \\
-    --display-name="$image_name ($framework)"
+    --name=$project_name \\
+    --display-name="$project_name ($framework)"
 
 DOCKERFILEEOF
     fi
@@ -1080,7 +1088,7 @@ if [ "$GUIDED" = true ]; then
     echo "  1. Choose base framework (PyTorch, TensorFlow, JAX)"
     echo "  2. Select use case (CV, NLP, RL, or general ML)"
     echo "  3. Add extra packages if needed"
-    echo "  4. Build image (takes 3-5 minutes)"
+    echo "  4. Build image (takes 3-5 minutes, depending on existing cache)"
     echo "  5. Create containers from this image"
     echo ""
     echo -e "${YELLOW}💡 Pro Tip:${NC} Start with a simple setup first."
@@ -1149,7 +1157,7 @@ if [ "$NO_BUILD" = true ]; then
     echo ""
     build_context=$(dirname "$DOCKERFILE")
     echo "Build later with:"
-    echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $build_context/${NC}"
+    echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME:latest -f $DOCKERFILE $build_context/${NC}"
     echo ""
 else
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1157,10 +1165,10 @@ else
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo "This will:"
-    echo "  • Download base image (~2 GB)"
+    echo "  • Download base image"
     echo "  • Install all packages"
     echo "  • Configure Jupyter and Python"
-    echo "  • Save final image (~4-5 GB)"
+    echo "  • Save final image (~18 GB)"
     echo ""
     echo -e "${DIM}This can take a few minutes${NC}"
     echo ""
@@ -1174,7 +1182,7 @@ else
         echo ""
         build_context=$(dirname "$DOCKERFILE")
         echo "Build later with:"
-        echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME -f $DOCKERFILE $build_context/${NC}"
+        echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME:latest -f $DOCKERFILE $build_context/${NC}"
         echo ""
     fi
 fi
@@ -1182,16 +1190,17 @@ fi
 # Build image if confirmed
 IMAGE_BUILT=false
 if [ "$BUILD_IMAGE" = true ]; then
-    echo -e "${CYAN}Building image... (this takes 3-5 minutes)${NC}\n"
+    echo -e "${CYAN}Building image... (this takes 3-5 minutes, depending on existing cache)${NC}\n"
 
     # Use the directory containing the Dockerfile as build context
     build_context=$(dirname "$DOCKERFILE")
-    if docker build -t "$FULL_IMAGE_NAME" -f "$DOCKERFILE" "$build_context/"; then
+    if docker build -t "$FULL_IMAGE_NAME:latest" -f "$DOCKERFILE" "$build_context/"; then
         IMAGE_BUILT=true
 
-        # Save metadata
+        # Save metadata (sanitize filename - replace / with _)
         mkdir -p "$HOME/ds01-config/images"
-        cat > "$HOME/ds01-config/images/${FULL_IMAGE_NAME}.info" << INFOEOF
+        METADATA_FILE=$(echo "$FULL_IMAGE_NAME" | tr '/' '_')
+        cat > "$HOME/ds01-config/images/${METADATA_FILE}.info" << INFOEOF
 Image: $FULL_IMAGE_NAME
 Framework: $FRAMEWORK
 Use Case: $USECASE
@@ -1209,7 +1218,7 @@ INFOEOF
         echo -e "${GREEN}${BOLD}✓ Phase 2/2: Docker Image Built${NC}"
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
-        echo -e "Image: ${CYAN}$FULL_IMAGE_NAME${NC}"
+        echo -e "${BOLD}{Namespace}/{Image}:{Tag}:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}"
         echo ""
 
         if [ "$GUIDED" = true ]; then
@@ -1240,7 +1249,7 @@ if [ "$IMAGE_BUILT" = true ]; then
     echo -e "${GREEN}${BOLD}✓ Image Built Successfully${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "Image: ${CYAN}$FULL_IMAGE_NAME${NC}"
+    echo -e "${BOLD}{Namespace}/{Image}:{Tag}:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}"
     echo ""
 
     if [ "$GUIDED" = true ]; then

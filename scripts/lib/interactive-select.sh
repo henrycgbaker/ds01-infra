@@ -101,14 +101,15 @@ select_container() {
 # Usage: image=$(select_image)
 select_image() {
     local images=()
+    local user_id=$(id -u)
 
-    # Get user's custom images (exclude base images)
-    mapfile -t images < <(docker images --format "{{.Repository}}" | grep -v "^<none>$" | grep -v "^ml-" | grep -v "^aime" | sort -u)
+    # Get user's custom images (using DS01 naming pattern)
+    mapfile -t images < <(docker images --format "{{.Repository}}" | grep "^ds01-$user_id/" | grep -v "^<none>$" | sort -u)
 
     # Check if we found any images
     if [ ${#images[@]} -eq 0 ]; then
         echo -e "${YELLOW}No custom images found${NC}" >&2
-        echo -e "${CYAN}Tip:${NC} Create an image with: ${GREEN}image create${NC}" >&2
+        echo -e "${CYAN}Tip:${NC} Create an image with: ${GREEN}image-create my-project${NC}" >&2
         return 1
     fi
 

@@ -40,8 +40,8 @@ show_detailed() {
     if [ "$filter" = "all" ]; then
         images=$(docker images --format "{{.Repository}}" | grep -v "^<none>$" || true)
     else
-        # Filter by maintainer label instead of name
-        images=$(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" || true)
+        # Filter by DS01 naming pattern: ds01-{user-id}/*
+        images=$(docker images --format "{{.Repository}}" | grep "^ds01-$(id -u)/" || true)
     fi
 
     if [ -z "$images" ]; then
@@ -122,15 +122,17 @@ show_simple() {
     else
         echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}\n"
 
+        # Filter by DS01 naming pattern: ds01-{user-id}/*
+        local user_id=$(id -u)
         if [ "$show_size" = "true" ]; then
-            docker images --filter "label=maintainer=$USERNAME" \
-                --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}"
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" | \
+                awk -v uid="$user_id" 'NR==1 || $1 ~ "^ds01-"uid"/"'
         else
-            docker images --filter "label=maintainer=$USERNAME" \
-                --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}"
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
+                awk -v uid="$user_id" 'NR==1 || $1 ~ "^ds01-"uid"/"'
         fi
 
-        local count=$(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" | wc -l)
+        local count=$(docker images --format "{{.Repository}}" | grep "^ds01-$user_id/" | wc -l)
 
         echo ""
         if [ "$count" -eq 0 ]; then
