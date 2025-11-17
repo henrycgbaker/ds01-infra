@@ -113,6 +113,7 @@
     - this will be the basis of the intelligent resource allocation
 - [x] set up workflow that monitors which containers have been allocated which GPUs currently
     - plan for this fully documented [here](../docs-admin/gpu-allocation-implementation.md)
+- [ ] check all cron jobs added to auto close & clean up container working!
 - [ ] once have worked out how users are added / recorded -> update the system audit that tracks users 
     - [ ] + add a tracking of users logging in 
     - [ ] + add tracking of which users are doing which PIDs etc
@@ -127,37 +128,12 @@
 - [x] restablish the git repo to be the root folder
     - but exlcuidng including all users etc
     - incl all the config files in /etc/ and others
+- [ ] set AIME lib as a subcommand within ds01 infra -> properly register my patches as a branch / fork? 
+    - currently i keep my patched versions separate -> instead, have within the repo, but as my local edits 
 
 # Containers
 
-
-  
-
-- [ ] `container create` -> move the --guided explanation of "understanding containers" BEFORE asking user for selections! --guided users should ALWAYS have explanation FIRST before making selections, so they can make informed choices!
-    - [ ] do the same for`container run`:- -guided users should ALWAYS have explanation FIRST before making selections, so they can make informed choices! Put the 'Entering Container' explanation before selection of container (although the IDE access explanation can stay after selection)
-    - [ ] check & do the same for all other commands: --guided users should ALWAYS have explanation FIRST before making selections, so they can make informed choices!
-- [ ] `container create` -> after getting name: check that there is not already a container with same name, do same workflow as `image create` (yellow warning, y/n, graceful loop back if necessary)
-- [ ] `container create` BUG:
-    ```
-    Creating container via mlc-create-wrapper...
-    [ERROR] Invalid container name: test-2
-    [INFO] Use only letters, numbers, hyphens, and underscores
-    ✗ Container creation failed (exit code: 1)
-    ```
-- [ ] `container cleanup` -> no way to just delete volumes without naming them:
-    - container cleanup --volumes => goes to GUI to select stopped containers, instead get it to open up all volumes to select (gracefully loop back after each deletion, to be able to reselect more)
-    - container cleanup --volumes --all => first deletes containers, THEN deletes volumes (change it to only delete volumes)
-    - also when deleting all (container cleanup --volumes --all), list the found volumes (and their number) first, so user can confirm to continue or not
-- [ ] `container exit --guided` prints "Auto-Stop Policy: 48h of idle GPU time" - this comes from `${YELLOW}$(get_idle_timeout "$USERNAME")${NC} of idle GPU time"` BUT the default in the yaml is 24h, and the admin user (datasciencelab) gets `null` in the idle_timeout? IS DATASCIENCELAB A RESEARCHER THEN? they get 48hs???
-- [ ] `container run` needs aesthetic banner at top:
-    ```
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Select a Container to Run${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    ```
-- [ ] build `alias-list` for within containers (ie same command, but now it displays commands to be run inside container)
-- [ ] `container stop` - is it stopping it gracefully or hitting the timeout? does it matter if it hits the timeout? if it does, should we extend the timeout?
-- [ ] `container stats` - BUG: "unknown flag: --filter"
+### Dir Create
 - [ ] `dir-create` works `dir create` does not. Need alias / symline
 - [ ] `dir create`: 
     - BUG: 
@@ -166,18 +142,15 @@
     dir: cannot access 'create': No such file or directory
     dir: cannot access 'test-2': No such file or directory
     ```
-    - needs aesthetic banner at top:
-    ```
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Create an Industry-Standard DS Project Directory${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    ```
+    - [x] needs aesthetic banner at top:
     - if no name provided -> open up GUI (change --guided output once updated this)
+
+### Admin comamnds
 - [ ] `ds01 run` delete? what does this do that other commands don't? i think its legacy hangover?
 - [ ] `ds01 status` needs alias / symlink. Also it's mostly broken. 
 
-
-### General Containers
+### Ancillary commands
+- [x] `container stats` - BUG: "unknown flag: --filter"
 
 ### General Containers
 - [x] get it set up so it's launchable from VS Code rather than jupyter
@@ -200,10 +173,9 @@
 - [x] Deprecated redundant scripts (create-custom-image.sh, manage-images.sh, student-setup.sh)
 - [x] Updated symlinks - added 14 new commands
 - [x] Fixed alias-list documentation errors
-- [ ] make sure a version of alias-list available INSIDE containers
-- [ ] ds01-dashboard alias command doesn't do anything useful
-    - no MIG config recognised
-
+- [ ] build `alias-list` for within containers (ie same command, but now it displays commands to be run inside container)
+- [x] ds01-dashboard alias command doesn't do anything useful
+    - [x] no MIG config recognised
 
 ### User Setup Wizard
 - [x] the colour formatting (the blue is too dark + also some of the colour formatting doesn't seem to apply)
@@ -213,24 +185,28 @@
 - [x] improve the mlc-open output text to be more useful
 - [x] ds01-git-init doesn't work
 - [ ] confirm the initial ssh config setup makes sense
-- [ ] for the container name, does it make sense to have the username before? surely easier just to call it the image/project name?
+- [x] for the container name, does it make sense to have the username before? surely easier just to call it the image/project name?
     - naming convention: <projet><username><container/image>?
-- [ ]  currently mlc-create --show-limits => again it makes more sense to have naming convention more intuitive
-    - [ ] i think this functionality got lost, but in the image / container Wizards, have clear arg for inspecting resource allocations
-- [ ] at all decision point: add clear defaults (ie. to press enter is usually just yes (to proceed). Enter should never default to exit
+- [ ] resolve container naming convention
+    - currently inconsistent: some commandsimplements with username suffix, some don't
+    - maybe remove username suffix if the username is in a label -> make sure to remove all dependencies (e.g. list / search / stop / remove etc might search for user-affiliated containers via the label)
+- [x]  currently mlc-create --show-limits => again it makes more sense to have naming convention more intuitive
+    - [x] i think this functionality got lost, but in the image / container Wizards, have clear arg for inspecting resource allocations
+- [x] at all decision point: add clear defaults (ie. to press enter is usually just yes (to proceed). Enter should never default to exit
+- [ ] when all other commands working, come back to this as there's streamlining to be done here
+- [ ] doesn't read users images
+        ```
+        ✓ Workspace exists: ~/workspace (16 project(s))
+        ○ No custom images yet (will create one)
+        ```
 - [ ] in the user setup, move the vs code setup to be just after ssh keys setup (i.e. before the dir & image setup: when choose no at ```⚠  Project directory already exists: /home/datasciencelab/workspace/test
 Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to 1) overwrite existing dir with new dir (incl warning), 2) rename new project, 3) exit
 - [ ] similarly for ```✓ You're already set up!Everything looks good. You can:.... Run full wizard anyway? [y/N]:  ``` if choose no, have graceful failover: options 1) skip to new project init,  2) skip to specific section (e.g. ssh keys / vs code configs / dir set up / new image / container run etc etc), 3) exit
 
 
 ### Project Init
-- [ ] do i need the project type at the beginning? or is this basically redundant as i do package management in image creation? or does it serve a useful/diff purpose?
-- [ ] there's an error with a lot of the image types where it crashes out after this unknown option (maybe just remove this type part?): 
-        ```
-        Step 5: Docker Image
-        Create a custom Docker image? [Y/n]: y
-        Unknown option: --type=nlp
-        ```
+- [x] do i need the project type at the beginning? or is this basically redundant as i do package management in image creation? or does it serve a useful/diff purpose?
+- [x] there's an error with a lot of the image types where it crashes out after this unknown option (maybe just remove this type part?): 
 - [ ] I'm not really sure what the point of the requirements.txt is in this process? surely it's important to get the packages in the image, then the requirements.txt is just all of them? But project init creates a requirements.txt BEFORE creating an image??
         ```
         Step 4: Creating Project Files
@@ -263,45 +239,33 @@ Use existing directory? [Y/n]:``` ==> have graceful failover: provide options to
     - what I want is for it to pull the base AIME template, then add any further packages defined through the `image create`/`image update` processes
 
 ### Image creation
-- [ ] need to rethink image create quite a it following refactor 
+- [x] need to rethink image create quite a it following refactor 
     - design principle: need to work from principle that aime image is the base we are inheriting from
     - so it needs to first ask which base framework to use (which i think these need updating in light of aime v2)
     - then (depending on base frameowrk image selection) it prints a list of ALL the pkgs that are ALREADY included within that base to the user (this will be the same logic as `image update` when it looks inside the base imaghe to retrieve existing preincluded pkgs)
     - then let's strategise here: apriori I'm just not sure how thorough these AIME base images are; if they are thorough then maybe there's no need for installing system pkgs, or base data science python packages, or use pkgs etc. 
     - strategy: let's now look at what's in the AIME base images, then we can strategise what options and defaults to offer the user in the `image creation` process
-
-
-
 So as part of redesigning `image create` GUI:
 - keep the separation between pulling AIME base image > customising the dockerfile > offering the build the dockerfile into an image executable. Make sure --guided offers clear explanation
 - is it possible to call mlc-create here, or does the dockerfile to image creation require dedicated logic - strategise this and come back to me with suggested options
-- [ ] first ask which base framework to use (which i think the choice of need updating in light of aime v2, ds01's image creator GUI is out of date). Also option: "Custom (specify base image)", also "Custom (specify no image)" - build out both of these workflows.
-- [ ] then (depending on base framework image selection) it prints a list of KEY pkgs ALREADY included within the base image (if they're pretty consistent between images we can just use ". conda, numpy, pillow tqdm, torch, torch audio, torchvision" and an option to more closely inspect the image
-- [ ] then offer to include core Python & interactive (Jupyter) pkgs as default (give list of examples) (keep ds01's option set: 1) Yes - Install defaults (recommended)  2) No - Skip core Python packages   3) Custom - Specify core Python packages manually. Choice [1-3, default: 1]: 1
-- [ ] then offer to include core Data Science pkgs as default (give a few examples) -> install as default (recommended), otherwise none 
-- [ ] then offer to include use case-specific packages - offer same use cases, but offer more pkgs per use case, make this robust and fully developed.
-- strategise if this phased setup makes sense, or if another slightly different categorisation of the phases makes sense instead. Suggest alternatives to me, I'll choose.
-
-- [ ] Once we have confirmed design of phased `image create`, `image update` should follow the same logic: .e.g. 
-  AIME base image: aimehub/pytorch-2.8.0-aime-cuda12.6.3
-  Key AIME preinstalled pkgs: conda, numpy, pillow tqdm, torch, torch audio, torchvision (IS THIS THE CASE FOR ALL THE AIME IMAGES?)
-  System pkgs: 
-  Core Python & Interactive pkgs: 
-  Core Data Science pkgs:
-  Use case defaults {the use case type}: 
-  Custom-installed: 
-OR, if we change this design for `image create`, the same logic should be applied for `image update
-
-
-- [ ] remove from `container create` all the image create functionality -> it just offers to select from existing image files created by the user, The --guided flag explains how containers are created from image executables are created from dockerfiles, and gives the bash command to image create
-- [ ] Make all Tier 2 much more modular & isolated! Currently they are entangled, call eachother, and duplicate functionality. The design principle for all Tier 2 commands is to make them isolated and unique functionality. The --guided mode can make it clear where this step is in the overall workflow, and define prerequisities (and give the bash command to call it), or even suggest the next step (and give the bash command), but in terms of actually implemented fucntionality Sthey should be strictly isolated, de-linked and avoid any duplication
-- [ ] refactor / review both Tier 3 orchestrators (`project init` and `user setup`) - make sure they are still properly orchestrating Tier 2 commands
-
-
-- [ ] for both `image create` and `image update` - allow pkg versioning functionlity! think how best to handle this for ease of use (defaults) vs ability. to specify when necessary 
-- [ ] just check again that `image create` strictly follows workflow from integration strategy `.md`s - that it pulls base aime image, then buiilds on there.
-
-- [ ] add/separate out another layer of install categorisation:
+- [x] first ask which base framework to use (which i think the choice of need updating in light of aime v2, ds01's image creator GUI is out of date). Also option: "Custom (specify base image)", also "Custom (specify no image)" - build out both of these workflows.
+- [x] then (depending on base framework image selection) it prints a list of KEY pkgs ALREADY included within the base image (if they're pretty consistent between images we can just use ". conda, numpy, pillow tqdm, torch, torch audio, torchvision" and an option to more closely inspect the image
+- [x] then offer to include core Python & interactive (Jupyter) pkgs as default (give list of examples) (keep ds01's option set: 1) Yes - Install defaults (recommended)  2) No - Skip core Python packages   3) Custom - Specify core Python packages manually. Choice [1-3, default: 1]: 1
+- [x] then offer to include core Data Science pkgs as default (give a few examples) -> install as default (recommended), otherwise none 
+- [x] then offer to include use case-specific packages - offer same use cases, but offer more pkgs per use case, make this robust and fully developed.
+- strategise if this phased setup makes sense, or if another slightly different categorisation of the phases makes sense instead. Suggest alternatives to me, I'll choose
+- [x] Once we have confirmed design of phased `image create`, `image update` should follow the same logic: .e.g. 
+        AIME base image: aimehub/pytorch-2.8.0-aime-cuda12.6.3
+        Key AIME preinstalled pkgs: conda, numpy, pillow tqdm, torch, torch audio, torchvision (IS THIS THE CASE FOR ALL THE AIME IMAGES?)
+        System pkgs: 
+        Core Python & Interactive pkgs: 
+        Core Data Science pkgs:
+        Use case defaults {the use case type}: 
+        Custom-installed: 
+    OR, if we change this design for `image create`, the same logic should be applied for `image update
+- [x] for both `image create` and `image update` - allow pkg versioning functionlity! think how best to handle this for ease of use (defaults) vs ability. to specify when necessary 
+- [x] just check again that `image create` strictly follows workflow from integration strategy `.md`s - that it pulls base aime image, then buiilds on there.
+- [x] add/separate out another layer of install categorisation:
     - (1) base framework (i.e. AIME base image <- need to see what's in there already)
     - (2) base interactive envs (jupyter, jupyterlab, ipykernel, ipywidgets)
     - (3) default data science (numpy pandas matplotlib seaborn scikit-learn scipy tqdm tensorboard Pillow python-dotenv)
@@ -309,38 +273,15 @@ OR, if we change this design for `image create`, the same logic should be applie
     - = separating out 2 & 3, which are currently combined
     - also: add in a bit more description into the wizard as to what's included
     - TODO first: check what is included in AIME and confirm that these base images are being called, as i'm not sure they are.....???
-- [ ] related to above: review which libs are preinstalled -> plan out what would be optimal
-    - [ ] add torch & pytorth etc into the preinstalled libs for pytorch framework??? Surely they should already be there, or are they there underthe hood somehow from the AIME base image? I THINK THESE ARE IN FACT INCLUDED IN AIME -> SEE WHAT'S ALREADY IN THERE?
-    - [ ] also maybe make custom (i.e. no default packages / frameworks) more prominent / the default?
-- [ ] add in hugging face image (that uses hugging face rather than pytorch?)
-- [ ] add in a nice banner at the top of the wizard (it has them from 
-        ```
-        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        ✓ Phase 1/3: Dockerfile Created
-        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-        ```
-onwards -> add one at the top that says `IMAGE CREATION WIZARD`, then new line: `Phase 1/2: Create Dockerfile (Blueprint)`
-- [ ] BUG: 
-        ```
-        Build image now? [Y/n]: y
-
-        Building image... (this takes 3-5 minutes)
-
-        /usr/local/bin/image-create: line 826: local: can only be used in a function
-        [+] Building 7.7s (12/12) FINISHED                                                                                                                                                                                                                               docker:default
-        => [internal] load build definition from test-datasciencelab.Dockerfile                                                                                                                                                                                                   0.0s
-        => => transferring dockerfile: 1.97kB                                                                                                                                                                                                                                     0.0s
-        => WARN: NoEmptyContinuation: Empty continuation line (line 25)
-        
-        ....
-
-        WARNING: current commit information was not captured by the build: failed to read current commit information with git rev-parse --is-inside-work-tree
-
-        1 warning found (use --debug to expand):
-        - NoEmptyContinuation: Empty continuation line (line 25)
-        ```
-    - [ ] error message in output: " => WARN: NoEmptyContinuation: Empty continuation line (line 25)   "
-
+- [x] related to above: review which libs are preinstalled -> plan out what would be optimal
+    - [x] add torch & pytorth etc into the preinstalled libs for pytorch framework??? Surely they should already be there, or are they there underthe hood somehow from the AIME base image? I THINK THESE ARE IN FACT INCLUDED IN AIME -> SEE WHAT'S ALREADY IN THERE?
+    - [x] also maybe make custom (i.e. no default packages / frameworks) more prominent / the default?
+- [x] add in hugging face image (that uses hugging face rather than pytorch?)
+- [x] add in a nice banner at the top of the wizard (it has them from 
+- [x] remove from `container create` all the image create functionality -> it just offers to select from existing image files created by the user, The --guided flag explains how containers are created from image executables are created from dockerfiles, and gives the bash command to image create
+- [x] Make all Tier 2 much more modular & isolated! Currently they are entangled, call eachother, and duplicate functionality. The design principle for all Tier 2 commands is to make them isolated and unique functionality. The --guided mode can make it clear where this step is in the overall workflow, and define prerequisities (and give the bash command to call it), or even suggest the next step (and give the bash command), but in terms of actually implemented fucntionality Sthey should be strictly isolated, de-linked and avoid any duplication
+- [x] refactor / review both Tier 3 orchestrators (`project init` and `user setup`) - make sure they are still properly orchestrating Tier 2 commands
+- [x] BUG: error message in output: " => WARN: NoEmptyContinuation: Empty continuation line (line 25)   "
 
 ### Image list 
 - [x] update based on naming changes in image create
@@ -351,18 +292,20 @@ onwards -> add one at the top that says `IMAGE CREATION WIZARD`, then new line: 
 - [x] BUG: either the currently installed packages list is not up to date, or it's not able to add new packages correctly, or both. All my images have the same 4 "Current Python packages" listed, then whwenever you try to add more python packages, it says it's already in the dockerfile, no matter "which package. Take the same package reading logic as in `image create`
 -  [x] BUG: the option 4: "  4) Edit Dockerfile directly (advanced)" -> `/usr/local/bin/image-update: line 300: vim: command not found`
 - [x] BUG: it's not refreshing / listing / adding pkgs correctly. E.g. with `test-datasciencelab` I'm adding torch, but then it doesn't show up when it prints the Current python packages. It also let's me add it multiple times (whereas it SHOULD) give a notification saying that that package is already in the image (and gracefully direct me to readding more)
-- [ ] nice to have: the `image list` call is directly edited before output so that it forms a selection screen, rather than being printed, then a duplicate selection screen below.
+- [x] nice to have: the `image list` call is directly edited before output so that it forms a selection screen, rather than being printed, then a duplicate selection screen below.
 - [ ] after updating the docker file, give the option to recreate the image - I dont' think this currently happens?
 - [x] sort out the logic between `image create` and `image update` about when to write the `pip install` command if/when there are packages after.
-- [ ] add a notification output after the image is rebuild to the new dockerfile specs so the user is aware 
-- [ ] after adding / removing a python / system package, 
+- [x] add a notification output after the image is rebuild to the new dockerfile specs so the user is aware 
+- [x] after adding / removing a python / system package, 
     - 1) explain very briefly (if no --guided) that dockerfile blueprint updated, but still need to rebuild the image (and later to recreate container based on rebuild image). More in depth if --guided flat on.
     - 2) offer to continue to rebuild, or loop back gracefully to the "What would you like to do?" menu.
+- [ ] sees lots of old `<none>` images -> what are these? presumably i need to clean them out, but where are they coming from firstly? is this image prune
 
 ### Image delete
 - [x] accept multiple image names as arguments -> will delete in bulk
 - [x] the GUI after providing no image names -> only see users own images
 - [ ] make sdure that when a user does `docker image prune` it only cleans up their images (or at least blocks them with sudo)
+    - or is this already sudo?
 - [ ] currently once image removed -> "Dockerfile backed up to: `/home/datasciencelab/ds01-config/images/deleted/datasciencelab-test-20251111-165620.Dockerfile`" ... why? back it up somewhere in tmp or other? (and zip/compress it), but not in this folder.
 
 
@@ -384,30 +327,24 @@ onwards -> add one at the top that says `IMAGE CREATION WIZARD`, then new line: 
 - [x] manually just add some initial explanation that to create a container we need an image (literally one line, add by hand)
 - [x] make `container create` default to (1) a call to `image create` to create custom image, with possiblitlites to chose PyTorch or Tensorflow (currently it has it's own workflow - this is duplication!)
 - Resource allocation workflow
-    - [ ] SEE TODOS IN `ds01-infra/docs-admin/gpu-allocation-implementation.md`
+    - [x] SEE TODOS IN `ds01-infra/docs-admin/gpu-allocation-implementation.md`
     - [ ] have so that students can get up to 4 MIG instances, but setup wizard defaults to 1, but gives them the option to choose more
-    - [ ] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
-- [ ] (is this under `container create` or `container run`?) currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
-- [ ] container create's option to `1) use existing image` -> lists too many images. Instead, call to `image-list` command (which does this properly), and set up output as bash selection.
+    - [x] if users try to create an image/container / run a container beyond their limits (in `ds01-infra/config/resource-limits.yaml`), within the wizard there's a graceful error message to explain what they did wrong and they are unable to progress / redirected back so they can change their settings
+- [ ] BUG: (is this under `container create` or `container run`?) currently only containers launched through ds01-run will be in the ds01.slice hierarchy. Containers launched with plain docker run will still go under the flat docker/ cgroup with no limits. => To enforce it for ALL containers configure Docker daemon (/etc/docker/daemon.json with "cgroup-parent": "ds01.slice") => add to etc-mirror
+- [x] container create's option to `1) use existing image` -> lists too many images. Instead, call to `image-list` command (which does this properly), and set up output as bash selection.
 Creating container via mlc-create-wrapper...
-- [ ] now broken:
-        ```
-        [INFO] Creating container 'test' for user 'datasciencelab'
-        [INFO] Framework: Pytorch v2.5.1
-        [INFO] Workspace: /home/datasciencelab/workspace/test
-        [INFO] Loading resource limits from configuration...
-        [INFO] Resource limits applied:
-        --cpus=64
-        --memory=128g
-        --memory-swap=128g
-        --shm-size=64g
-        --pids-limit=4096
-        --tmpfs=/tmp:size=50G
-        --cgroup-parent=ds01-admin.slice
-        [INFO] Allocating GPU via gpu_allocator.py (priority: 90, max: 1)...
+- [x] `container create` -> move the --guided explanation of "understanding containers" BEFORE asking user for selections! --guided users should ALWAYS have explanation FIRST before making selections, so they can make informed choices!
+    - [x] do the same for`container run`:- -guided users should ALWAYS have explanation FIRST before making selections, so they can make informed choices! Put the 'Entering Container' explanation before selection of container (although the IDE access explanation can stay after selection)
+    - [x] check & do the same for all other commands: --guided users should ALWAYS have explanation FIRST before making selections, so they can make informed choices!
+- [x] `container create` -> after getting name: check that there is not already a container with same name, do same workflow as `image create` (yellow warning, y/n, graceful loop back if necessary)
 
-        ✗ Container creation failed (exit code: 1)
-        ```
+### Container start
+- [ ] does container start not see 'created' containers, only 'stopped'? 
+-   if so, what's the logic of that?
+- [ ] I would expect both container start and `container run` should be robust to all non running containers? but maybe I'm missing something??
+- [ ] separate out `container start` vs `container run`
+    - maybe keep former start, rename latter open
+    - or if changing the resource allocation logic (see below) then maybe this becomes unncessary?
 
 ### Container start & stop
 - [ ] add to the guided explanation a bit to explain what is lost when starting (.e.g state & other processes etc) and what is/is not resumed when started
@@ -416,7 +353,7 @@ Creating container via mlc-create-wrapper...
 - [x] develop wrapper for mlc-open that prints explanation
     - [x] explains you're now in /workspace, what that means etc
     - [x] prints instructions to `exit` + explains what it means for it to be open + when to use `mlc-stop my-container` (when crashed)
-    - [ ] also explains workflow to keep container running while training (vs when will be auto stopped by system, and how to ask DSL if need for longer), and how to reaccess it later, etc
+    - [x] also explains workflow to keep container running while training (vs when will be auto stopped by system, and how to ask DSL if need for longer), and how to reaccess it later, etc
 - [ ] Containers should run with user namespaces:
         - Add to /etc/docker/daemon.json:        {"userns-remap": "default"} NB I did NOT do this, complicates gpu pids -> instead use cgroups....
         - currently if run through Dev Containers then it all works, but if run through `container run` which calls `mlc-create` then it doesn't display properly,
@@ -432,52 +369,91 @@ Creating container via mlc-create-wrapper...
     - A Docker container already acts as the ultimate form of a virtual environment. It isolates the entire operating system, filesystem, and all installed packages from the host machine and from all other containers.
 - WHEN SELECTING KERNEL IN JUPYTER NOTEBOOK IT RECOMMENDS TO DO QUICK CREATE THAT CREATES A VENV FROM WORKSPACE DEPENDENCEIS -> IS THAT ALL THE INLCUDED PACKAGES IN THE IMAGE?
 - [ ] when ready, set up the cgroups resource allocation & accounting (see scripts/system/setup-cgroups-slices)
+- [x] `container run` needs aesthetic banner at top:
 
 ### Exiting Containers
 - [x] exit currently auto closes the container (make it so it can run?) exit > [datasciencelab-test-4] detached from container, container keeps running > [datasciencelab-test-4] container is inactive, stopping container ... same even if do touch /workspace/.keep-alive.. currently there's no way to run containers after exit
-- [ ] clarify the exit / detatch system 
+- [x] clarify the exit / detatch system 
     - should be auto-stopped after 12(?) hrs, but with the option to request overrides 
     - actually: the info IS there if you do --guided => add a miniumal amount of info there in the default (non guided)          
 
-- [ ] include explanation in --guided wizards for running / exiting / detatching containers
-    - [ ] when enter a container with container run -> have better print out for available commands / how to use it / how long it will run for / how to exit it (detatch/exit/stop) (I thought I had this, where has it gone???)
+- [x] include explanation in --guided wizards for running / exiting / detatching containers
+    - [x] when enter a container with container run -> have better print out for available commands / how to use it / how long it will run for / how to exit it (detatch/exit/stop) (I thought I had this, where has it gone???)
 - related: CONTAINER STOP
     - [ ] increase timeout >10s?
     - [ ] add default Yes to ```⚠ This will STOP the container...Continue? [y/N]: ```
+- [ ] `container stop` - is it stopping it gracefully or hitting the timeout? does it matter if it hits the timeout? if it does, should we extend the timeout?
+
+- [x] `container exit --guided` prints "Auto-Stop Policy: 48h of idle GPU time" - this comes from `${YELLOW}$(get_idle_timeout "$USERNAME")${NC} of idle GPU time"` BUT the default in the yaml is 24h, and the admin user (datasciencelab) gets `null` in the idle_timeout? IS DATASCIENCELAB A RESEARCHER THEN? they get 48hs???
 
 ### Container-cleanup
--  container-cleanup → calls mlc-remove + GPU cleanup ==> need to check this GPU cleanup logic is safe!
+- [x] container-cleanup → calls mlc-remove + GPU cleanup ==> need to check this GPU cleanup logic is safe!
+- [x] `container cleanup` -> no way to just delete volumes without naming them:
+    - container cleanup --volumes => goes to GUI to select stopped containers, instead get it to open up all volumes to select (gracefully loop back after each deletion, to be able to reselect more)
+    - container cleanup --volumes --all => first deletes containers, THEN deletes volumes (change it to only delete volumes)
+    - also when deleting all (container cleanup --volumes --all), list the found volumes (and their number) first, so user can confirm to continue or not
 
 # Container starts
-- [ ] a new command from AIME v2 -> test + add to documentation around CLI ecosystem (esp to alias-listcont)
+- [x] a new command from AIME v2 -> test + add to documentation around CLI ecosystem (esp to alias-listcont)
 
 ### GPU allocation  
 - [x] Check logging all works
 
-
 ### for all dockerfile > image > container workflow
-- [ ] make more modular at same-tier level:
+- [x] make more modular at same-tier level:
     - avoid duplication of functionality
     - currently there's a lot of parallel tier commands calling eachother = bad design
     -  instead: at end of completion of that command's core function, it should gives concise output of what was done, and what command to run next to continue the workflow (rather than calling that command itself)
     - this makes each command at each level more independent / isolated: they don't do parallel calls; only commands at a higher tier can call comamnds at a lower tier = good design
     - principle: all tier 2 commands should be isolated from eachtoerh -> Tier 3 workflow orchestrators bring this together
     - instead of calling eachother: they same-tier commands give user concise update what they did and bash command to implement next stage
-- [ ] also make sure ALL Tier 1 base commands from aime are fully incorporated into ds01 3 tier structure.
+- [x] also make sure ALL Tier 1 base commands from aime are fully incorporated into ds01 3 tier structure.
 
 ### Container Cleanup
 - [ ] buggy
 
 ### Container Stats 
-- [ ] buggy: "unknown flag: --filter"
-- [ ] check the description is correct
+- [x] buggy: "unknown flag: --filter"
+- [x] check the description is correct
 
 ## Container code refactor
 - [ ] reorganise scripts dir to make more sense between admin vs user vs docker, etc scripts 
     - admin is too broad -> it should be dissagregated by functionality
 
+### ds01 dashboard
+- [ ] currently shows full GPU utilisation % -> ALSO show each MIG's util %
+- [ ] currently showws each MIG's containers -> ALSO show full GPU's containers
+- [ ] resolve the ds01-managed issue
+    - i think this comes from `ds01-run`
+    - this command will be depreciated soon, as I don't think it does anything useful??
+    - [ ] instead everything will go through `container create` -> this process needs to be associated with approrpiate cgroup
+        - [ ] all under ds01 slice
+            - students -> under student group (and then within that each user's own slice for granular monitoring)
+            - researchers-> under researcher group (and then within that each user's own slice for granular monitoring)
+            - admin -> under admin group (and then within that each user's own slice for granular monitoring)
+        - [ ] strategise first: is this sufficient for monitoring, allocating, tracking? or is there a better way to structure this?
+    - [ ] once this is implemented, and `ds01-run` removed, clean up the ds01 dashboard 
+        - [ ] e.g. do not need "DS01 System Containers:"
+        - [ ] e.g. active users should be ALL users on the server - like actually all of them, not just "No DS01-managed containers currently running"
+- [ ] I would like the GPU / MIG allocation and tracking sytem (and the dashboard & logs) to be robust to occasional changes in MIG configs
+    - might be that we have only full G/PUs sometimes, or only MIGs, or different sized MIGs, or some other combination
+    - the whole system needs to be robust to those changed
 
-# Container Resource Allocation Design Change: from Create-time → to Runtime
+# Resource Allocation
+- [x] work on MIG instance partitioning script (/opt/ds01-infra/scripts/admin/ds01-mig-partition)
+    - currently it fails
+- [x] add alias: ds01 mig-partition
+- [x] update container allocation based on UUID system (see `/docs-admin/gpu-allocation-implementation.md`) 
+    - this is a bit of a mess, make indexing more intuitive to users!
+- [x] currently the system is not auto setup: (are these cron jobs? or is there better system to automate?)
+    - [x] stopping idle container 
+    - [x] enforcing max runtime limits
+    - [x] cleaning up stopped containers (GPU hold limit)
+- [ ] eventually update design so that resource allocation happens at `container start / run` not `container create`
+    - this will require quite a lot of refactoring + moving away from `mlc-open` -> `mlc-open-patched` OR direct docker command that also replicates as much of `mlc-open` as possible.
+    - see below:
+
+### Container Resource Allocation Design Change: from Create-time → to Runtime
 
   ARCHITECTURE CHANGES
 
@@ -608,13 +584,6 @@ Creating container via mlc-create-wrapper...
 
   Recommendation: Option 1 (per-session env var, cleaner, more flexible)
 
-
-# Resource Allocation (priority)!!!
-- [ ] work on MIG instance partitioning script 
-- [ ] update container allocation based on UUID system (see `/docs-admin/gpu-allocation-implementation.md`)
-- [ ] eventually update design so that resource allocation happens at `container start / run` not `container create`
-    - this will require quite a lot of refactoring + moving away from `mlc-open` -> `mlc-open-patched` OR direct docker command that also replicates as much of `mlc-open` as possible.
-
 # Robustness Checks
 - [ ] test for local / admin / student / researcher users
 
@@ -633,26 +602,24 @@ Creating container via mlc-create-wrapper...
 - [ ] when fully set up: delete the setup scripts (in the /opt/scripts/system)
 
 # Miscellaneous
-# Miscellaneous
-
 
 # Partitioning & GPU allocation
 - [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
 - [x] Set up MIG vs MPS?
 - [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
 - [x] Set up MIG vs MPS?
-- [ ] implement GPU allocation properly
-- [ ] I set up so that total GPUs allocated hard limit -> change it so that the user limits apply to the containers they can spin up (but not the number of containers total)? or maybe leave it so they have total limit -> means they have to close running containers
-- [ ] currently my resource allocation is by GPU -> instead, it should be by MIG partition (?) -> rename in the resource-limits.yaml to max_mig
-- [ ] scripts/docker/mlc-create-wrapper.sh - Needs GPU allocator integration!!!!
+- [x] implement GPU allocation properly
+- [x] I set up so that total GPUs allocated hard limit -> change it so that the user limits apply to the containers they can spin up (but not the number of containers total)? or maybe leave it so they have total limit -> means they have to close running containers
+- [x] currently my resource allocation is by GPU -> instead, it should be by MIG partition (?) -> rename in the resource-limits.yaml to max_mig
+- [x] scripts/docker/mlc-create-wrapper.sh - Needs GPU allocator integration!!!!
     - 4. Wrapper Script Integration
     - The mlc-create-wrapper.sh still needs updates to:
         - Call gpu_allocator.py with priority
         - Show graceful error messages
         - Check container limits
         - Register release hook
-- [ ] check, is max_mig_per_user
-- [ ] check: idle timeout -> how do i set it so that users can run training runs in background, but that it checks when it's done and shuts it if nothing happening?
+- [x] check, is max_mig_per_user
+- [x] check: idle timeout -> how do i set it so that users can run training runs in background, but that it checks when it's done and shuts it if nothing happening?
 - [ ] Dynamic MIG configuration
    - Auto-partition GPUs based on demand
    - Reconfigure MIG profiles on-the-fly
@@ -665,7 +632,6 @@ Creating container via mlc-create-wrapper...
 - [ ] set up unit, functional, integraton tests
     
 # cgroups
-# cgroups
 - [ ] not sure if i optimally set up cgroups correctly -> maybe within user-group slice, each user should then get their own slice -> can see how much each user is using (in logs / reports)? It would be useful to see who is doing what....
     - [ ] make sure cgroups & user groups are integrated together / consistent
 - [ ] I don't think this is set up properly: `systemctl status ds01.slice` shows it being inactive
@@ -675,6 +641,9 @@ Creating container via mlc-create-wrapper...
 
 # File/Dir Clean Up of SSD
 - [ ] once identified current users -> send message out via dsl for saving important work -> begin deleting.
+- [ ] clean up disk
+- [ ] clean up old / images / containers
+
 # User groups
 - [ ] sort out user groups (incl using docker-users in the scripts, rather than docker -> remove docker group)
 - [ ] sort out admin vs user vs docker etc scripts (admin is too broad -> it should be dissagregated by functionality)

@@ -43,7 +43,9 @@ get_user_lifecycle_limits() {
 
 usage() {
     echo ""
-    echo -e "${BOLD}DS01 Container Run${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Select a Container to Run${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-run [name] [options]"
@@ -107,12 +109,12 @@ done
 if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Entering Container${NC}"
+    echo -e "${BOLD}Running a Container${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${BOLD}What's About to Happen:${NC}"
     echo ""
-    echo "  You're about to enter your container's bash shell."
+    echo "  You're about to select a container to enter via your container's bash shell."
     echo "  This is like SSH-ing into your computing environment."
     echo ""
     echo -e "${BOLD}Inside the Container:${NC}"
@@ -131,6 +133,13 @@ if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
     echo -e "  ${GREEN}exit-help${NC}    Show exit options"
     echo ""
     read -p "Press Enter to continue..." </dev/tty
+    echo ""
+fi
+
+if [ "$GUIDED" = false ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Container Run Command${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 fi
 

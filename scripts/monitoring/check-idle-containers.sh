@@ -1,5 +1,5 @@
-# File: /opt/ds01-infra/scripts/maintenance/check-idle-containers.sh
 #!/bin/bash
+# /opt/ds01-infra/scripts/monitoring/check-idle-containers.sh
 # Monitor container activity and handle idle cleanup with warnings
 
 set -e
@@ -7,8 +7,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
-STATE_DIR="/var/lib/ds01-infra/container-states"
-LOG_FILE="/var/log/ds01-infra/idle-cleanup.log"
+STATE_DIR="/var/lib/ds01/container-states"
+LOG_FILE="/var/log/ds01/idle-cleanup.log"
 
 # Create state directory
 mkdir -p "$STATE_DIR"

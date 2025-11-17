@@ -187,8 +187,10 @@ DS01 uses MLC where it excels (framework management, entering containers) and bu
 - Reservations: Time-based GPU reservations via `user_overrides` in YAML
 
 **Systemd Integration:**
-- `scripts/system/setup-resource-slices.sh`: Creates systemd slices from YAML config
-- Hierarchy: `ds01.slice` → `ds01-{group}.slice` → containers
+- `scripts/system/setup-resource-slices.sh`: Creates group-level systemd slices from YAML config
+- `scripts/system/create-user-slice.sh`: Dynamically creates per-user slices on-demand
+- Hierarchy: `ds01.slice` → `ds01-{group}.slice` → `ds01-{group}-{username}.slice`
+- Group slices enforce resource limits, user slices provide granular monitoring
 - Enforces CPU quotas, memory limits, and task limits at cgroup level
 
 **State Management:**
@@ -287,8 +289,11 @@ sudo systemctl daemon-reload
 ### Monitoring
 
 ```bash
+# Admin dashboard (comprehensive system overview)
+ds01-dashboard
+
 # GPU allocation status
-python3 scripts/monitoring/gpu-status-dashboard.py
+python3 scripts/docker/gpu_allocator.py status
 
 # Container-level resource usage
 scripts/monitoring/container-dashboard.sh
@@ -300,7 +305,10 @@ scripts/monitoring/check-idle-containers.sh
 scripts/user/ds01-status
 
 # View allocation logs
-tail -f /var/logs/ds01/gpu-allocations.log
+tail -f /var/log/ds01/gpu-allocations.log
+
+# Monitor per-user cgroups
+systemd-cgtop | grep ds01
 ```
 
 ### User Management
@@ -364,10 +372,11 @@ scripts/
 │   ├── project-init                   # Wrapper that executes new-project
 │   ├── container-*                    # Simplified container management commands
 │   ├── image-*                        # Image management commands
-│   ├── ds01-run                       # Standalone container launcher
+│   ├── ds01-run                       # Standalone container launcher (DEPRECATED - use container-create)
 │   └── ds01-status                    # Resource usage dashboard
 ├── system/              # System administration
-│   ├── setup-resource-slices.sh       # Creates systemd cgroup slices
+│   ├── setup-resource-slices.sh       # Creates systemd cgroup slices (group level)
+│   ├── create-user-slice.sh           # Creates per-user cgroup slices (auto-invoked)
 │   ├── add-user-to-docker.sh          # Add users to docker-users group
 │   └── update-symlinks.sh             # Update command symlinks in /usr/local/bin
 ├── monitoring/          # Metrics and auditing
@@ -385,7 +394,7 @@ scripts/
 ### GPU Allocation Flow
 
 **On Container Creation:**
-1. User runs `mlc-create` (wrapper) or `ds01-run`
+1. User runs `container-create` (which calls `mlc-create-wrapper.sh`)
 2. `get_resource_limits.py` reads user's group/overrides from YAML
 3. Wrapper calls `gpu_allocator.py allocate <user> <container> <max_gpus> <priority>`
 4. Allocator checks:
@@ -540,6 +549,47 @@ When modifying resource allocation logic:
 - Users must be added to `docker` group for Docker socket access
 
 ## Recent Changes (November 2025)
+
+**Dashboard & Cgroup Enhancements (November 14, 2025):** ✅ **COMPLETE**
+- **Per-User Cgroup Slices**: Implemented 3-tier hierarchy for granular monitoring
+  - Structure: `ds01.slice` → `ds01-{group}.slice` → `ds01-{group}-{username}.slice`
+  - User slices created automatically on first container creation
+  - Enables per-user resource tracking with `systemd-cgtop | grep ds01`
+  - Updated `get_resource_limits.py` to return per-user cgroup paths
+  - Updated `mlc-create-wrapper.sh` to call `create-user-slice.sh` automatically
+
+- **Enhanced Dashboard (`ds01-dashboard`)**:
+  - **MIG Utilization Display**: Shows per-MIG memory usage (e.g., "2.3GB/10GB")
+  - **Physical GPU Utilization**: Displays for both full GPUs and MIG-enabled GPUs
+  - **Full GPU Container Display**: Clearly separates full GPU vs MIG containers
+  - **System Users Section**: Shows ALL system users (not just DS01-managed)
+    - Format: `● username: 2 containers running` or `○ username: no containers`
+  - **Improved GPU Allocation Status**: Better organization by physical GPU
+  - **Container Ownership Display**: Shows username next to container name
+
+- **Robust GPU Configuration Handling**:
+  - Enhanced `gpu_allocator.py` to handle all MIG config changes:
+    - Full GPU → MIG: Migrates containers to first MIG instance
+    - MIG → Full GPU: Merges MIG containers onto physical GPU
+    - MIG reconfiguration: Preserves allocations where possible
+    - Mixed configs: Handles full GPUs and MIG GPUs simultaneously
+  - Automatic state migration with detailed logging
+  - Orphaned allocation detection and warnings
+  - Configuration change logging to `/var/log/ds01/gpu-allocations.log`
+
+- **Deprecated `ds01-run`**:
+  - Added prominent deprecation warning (5-second display)
+  - Directs users to `container-create` instead
+  - Will be removed in DS01 v2.0
+  - Reason: Lacks DS01_MANAGED label, GPU tracking, and cgroup integration
+
+**Benefits**:
+- Administrators can monitor per-user resource consumption within groups
+- Dashboard provides complete visibility into GPU utilization (full + MIG)
+- System adapts gracefully to MIG configuration changes
+- All users visible in dashboard regardless of container status
+
+## Recent Changes (November 2025 - Previous)
 
 **GPU Hold After Stop - Hybrid Allocation Strategy (November 13, 2025):** ✅ **COMPLETE**
 - **Problem**: GPUs were released immediately on container stop, forcing users to re-compete for allocation on restart

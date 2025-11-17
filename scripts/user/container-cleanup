@@ -90,8 +90,6 @@ usage() {
     echo "  This permanently removes containers."
     echo -e "  Recreate with: ${GREEN}container-create <name>${NC}"
     echo ""
-    echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-remove for container removal"
-    echo ""
 }
 
 format_size() {

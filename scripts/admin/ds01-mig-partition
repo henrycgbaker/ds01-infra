@@ -13,7 +13,9 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # Paths
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to get actual script location
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 PARSER_SCRIPT="$INFRA_ROOT/scripts/docker/mig-config-parser.py"
@@ -215,16 +217,46 @@ if [ "$FORCE" = false ] && [ "$DRY_RUN" = false ]; then
     echo ""
 fi
 
-# Map profile names to nvidia-smi profile IDs
-# For A100: 1g.10gb=14, 2g.20gb=9, 3g.40gb=5, 4g.40gb=0
-declare -A PROFILE_MAP=(
-    ["1g.10gb"]="14"
-    ["1g.5gb"]="19"
-    ["2g.20gb"]="9"
-    ["3g.40gb"]="5"
-    ["4g.40gb"]="0"
-    ["7g.80gb"]="0"
-)
+# Dynamically build profile map by querying available MIG profiles
+# This works across different GPU architectures (profile IDs vary)
+declare -A PROFILE_MAP
+
+# Get list of GPUs with MIG enabled
+GPU_COUNT=$(nvidia-smi --query-gpu=count --format=csv,noheader | head -1)
+
+# Query profiles from first MIG-enabled GPU
+for ((i=0; i<GPU_COUNT; i++)); do
+    MIG_MODE=$(nvidia-smi --query-gpu=mig.mode.current --format=csv,noheader -i $i)
+
+    if [ "$MIG_MODE" = "Enabled" ]; then
+        # Parse nvidia-smi mig -lgip output to build profile map
+        while IFS= read -r line; do
+            # Extract profile name and ID from lines like:
+            # |   1  MIG 1g.10gb       15     1/4        9.62       No     14     1     0   |
+            if [[ "$line" =~ MIG[[:space:]]+([0-9]+g\.[0-9]+gb[+a-z]*)[[:space:]]+([0-9]+)[[:space:]] ]]; then
+                PROFILE_NAME="${BASH_REMATCH[1]}"
+                PROFILE_ID="${BASH_REMATCH[2]}"
+                PROFILE_MAP["$PROFILE_NAME"]="$PROFILE_ID"
+            fi
+        done < <(nvidia-smi mig -lgip -i $i 2>/dev/null)
+
+        # Only need to query one GPU
+        break
+    fi
+done
+
+# If no MIG-enabled GPU found to query, use fallback mappings (A100-40GB)
+if [ ${#PROFILE_MAP[@]} -eq 0 ]; then
+    echo -e "${YELLOW}Warning: No MIG-enabled GPU found to query profiles, using fallback mapping${NC}"
+    PROFILE_MAP=(
+        ["1g.5gb"]="19"
+        ["1g.10gb"]="15"
+        ["2g.10gb"]="14"
+        ["3g.20gb"]="9"
+        ["4g.20gb"]="5"
+        ["7g.40gb"]="0"
+    )
+fi
 
 # Apply configuration
 echo -e "${BOLD}Applying MIG Configuration:${NC}"

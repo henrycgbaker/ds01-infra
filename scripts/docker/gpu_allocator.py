@@ -42,49 +42,344 @@ class GPUAllocationManager:
             return yaml.safe_load(f)
     
     def _get_mig_instances(self) -> List[Dict]:
-        """Detect MIG instances if MIG is enabled"""
+        """
+        Detect MIG instances if MIG is enabled.
+        Uses human-friendly sequential Device IDs (0, 1, 2, 3) instead of
+        confusing hardware instance IDs (3, 4, 5, 6).
+        """
         if not self.mig_enabled:
             return []
-        
+
+        try:
+            # Use nvidia-smi -L to get MIG devices with sequential IDs and UUIDs
+            result = subprocess.run(
+                ['nvidia-smi', '-L'],
+                capture_output=True, text=True, check=True
+            )
+
+            mig_gpus = []
+            current_gpu = None
+
+            for line in result.stdout.strip().split('\n'):
+                # Match GPU line: "GPU 1: NVIDIA A100-PCIE-40GB (UUID: ...)"
+                if line.startswith('GPU '):
+                    gpu_match = line.split(':')[0].replace('GPU ', '').strip()
+                    current_gpu = gpu_match
+                # Match MIG device line: "  MIG 1g.10gb Device 0: (UUID: MIG-...)"
+                elif 'MIG' in line and 'Device' in line and current_gpu is not None:
+                    # Extract device number and UUID
+                    # Format: "  MIG 1g.10gb     Device  0: (UUID: MIG-c4a1cc9d-...)"
+                    parts = line.split('Device')
+                    if len(parts) >= 2:
+                        device_part = parts[1].split(':')[0].strip()
+                        uuid_part = line.split('UUID:')[1].strip().rstrip(')')
+
+                        # Extract profile name (e.g., "1g.10gb")
+                        profile = line.split()[1] if len(line.split()) > 1 else "unknown"
+
+                        # User-friendly ID: "GPU.Device" format (e.g., "1.0", "1.1", "2.0")
+                        friendly_id = f"{current_gpu}.{device_part}"
+
+                        mig_gpus.append({
+                            'physical_gpu': current_gpu,
+                            'device_id': device_part,
+                            'uuid': uuid_part,
+                            'profile': profile,
+                            'id': friendly_id,  # Human-friendly: "1.0", "1.1", "2.0", etc.
+                            'docker_id': uuid_part  # What to pass to Docker --gpus
+                        })
+
+            return mig_gpus
+        except Exception as e:
+            # Fallback to old method if nvidia-smi -L fails
+            return self._get_mig_instances_fallback()
+
+    def _get_mig_instances_fallback(self) -> List[Dict]:
+        """Fallback method using old hardware instance IDs (for compatibility)"""
         try:
             result = subprocess.run(
                 ['nvidia-smi', '--query-gpu=index,mig.mode.current', '--format=csv,noheader'],
                 capture_output=True, text=True, check=True
             )
-            
-            # Check if any GPU has MIG enabled
+
             mig_gpus = []
             for line in result.stdout.strip().split('\n'):
                 parts = line.split(',')
                 gpu_id = parts[0].strip()
                 mig_mode = parts[1].strip() if len(parts) > 1 else 'N/A'
-                
+
                 if mig_mode == 'Enabled':
-                    # Get MIG instances for this GPU
                     result2 = subprocess.run(
                         ['nvidia-smi', 'mig', '-lgi', '-i', gpu_id],
                         capture_output=True, text=True
                     )
-                    # Only add MIG instances if they actually exist
                     if result2.returncode == 0 and "No GPU instances found" not in result2.stdout:
-                        # Parse actual MIG instance IDs from output
-                        # Format: "| GPU  GI  CI  MIG |..."
+                        # Create sequential mapping for this GPU
+                        instance_count = 0
                         for line in result2.stdout.split('\n'):
                             if '|' in line and line.strip().startswith('|') and not line.strip().startswith('|='):
                                 parts = [p.strip() for p in line.split('|') if p.strip()]
                                 if len(parts) >= 2 and parts[0].isdigit():
-                                    instance_id = parts[1]  # GI (GPU Instance) ID
+                                    hw_instance_id = parts[1]
                                     mig_gpus.append({
                                         'physical_gpu': gpu_id,
-                                        'mig_instance': instance_id,
-                                        'id': f"{gpu_id}:{instance_id}"
+                                        'device_id': str(instance_count),
+                                        'uuid': f"hw:{gpu_id}:{hw_instance_id}",
+                                        'profile': "unknown",
+                                        'id': f"{gpu_id}.{instance_count}",
+                                        'docker_id': f"{gpu_id}:{hw_instance_id}"
                                     })
-                    # If no instances found, this GPU will be treated as whole GPU in standard mode
-            
+                                    instance_count += 1
+
             return mig_gpus
         except:
             return []
     
+    def _validate_and_update_state(self, state):
+        """
+        Validate that the current state matches hardware configuration.
+        If MIG configuration changed, migrate allocations where possible.
+        Returns: (is_valid, updated_state, change_description)
+        """
+        import sys
+
+        # Detect current hardware
+        current_mig_instances = self._get_mig_instances()
+
+        # Check if state matches current hardware
+        state_gpu_ids = set(state['gpus'].keys())
+        state_was_mig = state.get('mig_enabled', False)
+
+        if current_mig_instances:
+            # System is in MIG mode
+            current_gpu_ids = set(mig['id'] for mig in current_mig_instances)
+
+            if state_gpu_ids == current_gpu_ids and state_was_mig:
+                # Configuration matches - all good
+                return True, state, None
+
+            # MIG configuration changed - need to migrate
+            change_type = "MIG_RECONFIGURED" if state_was_mig else "FULL_GPU_TO_MIG"
+
+            print(f"\n{'='*60}", file=sys.stderr)
+            print(f"GPU Configuration Change Detected: {change_type}", file=sys.stderr)
+            print(f"Previous: {len(state_gpu_ids)} {'MIG instances' if state_was_mig else 'full GPUs'}", file=sys.stderr)
+            print(f"Current:  {len(current_gpu_ids)} MIG instances", file=sys.stderr)
+            print(f"{'='*60}\n", file=sys.stderr)
+
+            # Create new GPU map
+            new_gpus = {}
+            migrated_containers = []
+            orphaned_containers = []
+
+            for mig in current_mig_instances:
+                mig_id = mig['id']
+                physical_gpu = mig['physical_gpu']
+
+                # Try to migrate containers from:
+                # 1. Same MIG ID (if it existed before)
+                # 2. Same physical GPU (if switching from full GPU to MIG)
+
+                if mig_id in state['gpus']:
+                    # Exact MIG ID match - keep allocation
+                    new_gpus[mig_id] = state['gpus'][mig_id]
+                    # Update metadata in case profile changed
+                    new_gpus[mig_id]['device_id'] = mig.get('device_id', '0')
+                    new_gpus[mig_id]['uuid'] = mig.get('uuid', '')
+                    new_gpus[mig_id]['profile'] = mig.get('profile', 'unknown')
+                    new_gpus[mig_id]['docker_id'] = mig.get('docker_id', mig_id)
+                    new_gpus[mig_id]['type'] = 'mig_instance'
+                    new_gpus[mig_id]['physical_gpu'] = physical_gpu
+
+                    if new_gpus[mig_id]['containers']:
+                        migrated_containers.extend(new_gpus[mig_id]['containers'])
+
+                elif not state_was_mig and physical_gpu in state['gpus']:
+                    # Full GPU -> MIG: Try to migrate containers from physical GPU
+                    # Only migrate to the first MIG instance of that GPU
+                    if not any(g.get('physical_gpu') == physical_gpu for g in new_gpus.values()):
+                        new_gpus[mig_id] = state['gpus'][physical_gpu].copy()
+                        new_gpus[mig_id]['type'] = 'mig_instance'
+                        new_gpus[mig_id]['physical_gpu'] = physical_gpu
+                        new_gpus[mig_id]['device_id'] = mig.get('device_id', '0')
+                        new_gpus[mig_id]['uuid'] = mig.get('uuid', '')
+                        new_gpus[mig_id]['profile'] = mig.get('profile', 'unknown')
+                        new_gpus[mig_id]['docker_id'] = mig.get('docker_id', mig_id)
+
+                        if new_gpus[mig_id]['containers']:
+                            migrated_containers.extend(new_gpus[mig_id]['containers'])
+                            print(f"  Migrated containers from GPU {physical_gpu} to MIG {mig_id}", file=sys.stderr)
+                    else:
+                        # Create empty MIG instance
+                        new_gpus[mig_id] = {
+                            "type": "mig_instance",
+                            "physical_gpu": physical_gpu,
+                            "device_id": mig.get('device_id', '0'),
+                            "uuid": mig.get('uuid', ''),
+                            "profile": mig.get('profile', 'unknown'),
+                            "docker_id": mig.get('docker_id', mig_id),
+                            "containers": [],
+                            "users": {},
+                            "reserved_until": None,
+                            "reserved_for": None
+                        }
+                else:
+                    # New MIG instance with no previous allocation
+                    new_gpus[mig_id] = {
+                        "type": "mig_instance",
+                        "physical_gpu": physical_gpu,
+                        "device_id": mig.get('device_id', '0'),
+                        "uuid": mig.get('uuid', ''),
+                        "profile": mig.get('profile', 'unknown'),
+                        "docker_id": mig.get('docker_id', mig_id),
+                        "containers": [],
+                        "users": {},
+                        "reserved_until": None,
+                        "reserved_for": None
+                    }
+
+            # Identify orphaned allocations
+            orphaned = state_gpu_ids - current_gpu_ids
+            if orphaned:
+                print(f"\nOrphaned Allocations:", file=sys.stderr)
+                for gpu_id in orphaned:
+                    containers = state['gpus'][gpu_id].get('containers', [])
+                    if containers:
+                        orphaned_containers.extend(containers)
+                        print(f"  GPU {gpu_id}: {', '.join(containers)}", file=sys.stderr)
+
+                if orphaned_containers and not migrated_containers:
+                    print(f"\n⚠️  WARNING: {len(orphaned_containers)} container(s) lost GPU allocation!", file=sys.stderr)
+                    print(f"  Affected containers: {', '.join(orphaned_containers)}", file=sys.stderr)
+                    print(f"  Action required: Stop and recreate these containers", file=sys.stderr)
+
+            state['gpus'] = new_gpus
+            state['mig_enabled'] = True
+
+            change_desc = {
+                'type': change_type,
+                'migrated': migrated_containers,
+                'orphaned': orphaned_containers,
+                'new_instances': len(new_gpus)
+            }
+
+            print(f"\n{'='*60}\n", file=sys.stderr)
+            return False, state, change_desc
+
+        else:
+            # System is in non-MIG mode
+            try:
+                result = subprocess.run(
+                    ['nvidia-smi', '--query-gpu=index', '--format=csv,noheader'],
+                    capture_output=True, text=True, check=True
+                )
+                gpu_count = len(result.stdout.strip().split('\n'))
+                current_gpu_ids = set(str(i) for i in range(gpu_count))
+            except:
+                # Can't detect GPUs - keep current state
+                return True, state, None
+
+            if state_gpu_ids == current_gpu_ids and not state_was_mig:
+                return True, state, None
+
+            # GPU configuration changed (MIG -> Full or count changed)
+            change_type = "MIG_TO_FULL_GPU" if state_was_mig else "GPU_COUNT_CHANGED"
+
+            print(f"\n{'='*60}", file=sys.stderr)
+            print(f"GPU Configuration Change Detected: {change_type}", file=sys.stderr)
+            print(f"Previous: {len(state_gpu_ids)} {'MIG instances' if state_was_mig else 'GPUs'}", file=sys.stderr)
+            print(f"Current:  {len(current_gpu_ids)} full GPUs", file=sys.stderr)
+            print(f"{'='*60}\n", file=sys.stderr)
+
+            new_gpus = {}
+            migrated_containers = []
+            orphaned_containers = []
+
+            for i in range(gpu_count):
+                gpu_id = str(i)
+
+                if gpu_id in state['gpus']:
+                    # GPU ID still exists
+                    new_gpus[gpu_id] = state['gpus'][gpu_id].copy()
+                    new_gpus[gpu_id]['type'] = 'physical_gpu'
+                    # Remove MIG-specific fields
+                    new_gpus[gpu_id].pop('physical_gpu', None)
+                    new_gpus[gpu_id].pop('device_id', None)
+                    new_gpus[gpu_id].pop('uuid', None)
+                    new_gpus[gpu_id].pop('profile', None)
+                    new_gpus[gpu_id].pop('docker_id', None)
+
+                    if new_gpus[gpu_id]['containers']:
+                        migrated_containers.extend(new_gpus[gpu_id]['containers'])
+
+                elif state_was_mig:
+                    # MIG -> Full GPU: Try to migrate containers from MIG instances of this GPU
+                    mig_pattern = f"{gpu_id}."
+                    matching_migs = [k for k in state['gpus'].keys() if k.startswith(mig_pattern)]
+
+                    if matching_migs:
+                        # Merge all MIG instances' containers onto this full GPU
+                        merged_containers = []
+                        merged_users = {}
+
+                        for mig_id in matching_migs:
+                            merged_containers.extend(state['gpus'][mig_id].get('containers', []))
+                            for user, count in state['gpus'][mig_id].get('users', {}).items():
+                                merged_users[user] = merged_users.get(user, 0) + count
+
+                        new_gpus[gpu_id] = {
+                            "type": "physical_gpu",
+                            "containers": merged_containers,
+                            "users": merged_users,
+                            "reserved_until": None,
+                            "reserved_for": None
+                        }
+
+                        if merged_containers:
+                            migrated_containers.extend(merged_containers)
+                            print(f"  Migrated {len(merged_containers)} container(s) from MIG instances to GPU {gpu_id}", file=sys.stderr)
+                    else:
+                        # New GPU
+                        new_gpus[gpu_id] = {
+                            "type": "physical_gpu",
+                            "containers": [],
+                            "users": {},
+                            "reserved_until": None,
+                            "reserved_for": None
+                        }
+                else:
+                    # New GPU
+                    new_gpus[gpu_id] = {
+                        "type": "physical_gpu",
+                        "containers": [],
+                        "users": {},
+                        "reserved_until": None,
+                        "reserved_for": None
+                    }
+
+            # Identify orphaned allocations
+            orphaned = state_gpu_ids - current_gpu_ids
+            if orphaned:
+                print(f"\nOrphaned Allocations:", file=sys.stderr)
+                for gpu_id in orphaned:
+                    containers = state['gpus'][gpu_id].get('containers', [])
+                    if containers:
+                        orphaned_containers.extend(containers)
+                        print(f"  GPU {gpu_id}: {', '.join(containers)}", file=sys.stderr)
+
+            state['gpus'] = new_gpus
+            state['mig_enabled'] = False
+
+            change_desc = {
+                'type': change_type,
+                'migrated': migrated_containers,
+                'orphaned': orphaned_containers,
+                'new_gpus': len(new_gpus)
+            }
+
+            print(f"\n{'='*60}\n", file=sys.stderr)
+            return False, state, change_desc
+
     def _initialize_state(self):
         """Initialize GPU state file with detected GPUs/MIG instances"""
         # Detect physical GPUs
@@ -106,7 +401,10 @@ class GPUAllocationManager:
                 mig['id']: {
                     "type": "mig_instance",
                     "physical_gpu": mig['physical_gpu'],
-                    "mig_instance": mig['mig_instance'],
+                    "device_id": mig.get('device_id', '0'),
+                    "uuid": mig.get('uuid', ''),
+                    "profile": mig.get('profile', 'unknown'),
+                    "docker_id": mig.get('docker_id', mig['id']),
                     "containers": [],
                     "users": {},
                     "reserved_until": None,
@@ -137,9 +435,26 @@ class GPUAllocationManager:
             json.dump(state, f, indent=2)
     
     def _load_state(self) -> dict:
-        """Load current GPU state"""
+        """Load current GPU state and validate against hardware"""
         with open(self.state_file, 'r') as f:
-            return json.load(f)
+            state = json.load(f)
+
+        # Validate and update state if hardware configuration changed
+        is_valid, state, change_desc = self._validate_and_update_state(state)
+
+        if not is_valid and change_desc:
+            # Configuration changed - save updated state
+            self._save_state(state)
+
+            # Log the change
+            self._log_event(
+                "CONFIG_CHANGE",
+                "system",
+                "gpu_allocator",
+                reason=f"{change_desc['type']}: {len(change_desc.get('migrated', []))} migrated, {len(change_desc.get('orphaned', []))} orphaned"
+            )
+
+        return state
     
     def _save_state(self, state: dict):
         """Save GPU state"""
@@ -471,12 +786,18 @@ class GPUAllocationManager:
         from datetime import timedelta
 
         def parse_duration(duration_str: str) -> Optional[timedelta]:
-            """Parse duration string like '24h', '48h', '1d' to timedelta"""
+            """Parse duration string like '24h', '0.5h', '1d' to timedelta"""
             if not duration_str or duration_str == "null" or duration_str == "indefinite":
                 return None
 
             duration_str = duration_str.strip().lower()
-            value = int(''.join(c for c in duration_str if c.isdigit()))
+
+            # Extract numeric value (supporting decimals)
+            import re
+            match = re.search(r'([\d.]+)', duration_str)
+            if not match:
+                return None
+            value = float(match.group(1))
 
             if 'h' in duration_str:
                 return timedelta(hours=value)
@@ -534,14 +855,10 @@ class GPUAllocationManager:
                 if username and user != username:
                     continue
 
-                # Skip if container not stopped
-                if not stopped_at_str:
-                    continue
-
-                # Check if container actually exists and is stopped
+                # Check if container actually exists and get its state
                 try:
                     result = subprocess.run(
-                        ['docker', 'inspect', '--format', '{{.State.Running}}', container],
+                        ['docker', 'inspect', '--format', '{{.State.Status}}', container],
                         capture_output=True, text=True
                     )
                     if result.returncode != 0:
@@ -550,12 +867,23 @@ class GPUAllocationManager:
                         released.append((container, f"Container no longer exists"))
                         continue
 
-                    is_running = result.stdout.strip() == 'true'
-                    if is_running:
-                        # Container is running again - clear stopped timestamp
-                        metadata.pop("stopped_at", None)
+                    container_status = result.stdout.strip()
+
+                    # If container is running, clear stopped timestamp
+                    if container_status == 'running':
+                        if stopped_at_str:
+                            metadata.pop("stopped_at", None)
+                            with open(metadata_file, 'w') as f:
+                                json.dump(metadata, f, indent=2)
+                        continue
+
+                    # Container is not running (created, exited, stopped, paused, etc.)
+                    # Set stopped_at timestamp if not already set
+                    if not stopped_at_str:
+                        metadata["stopped_at"] = now.isoformat()
                         with open(metadata_file, 'w') as f:
                             json.dump(metadata, f, indent=2)
+                        # Just marked as stopped - don't release yet
                         continue
 
                 except Exception:
@@ -630,6 +958,9 @@ class GPUAllocationManager:
                 "id": gpu_id,
                 "type": gpu_info.get("type", "physical_gpu"),
                 "physical_gpu": physical_gpu if "physical_gpu" in gpu_info else gpu_id,
+                "profile": gpu_info.get("profile", ""),
+                "uuid": gpu_info.get("uuid", ""),
+                "device_id": gpu_info.get("device_id", ""),
                 "container_count": container_count,
                 "containers": containers,
                 "users": gpu_info.get("users", {}),
@@ -643,6 +974,95 @@ class GPUAllocationManager:
             })
         
         return status
+
+    def sync_with_running_containers(self) -> Dict[str, str]:
+        """
+        Sync GPU allocator state with running containers.
+        Detects containers with GPU assignments that aren't tracked.
+        Returns dict of synced containers: {container_name: gpu_id}
+        """
+        synced = {}
+
+        try:
+            # Get all running DS01-managed containers
+            result = subprocess.run(
+                ['docker', 'ps', '--filter', 'label=aime.mlc.DS01_MANAGED=true', '--format', '{{.Names}}'],
+                capture_output=True, text=True, check=True
+            )
+
+            running_containers = [name.strip() for name in result.stdout.strip().split('\n') if name.strip()]
+
+            state = self._load_state()
+
+            for container in running_containers:
+                # Check if already tracked
+                already_tracked = False
+                for gpu_id, gpu_info in state['gpus'].items():
+                    if container in gpu_info.get('containers', []):
+                        already_tracked = True
+                        break
+
+                if already_tracked:
+                    continue
+
+                # Get GPU assignment from container
+                result = subprocess.run(
+                    ['docker', 'inspect', container, '--format', '{{index .Config.Labels "aime.mlc.GPUS"}}'],
+                    capture_output=True, text=True
+                )
+
+                if result.returncode != 0:
+                    continue
+
+                gpu_assignment = result.stdout.strip()
+
+                if not gpu_assignment or gpu_assignment == '<no value>':
+                    continue
+
+                # Parse GPU assignment (e.g., "device=2" or "MIG-uuid")
+                gpu_id = None
+
+                if gpu_assignment.startswith('device='):
+                    # Old style: device=0, device=2
+                    physical_gpu = gpu_assignment.split('=')[1]
+                    gpu_id = physical_gpu
+                elif gpu_assignment.startswith('MIG-'):
+                    # New style: MIG UUID
+                    # Find which MIG instance has this UUID
+                    for gid, ginfo in state['gpus'].items():
+                        if ginfo.get('uuid') == gpu_assignment:
+                            gpu_id = gid
+                            break
+
+                if gpu_id and gpu_id in state['gpus']:
+                    # Add container to GPU state
+                    if container not in state['gpus'][gpu_id]['containers']:
+                        state['gpus'][gpu_id]['containers'].append(container)
+
+                    # Get user from container
+                    user_result = subprocess.run(
+                        ['docker', 'inspect', container, '--format', '{{index .Config.Labels "aime.mlc.USER"}}'],
+                        capture_output=True, text=True
+                    )
+
+                    if user_result.returncode == 0:
+                        user = user_result.stdout.strip()
+                        if user and user != '<no value>':
+                            users_dict = state['gpus'][gpu_id].get('users', {})
+                            users_dict[user] = users_dict.get(user, 0) + 1
+                            state['gpus'][gpu_id]['users'] = users_dict
+
+                    synced[container] = gpu_id
+
+            # Save updated state
+            if synced:
+                self._save_state(state)
+
+            return synced
+
+        except Exception as e:
+            print(f"Error syncing containers: {e}", file=sys.stderr)
+            return {}
 
 
 def main():
@@ -659,6 +1079,7 @@ def main():
         print("  release-stale [user]                      - Release stale GPU allocations (optional: for specific user)")
         print("  user-status <user>                        - Show user's allocations")
         print("  user-count <user>                         - Show GPU count for user")
+        print("  sync                                      - Sync allocator with running containers")
         sys.exit(1)
     
     manager = GPUAllocationManager()
@@ -733,6 +1154,16 @@ def main():
                 print(f"  {container}: {reason}")
         else:
             print("\n✓ No stale allocations found")
+
+    elif command == "sync":
+        synced = manager.sync_with_running_containers()
+
+        if synced:
+            print(f"\n✓ Synced {len(synced)} container(s) with GPU allocator:\n")
+            for container, gpu_id in synced.items():
+                print(f"  {container} → GPU/MIG {gpu_id}")
+        else:
+            print("\n✓ All running containers already tracked (or none have GPUs)")
 
     else:
         print("Invalid command")

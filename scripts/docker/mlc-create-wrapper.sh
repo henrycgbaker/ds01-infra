@@ -301,21 +301,41 @@ log_info "Creating container '$CONTAINER_NAME' for user '$CURRENT_USER'"
 log_info "Framework: $FRAMEWORK ${VERSION:+v$VERSION}"
 log_info "Workspace: $WORKSPACE_DIR"
 
-# Get user's resource limits
+# Get user's resource limits and group
 if [ -f "$RESOURCE_PARSER" ] && [ -f "$CONFIG_FILE" ]; then
     log_info "Loading resource limits from configuration..."
     RESOURCE_LIMITS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --docker-args 2>/dev/null)
-    
+    USER_GROUP=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --group 2>/dev/null || echo "student")
+
     if [ $? -eq 0 ] && [ -n "$RESOURCE_LIMITS" ]; then
         log_info "Resource limits applied:"
         echo "$RESOURCE_LIMITS" | tr ' ' '\n' | sed 's/^/  /'
     else
         log_warning "Could not parse resource limits, using defaults"
         RESOURCE_LIMITS="--cpus=16 --memory=32g --memory-swap=32g --shm-size=16g --pids-limit=4096"
+        USER_GROUP="student"
     fi
 else
     log_warning "Resource configuration not found, using defaults"
     RESOURCE_LIMITS="--cpus=16 --memory=32g --memory-swap=32g --shm-size=16g --pids-limit=4096"
+    USER_GROUP="student"
+fi
+
+# Ensure user-specific cgroup slice exists
+USER_SLICE_SCRIPT="$SCRIPT_DIR/../system/create-user-slice.sh"
+if [ -f "$USER_SLICE_SCRIPT" ]; then
+    log_info "Ensuring user slice exists: ds01-${USER_GROUP}-${CURRENT_USER}.slice"
+    if sudo "$USER_SLICE_SCRIPT" "$USER_GROUP" "$CURRENT_USER" 2>/dev/null; then
+        log_info "User slice ready"
+    else
+        log_warning "Could not create user slice (will use group slice instead)"
+        # Fall back to group slice if user slice creation fails
+        RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${CURRENT_USER}.slice/ds01-${USER_GROUP}.slice/")
+    fi
+else
+    log_warning "User slice script not found, using group slice"
+    # Fall back to group slice
+    RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${CURRENT_USER}.slice/ds01-${USER_GROUP}.slice/")
 fi
 
 # GPU allocation via gpu_allocator.py (DS01 priority-based allocation)
