@@ -449,7 +449,7 @@ fi
 # Add resource limits that must be set at creation time (DS01 patch)
 if [ -n "$SHM_SIZE" ]; then
     MLC_ARGS="$MLC_ARGS --shm-size=$SHM_SIZE"
-    log_info "Setting shm-size: $SHM_SIZE (at creation)"
+    log_info "Setting shm-size: $SHM_SIZE"
 fi
 
 if [ -n "$CGROUP_PARENT" ]; then
