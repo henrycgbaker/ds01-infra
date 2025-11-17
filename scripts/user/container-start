@@ -71,7 +71,6 @@ usage() {
     echo "  container-start"
     echo ""
     echo -e "${YELLOW}💡 Tip:${NC}"
-    echo -e "  • This command uses AIME's ${GREEN}mlc-start${NC} for starting containers"
     echo -e "  • To start AND enter: ${GREEN}container-run <name>${NC}"
     echo -e "  • To check status: ${GREEN}container-list${NC}"
     echo ""
@@ -110,7 +109,7 @@ start_container() {
     # Check if mlc-start exists
     if [ ! -f "$MLC_START" ]; then
         # Fallback to docker start
-        echo -e "${CYAN}Starting container...${NC}"
+        echo -e "${CYAN}Starting container...${NC}\n"
         if docker start "$container_tag" > /dev/null 2>&1; then
             echo -e "${GREEN}✓${NC} Container started"
             return 0
@@ -123,7 +122,7 @@ start_container() {
     # Start container via mlc-start (AIME Tier 1)
     echo -e "${CYAN}Starting container...${NC}"
     if bash "$MLC_START" "$container_name" -s > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Container started (via mlc-start)"
+        echo -e "${GREEN}✓${NC} Container started"
         return 0
     else
         # Fallback to docker start
@@ -169,15 +168,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${CYAN}${BOLD}    Starting Container${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 # Show guided explanation BEFORE selection
 if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
-    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
-
     echo -e "${CYAN}ℹ ${NC}${BOLD}What does starting mean?${NC}"
+    echo ""
     echo -e "  Starting a container resumes it from a stopped state."
     echo -e "  This will:"
     echo -e "  • Allocate necessary resources (CPU, GPU, memory)"
@@ -188,19 +187,6 @@ if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
     echo ""
     echo -e "  ${YELLOW}Note:${NC} This ${BOLD}does not${NC} automatically connect you to the container."
     echo -e "  To enter the container, use: ${GREEN}container-run <name>${NC}"
-    echo ""
-    echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
-    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
-        echo -e "  • Idle timeout: ${CYAN}$idle_timeout${NC} (auto-stop after GPU idle)"
-    fi
-    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
-        echo -e "  • Max runtime: ${CYAN}$max_runtime${NC}"
-    fi
-    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
-        echo -e "  • GPU hold after stop: ${CYAN}$gpu_hold${NC} (restart window)"
-    elif [ "$gpu_hold" = "indefinite" ]; then
-        echo -e "  • GPU held indefinitely until cleanup"
-    fi
     echo ""
 fi
 
@@ -227,6 +213,23 @@ if start_container "$CONTAINER_NAME"; then
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}    ✓ Container Started${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
+
+
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        echo -e "  • Max continuous runtime: ${CYAN}$max_runtime${NC}"
+    fi
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        echo -e "  • Idle timeout: ${CYAN}$idle_timeout${NC} ${DIM}(auto-stop after GPU idle)${NC}"
+    fi
+    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
+        echo -e "  • Restart window: ${CYAN}$gpu_hold${NC} ${DIM}(GPU hold after stop)${NC}"
+    elif [ "$gpu_hold" = "indefinite" ]; then
+        echo -e "  • GPU held indefinitely until cleanup"
+    fi
+    echo ""
 
     echo -e "${BOLD}Next Steps:${NC}"
     echo -e "  • Enter container: ${GREEN}container-run $CONTAINER_NAME${NC}"

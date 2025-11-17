@@ -389,7 +389,8 @@ Creating container via mlc-create-wrapper...
             - e.g. as a warning message when a user ties to restart an old container and (if resource no longer available) they get a resource allocation problem notification -> instructs them to remove container and recreate it.
             - or add in a --rm flag into the docker call? or does this stop it being interactive?
         - SLURM / K8s?
-
+    - [ ] "Stopping gracefully (timeout: 10s)..." -> is it actually stoppin gthem properly? or is it timeout-ing. 
+        - add GPU release info messages (if that's what's happening?) because i thought it wasn't initially releaseing the gpu at stop, but then you look at ds01 dashboard and it seems ther are 
 
 ### Container-cleanup
 - [x] container-cleanup → calls mlc-remove + GPU cleanup ==> need to check this GPU cleanup logic is safe!
@@ -397,7 +398,7 @@ Creating container via mlc-create-wrapper...
     - container cleanup --volumes => goes to GUI to select stopped containers, instead get it to open up all volumes to select (gracefully loop back after each deletion, to be able to reselect more)
     - container cleanup --volumes --all => first deletes containers, THEN deletes volumes (change it to only delete volumes)
     - also when deleting all (container cleanup --volumes --all), list the found volumes (and their number) first, so user can confirm to continue or not
-- [ ] REFACTOR BUIT FIRST CHECK WHAT'S THERE & HOW IT BEHAVES
+- [ ] REFACTOR BUT FIRST CHECK WHAT'S THERE & HOW IT BEHAVES
     - keep `container stop` as is 
     - then `container cleanup` -> `container remove` (rename all scripts cmd aliases, dependencies etc),
     - `container remove` with arguments -> acts directly as a script (e.g. <container-name> --images --volumes)

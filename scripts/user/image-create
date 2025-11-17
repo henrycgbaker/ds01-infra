@@ -41,11 +41,11 @@ usage() {
     echo "  jax          JAX + CUDA"
     echo ""
     echo -e "${CYAN}Use Case Types:${NC}"
-    echo "  cv       Computer Vision (includes: timm, albumentations, opencv)"
-    echo "  nlp      Natural Language Processing (includes: transformers, datasets)"
-    echo "  rl       Reinforcement Learning (includes: gymnasium, stable-baselines3)"
-    echo "  ml       General ML (scikit-learn, xgboost, lightgbm)"
-    echo "  custom   Specify all packages manually"
+    echo -e "  cv       Computer Vision ${DIM}(incl: timm, albumentations, opencv)${NC}"
+    echo -e "  nlp      Natural Language Processing ${DIM}(incl: transformers, datasets)${NC}"
+    echo -e "  rl       Reinforcement Learning ${DIM}(incl: gymnasium, stable-baselines3)${NC}"
+    echo -e "  ml       General ML ${DIM}(incl scikit-learn, xgboost, lightgbm)${NC}"
+    echo -e "  custom   Specify all packages manually"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  image-create my-cv-project                    # Interactive mode"
@@ -67,26 +67,12 @@ show_base_image_packages() {
 
     echo -e "${CYAN}━━━ AIME Base Image Packages ━━━${NC}"
     echo ""
-    echo -e "${BOLD}Pre-installed in $base_image:${NC}"
-    echo ""
-
+    echo -e "${BOLD}Pre-installed in ${CYAN}$base_image:${NC}{NC}:"
     # Key packages that are consistent across AIME images
-    echo -e "  ${BOLD}Framework:${NC}"
-    echo "    • torch, torchvision, torchaudio (PyTorch ecosystem)"
-    echo ""
-    echo -e "  ${BOLD}Core Scientific Computing:${NC}"
-    echo "    • numpy (arrays & numerical computing)"
-    echo "    • pillow (image processing)"
-    echo ""
-    echo -e "  ${BOLD}Utilities:${NC}"
-    echo "    • conda (package management)"
-    echo "    • ipython (interactive shell)"
-    echo "    • psutil (system monitoring)"
-    echo "    • tqdm (progress bars)"
-    echo ""
-    echo -e "  ${BOLD}CUDA & GPU:${NC}"
-    echo "    • CUDA 12.6.3, cuDNN, NCCL"
-    echo "    • nvidia-* packages (10+ CUDA dependencies)"
+    echo -e "  ${BOLD}Nvidia GPU libs:${NC} CUDA 12.6.3, cuDNN, NCCL, nvidia-* packages (10+ CUDA dependencies)"
+    echo -e "  ${BOLD}DL Frameworks:${NC} torch, torchvision, torchaudio (PyTorch ecosystem)"
+    echo -e "  ${BOLD}Core Scientific Computing:${NC} numpy & pillow"
+    echo -e "  ${BOLD}Utilities:${NC}: conda, ipython, psutil, tqdm"
     echo ""
     echo -e "${YELLOW}💡 Note:${NC} AIME base images are framework-focused (133 packages total)."
     echo "    They include the ML framework + CUDA, but NOT data science packages."
@@ -340,7 +326,9 @@ interactive_mode() {
         fi
     fi
 
-    echo -e "\n${BOLD}Image will be named: ${CYAN}${FULL_IMAGE_NAME}:latest${NC}\n"
+    echo -e "${BOLD}Image repo will be named: ${CYAN}${IMAGE_NAME}${NC}\n"
+    echo -e "${DIM}The full image reference is given by "{namespace}/{repo_name}:{tag}": ${CYAN}${FULL_IMAGE_NAME}:latest${NC}"
+    echo -e "${DIM}Here, the {namespace} is given by 'ds01-{user-id}', and we apply a default tag 'latest'.${NC}\n"
 
     # Framework
     if [ -z "$FRAMEWORK" ]; then
@@ -586,11 +574,11 @@ interactive_mode() {
         fi
 
         echo -e "${BOLD}Select use case (additional domain-specific packages):${NC}"
-        echo -e "  ${BOLD}1)${NC} General ML (xgboost, lightgbm, catboost, optuna) (${GREEN}default${NC})"
-        echo -e "  ${BOLD}2)${NC} Computer Vision (timm, albumentations, opencv)"
-        echo -e "  ${BOLD}3)${NC} NLP (transformers, datasets, tokenizers)"
-        echo -e "  ${BOLD}4)${NC} Reinforcement Learning (gymnasium, stable-baselines3)"
-        echo -e "  ${BOLD}5)${NC} Custom - specify packages manually"
+        echo -e "  ${BOLD}1)${NC} General ML ${DIM}(xgboost, lightgbm, catboost, optuna)${NC} (${GREEN}default${NC})"
+        echo -e "  ${BOLD}2)${NC} Computer Vision ${DIM}(timm, albumentations, opencv)${NC}"
+        echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, datasets, tokenizers)${NC}"
+        echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
+        echo -e "  ${BOLD}5)${NC} Custom (${DIM}specify packages manually${NC}"
         echo ""
         read -p "Choice [1-5, default: 1]: " UC_CHOICE
 
@@ -1111,9 +1099,16 @@ fi
 check_user_limits
 
 # Create Dockerfile
-echo -e "\n${CYAN}Creating Dockerfile...${NC}"
+echo -e "${CYAN}Creating Dockerfile...${NC}\n"
+
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ Phase 1/2: Complete${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
 DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$JUPYTER_CHOICE" "$CUSTOM_JUPYTER_PACKAGES" "$DATA_SCIENCE_CHOICE" "$CUSTOM_DS_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES")
 echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
+
 
 # Guided explanation of Dockerfile
 if [ "$GUIDED" = true ]; then
@@ -1139,15 +1134,6 @@ if [ "$GUIDED" = true ]; then
     echo -e "Then rebuild with: ${GREEN}image-update $FULL_IMAGE_NAME${NC}"
     echo ""
 fi
-
-# Phase 1: Dockerfile Created ✓
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Phase 1/2: Dockerfile Created${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "Location: ${BLUE}$DOCKERFILE${NC}"
-echo ""
 
 # Phase 2: Build Image?
 BUILD_IMAGE=true
@@ -1215,10 +1201,12 @@ INFOEOF
 
         echo ""
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}${BOLD}✓ Phase 2/2: Docker Image Built${NC}"
+        echo -e "${GREEN}${BOLD}✓ Phase 2/2: Image Built Successfully${NC}"
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
-        echo -e "${BOLD}{Namespace}/{Image}:{Tag}:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}"
+        echo -e "${BOLD}Image reference:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}\n"
+        echo -e "${DIM}Metadata saved to:${NC} ${BLUE}$HOME/ds01-config/images/${METADATA_FILE}.info${NC}"
+        echo -e "${DIM}Dockerfile location:${NC} ${BLUE}$DOCKERFILE${NC}"
         echo ""
 
         if [ "$GUIDED" = true ]; then
@@ -1248,8 +1236,6 @@ if [ "$IMAGE_BUILT" = true ]; then
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}✓ Image Built Successfully${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "${BOLD}{Namespace}/{Image}:{Tag}:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}"
     echo ""
 
     if [ "$GUIDED" = true ]; then
