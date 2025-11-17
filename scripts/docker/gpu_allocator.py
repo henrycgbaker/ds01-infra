@@ -663,7 +663,18 @@ class GPUAllocationManager:
         
         return None
     
-    def allocate_gpu(self, username: str, container: str, max_gpus: int, 
+    def get_docker_id(self, gpu_id: str) -> str:
+        """
+        Get Docker-compatible device ID for a given GPU/MIG ID.
+        For MIG instances, returns UUID. For physical GPUs, returns gpu_id.
+        """
+        state = self._load_state()
+        if gpu_id in state["gpus"]:
+            # Return docker_id if available (MIG UUID), otherwise return gpu_id
+            return state["gpus"][gpu_id].get("docker_id", gpu_id)
+        return gpu_id
+
+    def allocate_gpu(self, username: str, container: str, max_gpus: int,
                      priority: int, strategy: str = "least_allocated") -> Tuple[Optional[str], str]:
         """
         Allocate GPU/MIG instance to a container (dynamic, priority-aware)
@@ -1108,9 +1119,13 @@ def main():
 
         gpu_id, reason = manager.allocate_gpu(user, container, max_gpus, priority)
         if gpu_id and reason not in ["ALREADY_ALLOCATED", "USER_AT_LIMIT"]:
+            docker_id = manager.get_docker_id(gpu_id)
             print(f"✓ Allocated GPU/MIG {gpu_id} to {container}")
+            print(f"DOCKER_ID={docker_id}")  # For mlc-create-wrapper parsing
         elif reason == "ALREADY_ALLOCATED":
+            docker_id = manager.get_docker_id(gpu_id)
             print(f"⚠ Container {container} already has GPU/MIG {gpu_id} allocated")
+            print(f"DOCKER_ID={docker_id}")  # For mlc-create-wrapper parsing
         else:
             print(f"✗ Allocation failed: {reason}")
     

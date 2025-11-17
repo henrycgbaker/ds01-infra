@@ -88,9 +88,10 @@ done
 # Custom select_image function that filters by user's images
 select_user_image() {
     local images=()
+    local user_id=$(id -u)
 
-    # Get user's images using maintainer label (same as image-list)
-    mapfile -t images < <(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" 2>/dev/null | grep -v "^<none>$" | sort -u)
+    # Get user's images using DS01 naming pattern (same as image-list)
+    mapfile -t images < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$user_id/" | grep -v "^<none>$" | sort -u)
 
     # Check if we found any images
     if [ ${#images[@]} -eq 0 ]; then
@@ -145,10 +146,12 @@ fi
 # Function to delete a single image
 delete_single_image() {
     local IMAGE_NAME="$1"
+    local USER_ID=$(id -u)
 
-    # Add username prefix if not present
-    if [[ ! "$IMAGE_NAME" =~ ^${USERNAME}- ]]; then
-        IMAGE_NAME="${USERNAME}-${IMAGE_NAME}"
+    # Convert to new naming format if needed
+    if [[ ! "$IMAGE_NAME" =~ ^ds01- ]]; then
+        # Add DS01 prefix: ds01-{user-id}/{project}
+        IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
     fi
 
     # Check if image exists
@@ -235,8 +238,13 @@ if docker rmi "$IMAGE_NAME"; then
 
     # Handle Dockerfile
     DOCKERFILES_DIR="$HOME/dockerfiles"
-    DOCKERFILE="$DOCKERFILES_DIR/${IMAGE_NAME}.Dockerfile"
-    INFO_FILE="$HOME/ds01-config/images/${IMAGE_NAME}.info"
+    # Extract project name from image (ds01-1001/my-project → my-project)
+    PROJECT_NAME="${IMAGE_NAME##*/}"
+    DOCKERFILE="$DOCKERFILES_DIR/${PROJECT_NAME}.Dockerfile"
+
+    # Sanitize metadata filename (replace / with _)
+    METADATA_FILE=$(echo "$IMAGE_NAME" | tr '/' '_')
+    INFO_FILE="$HOME/ds01-config/images/${METADATA_FILE}.info"
 
     # Check info file for custom Dockerfile location
     if [ -f "$INFO_FILE" ]; then
@@ -246,10 +254,11 @@ if docker rmi "$IMAGE_NAME"; then
 
     if [ "$KEEP_DOCKERFILE" = false ]; then
         if [ -f "$DOCKERFILE" ]; then
-            # Create backup
+            # Create backup (sanitize filename)
             BACKUP_DIR="$HOME/ds01-config/images/deleted"
             mkdir -p "$BACKUP_DIR"
-            BACKUP_FILE="$BACKUP_DIR/${IMAGE_NAME}-$(date +%Y%m%d-%H%M%S).Dockerfile"
+            BACKUP_NAME=$(echo "$IMAGE_NAME" | tr '/' '_')
+            BACKUP_FILE="$BACKUP_DIR/${BACKUP_NAME}-$(date +%Y%m%d-%H%M%S).Dockerfile"
 
             cp "$DOCKERFILE" "$BACKUP_FILE"
             rm "$DOCKERFILE"
@@ -272,7 +281,7 @@ if docker rmi "$IMAGE_NAME"; then
     fi
 
     # Show final status
-    REMAINING=$(docker images --format "{{.Repository}}" --filter "reference=${USERNAME}-*" | wc -l)
+    REMAINING=$(docker images --format "{{.Repository}}" | grep "^ds01-$USER_ID/" | wc -l)
     echo -e "${BOLD}Summary:${NC}"
     echo "  Deleted:   $IMAGE_NAME"
     echo "  Freed:     $SIZE"
@@ -315,7 +324,8 @@ for IMAGE_NAME in "${IMAGE_NAMES[@]}"; do
         DELETED_COUNT=$((DELETED_COUNT + 1))
     else
         # Check if it was skipped (not found) or failed (error during deletion)
-        if ! docker images --format "{{.Repository}}" | grep -q "^${USERNAME}-${IMAGE_NAME}$" && \
+        local USER_ID=$(id -u)
+        if ! docker images --format "{{.Repository}}" | grep -q "^ds01-${USER_ID}/${IMAGE_NAME}$" && \
            ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
         else

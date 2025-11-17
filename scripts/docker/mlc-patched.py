@@ -1555,13 +1555,22 @@ def build_docker_create_command(
     bash_command = ' '.join(bash_lines)
 
     # Assemble full command
+    # DS01 PATCH: Handle custom images that already have tags (e.g., ds01-1001/test:latest)
+    # Don't append container_tag if image already has a tag (contains ':')
+    if ':' in selected_docker_image:
+        # Custom image with explicit tag - use as-is
+        image_with_tag = selected_docker_image
+    else:
+        # AIME base image - append container_tag
+        image_with_tag = f'{selected_docker_image}:{container_tag}'
+
     if 'CUDA' in architecture:
         docker_cmd = base_docker_cmd + cuda_extras + [
-            f'{selected_docker_image}:{container_tag}', 'bash', '-c', bash_command
+            image_with_tag, 'bash', '-c', bash_command
         ]
     elif 'ROCM' in architecture:
         docker_cmd = base_docker_cmd + rocm_extras + [
-            f'{selected_docker_image}:{container_tag}', 'bash', '-c', bash_command
+            image_with_tag, 'bash', '-c', bash_command
         ]
     else:
         raise ValueError(f"Unsupported architecture: {architecture}")
@@ -2049,8 +2058,17 @@ def main():
                 cgroup_parent=getattr(args, 'cgroup_parent', None)  # DS01 PATCH
             )
             
-            # ToDo: compare subprocess.Popen with subprocess.run  
+            # ToDo: compare subprocess.Popen with subprocess.run
             result_create_cmd = subprocess.run(docker_create_cmd, capture_output= True, text=True)
+
+            # DS01 PATCH: Check if container creation succeeded
+            if result_create_cmd.returncode != 0:
+                print(f"\n{ERROR}Error creating container:{RESET}")
+                if result_create_cmd.stderr:
+                    print(result_create_cmd.stderr)
+                if result_create_cmd.stdout:
+                    print(result_create_cmd.stdout)
+                sys.exit(1)
 
             print(f"\n{INPUT}[{validated_container_name}]{RESET} ready.{INFO}\n\nOpen the container with:{RESET}\nmlc open {INPUT}{validated_container_name}{RESET}\n")
 

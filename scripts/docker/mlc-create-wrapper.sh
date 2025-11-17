@@ -278,8 +278,7 @@ fi
 CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
 if docker ps -a --filter "name=^${CONTAINER_TAG}$" --format '{{.Names}}' | grep -q "^${CONTAINER_TAG}$"; then
     log_error "Container '$CONTAINER_NAME' already exists"
-    log_info "Use: mlc-open $CONTAINER_NAME (to open it)"
-    log_info "Or:  mlc-remove $CONTAINER_NAME (to delete it first)"
+    log_info "Use container-cleanup to remove it first, or choose a different name"
     exit 1
 fi
 
@@ -370,11 +369,15 @@ else
             ALLOC_EXIT=$?
 
             if [ $ALLOC_EXIT -eq 0 ] && echo "$ALLOC_OUTPUT" | grep -q "✓ Allocated"; then
-                # Extract GPU ID from output (format: "✓ Allocated GPU/MIG X to container")
+                # Extract friendly GPU ID (for logging: "1.1", "2.0", etc.)
                 ALLOCATED_GPU=$(echo "$ALLOC_OUTPUT" | grep -oP '(?<=GPU/MIG )\S+(?= to)')
 
-                if [ -n "$ALLOCATED_GPU" ]; then
-                    GPU_ARG="-g=device=$ALLOCATED_GPU"
+                # Extract Docker ID (MIG UUID for MIG instances, gpu index for full GPUs)
+                DOCKER_ID=$(echo "$ALLOC_OUTPUT" | grep "^DOCKER_ID=" | cut -d= -f2)
+
+                if [ -n "$ALLOCATED_GPU" ] && [ -n "$DOCKER_ID" ]; then
+                    # Use Docker ID (UUID for MIG) instead of friendly ID
+                    GPU_ARG="-g=device=$DOCKER_ID"
                     log_success "GPU $ALLOCATED_GPU allocated successfully"
                 else
                     log_error "GPU allocator returned success but couldn't parse GPU ID"
@@ -471,11 +474,17 @@ fi
 # Call mlc-patched.py (DS01-enhanced AIME v2)
 log_info "Creating container with mlc-patched.py (AIME v2)..."
 
-python3 "$MLC_PATCHED" $MLC_ARGS
+# Capture output to suppress verbose logging (only show errors)
+MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
 MLC_EXIT_CODE=$?
 
 if [ $MLC_EXIT_CODE -ne 0 ]; then
     log_error "Container creation failed (exit code: $MLC_EXIT_CODE)"
+
+    # Show mlc-patched.py error output
+    if [ -n "$MLC_OUTPUT" ]; then
+        echo "$MLC_OUTPUT"
+    fi
 
     # Release allocated GPU if one was allocated
     if [ -n "$ALLOCATED_GPU" ] && [ -f "$GPU_ALLOCATOR" ]; then
@@ -492,6 +501,14 @@ log_info "Applying resource limits to container..."
 # Verify container was created
 if ! docker inspect "$CONTAINER_TAG" &>/dev/null; then
     log_error "Container $CONTAINER_TAG was not created successfully"
+    echo ""
+
+    # Show mlc-patched.py output for debugging
+    if [ -n "$MLC_OUTPUT" ]; then
+        echo -e "${YELLOW}mlc-patched.py output:${NC}"
+        echo "$MLC_OUTPUT"
+        echo ""
+    fi
 
     # Release allocated GPU if one was allocated
     if [ -n "$ALLOCATED_GPU" ] && [ -f "$GPU_ALLOCATOR" ]; then
@@ -538,16 +555,3 @@ fi
 docker stop "$CONTAINER_TAG" &>/dev/null || true
 
 log_success "Container '$CONTAINER_NAME' created successfully!"
-echo ""
-log_info "Next steps:"
-echo "  1. Open your container:  ${GREEN}mlc-open $CONTAINER_NAME${NC}"
-echo "  2. Your workspace is mounted at: /workspace"
-echo "  3. Install packages with: pip install <package>"
-echo ""
-log_info "Useful commands:"
-echo "  mlc-list           # List your containers"
-echo "  mlc-stats          # Show resource usage"
-echo "  mlc-stop $CONTAINER_NAME  # Stop this container"
-echo ""
-log_warning "Remember: Save your work in /workspace - it persists across container restarts!"
-echo ""

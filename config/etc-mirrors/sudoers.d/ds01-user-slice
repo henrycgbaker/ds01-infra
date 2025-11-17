@@ -1,0 +1,11 @@
+# DS01 Infrastructure - Passwordless sudo for user slice creation
+# This allows users to create their cgroup slices without entering password
+#
+# Installation: sudo cp /opt/ds01-infra/config/etc-mirrors/sudoers.d/ds01-user-slice /etc/sudoers.d/
+#               sudo chmod 0440 /etc/sudoers.d/ds01-user-slice
+#
+# Security: Only allows execution of one specific script with no arguments control
+# Users can only create slices for their own username and group
+
+# Allow all users in docker group to create user slices
+%docker ALL=(root) NOPASSWD: /opt/ds01-infra/scripts/system/create-user-slice.sh

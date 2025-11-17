@@ -128,7 +128,7 @@ gpu_allocation:
 # Container lifecycle policies
 policies:
   auto_stop_idle: true
-  checkpoint_warning: 36h           # Warn users X hours before auto-stop
+  checkpoint_warning: 1h           # Warn users X hours before auto-stop
   require_workspace_mount: true     # Force all containers to mount /workspace
   enforce_storage_quotas: true      # Enable disk quotas
   
