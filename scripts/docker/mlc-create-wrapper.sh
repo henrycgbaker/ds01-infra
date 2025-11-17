@@ -278,7 +278,7 @@ fi
 CONTAINER_TAG="${CONTAINER_NAME}._.$USER_ID"
 if docker ps -a --filter "name=^${CONTAINER_TAG}$" --format '{{.Names}}' | grep -q "^${CONTAINER_TAG}$"; then
     log_error "Container '$CONTAINER_NAME' already exists"
-    log_info "Use container-cleanup to remove it first, or choose a different name"
+    log_info "Use container-remove to remove it first, or choose a different name"
     exit 1
 fi
 

@@ -25,7 +25,7 @@ defaults:
   max_containers_per_user: 3        # Max simultaneous containers
   max_runtime: 12h                 # Max walltime (null = no limit)
   idle_timeout: 0.5h                 # Auto-stop after X hours of GPU inactivity
-  gpu_hold_after_stop: 0.5h          # How long to hold GPU after container stopped (null = indefinite)
+  gpu_hold_after_stop: 0.25h          # How long to hold GPU after container stopped (null = indefinite)
   max_tasks: 512                    # Max tasks for systemd slice
   
   # Priority for allocation (1=lowest, 100=highest)

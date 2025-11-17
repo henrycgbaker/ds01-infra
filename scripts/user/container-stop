@@ -79,7 +79,7 @@ usage() {
     echo ""
     echo -e "${CYAN}After stopping:${NC}"
     echo -e "  • Restart: ${GREEN}container-run <name>${NC}"
-    echo -e "  • Remove:  ${GREEN}container-cleanup <name>${NC}"
+    echo -e "  • Remove:  ${GREEN}container-remove <name>${NC}"
     echo -e "  • Status:  ${GREEN}container-list${NC}"
     echo ""
     echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-stop for container stopping"
@@ -294,9 +294,9 @@ if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; 
         echo -e "  • Restart within ${CYAN}$gpu_hold${NC} → GPU still yours (no re-competing)"
         echo -e "  • After ${CYAN}$gpu_hold${NC} → GPU auto-released for others"
     elif [ "$gpu_hold" = "indefinite" ]; then
-        echo -e "  • GPU held ${CYAN}indefinitely${NC} until you run container-cleanup"
+        echo -e "  • GPU held ${CYAN}indefinitely${NC} until you run container-remove"
     fi
-    echo -e "  • Need GPU freed immediately? Use ${GREEN}container-cleanup${NC}"
+    echo -e "  • Need GPU freed immediately? Use ${GREEN}container-remove${NC}"
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
     if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
@@ -388,7 +388,7 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
 
             echo -e "${BOLD}Be a good citizen:${NC}"
             echo -e "  If you're done with this container, release the GPU now:"
-            echo -e "    ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
+            echo -e "    ${GREEN}container-remove $CONTAINER_NAME${NC}"
             echo ""
             echo -e "  This removes the container and ${BOLD}immediately frees the GPU${NC} for others."
             echo ""
@@ -399,7 +399,7 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
 
     echo -e "${BOLD}Next Steps:${NC}"
     echo -e "  • Restart:   ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "  • Cleanup:   ${GREEN}container-cleanup $CONTAINER_NAME${NC} ${DIM}(releases GPU)${NC}"
+    echo -e "  • Cleanup:   ${GREEN}container-remove $CONTAINER_NAME${NC} ${DIM}(releases GPU)${NC}"
     echo -e "  • View all:  ${GREEN}container-list${NC}"
     echo ""
 else
