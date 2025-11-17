@@ -30,7 +30,7 @@ show_usage() {
     echo -e "  ${GREEN}exit${NC}        Exit container (without stopping)"
     echo -e "  ${GREEN}list${NC}        List your containers"
     echo -e "  ${GREEN}stats${NC}       Show resource usage statistics"
-    echo -e "  ${GREEN}cleanup${NC}     Remove stopped containers"
+    echo -e "  ${GREEN}remove${NC}      Remove stopped containers"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo -e "  ${CYAN}container create${NC} my-project pytorch"
@@ -59,7 +59,7 @@ SUBCOMMAND_SCRIPT="$SCRIPT_DIR/container-$SUBCOMMAND"
 if [ ! -f "$SUBCOMMAND_SCRIPT" ]; then
     echo -e "${RED}Error:${NC} Unknown subcommand: ${BOLD}$SUBCOMMAND${NC}"
     echo ""
-    echo "Available subcommands: create, run, stop, exit, list, stats, cleanup"
+    echo "Available subcommands: create, run, stop, exit, list, stats, remove"
     echo "Run 'container help' for more information"
     exit 1
 fi

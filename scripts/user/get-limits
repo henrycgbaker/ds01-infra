@@ -305,7 +305,7 @@ if [ "$GUIDED" = true ] || [ $STOPPED_CONTAINERS -gt 0 ]; then
     
     if [ $STOPPED_CONTAINERS -gt 0 ]; then
         echo -e "${YELLOW}●${NC} You have ${YELLOW}$STOPPED_CONTAINERS${NC} stopped container(s)"
-        echo -e "  Consider cleaning up: ${GREEN}container-cleanup --all${NC}"
+        echo -e "  Consider cleaning up: ${GREEN}container-remove --all${NC}"
         echo ""
     fi
     
@@ -320,7 +320,7 @@ if [ "$GUIDED" = true ] || [ $STOPPED_CONTAINERS -gt 0 ]; then
         echo ""
         echo -e "  ${GREEN}container-list${NC}        See all your containers"
         echo -e "  ${GREEN}container-stop${NC}        Stop a running container"
-        echo -e "  ${GREEN}container-cleanup${NC}     Remove stopped containers"
+        echo -e "  ${GREEN}container-remove${NC}     Remove stopped containers"
         echo -e "  ${GREEN}container-stats${NC}       Real-time resource monitoring"
         echo ""
     fi

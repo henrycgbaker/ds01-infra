@@ -1,5 +1,5 @@
 #!/bin/bash
-# DS01 Container Cleanup - Removes containers via mlc-remove with DS01 UX
+# DS01 Container Remove - Removes containers via mlc-remove with DS01 UX
 # Tier 2 Command - Wraps AIME mlc-remove with bulk operations and GPU state cleanup
 
 set -e
@@ -43,11 +43,11 @@ get_user_lifecycle_limits() {
 
 usage() {
     echo ""
-    echo -e "${BOLD}DS01 Container Cleanup${NC}"
+    echo -e "${BOLD}DS01 Container Remove${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  container-cleanup [name] [options]"
-    echo "  container-cleanup                    # Prompts to select cleanup action (if none specified)"
+    echo "  container-remove [name] [options]"
+    echo "  container-remove                    # Interactive mode - prompts to select container"
     echo ""
     echo -e "${CYAN}Arguments:${NC}"
     echo "  name              Specific container to remove (optional - will prompt if not provided)"
@@ -55,40 +55,43 @@ usage() {
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
     echo "  -a, --all         Remove ALL your stopped containers"
-    echo "  -i, --images      Also remove unused images"
-    echo "  -f, --force       Skip confirmation prompts"
+    echo "  -i, --images      Also remove associated Docker images"
     echo "  -v, --volumes     Also remove anonymous volumes"
+    echo "  -f, --force       Skip confirmation prompts"
     echo "  --dry-run         Show what would be removed"
     echo "  -h, --help        Show this help message"
     echo ""
-    echo -e "${CYAN}What gets cleaned:${NC}"
-    echo "  • Stopped containers"
-    echo "  • GPU allocations (automatically)"
-    echo "  • Unused images (with --images)"
-    echo "  • Dangling volumes (with --volumes)"
+    echo -e "${CYAN}What gets removed:${NC}"
+    echo "  • ${BOLD}Container${NC} - Always removed (the running instance)"
+    echo "  • ${BOLD}GPU allocation${NC} - Always released (good citizen!)"
+    echo "  • ${BOLD}Docker image${NC} - Only with --images flag (the blueprint)"
+    echo "  • ${BOLD}Volumes${NC} - Only with --volumes flag (persistent data)"
     echo ""
-    echo -e "${CYAN}What is preserved:${NC}"
+    echo -e "${CYAN}What is ALWAYS preserved:${NC}"
+    echo -e "  ${GREEN}✓${NC} Your workspace files (~/workspace/<project>/)"
     echo -e "  ${GREEN}✓${NC} Running containers"
-    echo -e "  ${GREEN}✓${NC} Your workspace files"
-    echo -e "  ${GREEN}✓${NC} Container configurations"
-    echo -e "  ${GREEN}✓${NC} Dockerfiles"
+    echo -e "  ${GREEN}✓${NC} Dockerfiles (~/dockerfiles/)"
+    echo -e "  ${GREEN}✓${NC} Project configuration files"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
-    echo -e "  ${DIM}# Remove specific stopped container${NC}"
-    echo "  container-cleanup my-old-project"
+    echo -e "  ${DIM}# Remove specific container only${NC}"
+    echo "  container-remove my-old-project"
+    echo ""
+    echo -e "  ${DIM}# Remove container and its Docker image${NC}"
+    echo "  container-remove my-old-project --images"
     echo ""
     echo -e "  ${DIM}# Remove all stopped containers${NC}"
-    echo "  container-cleanup --all"
+    echo "  container-remove --all"
     echo ""
-    echo -e "  ${DIM}# Clean containers and unused images${NC}"
-    echo "  container-cleanup --all --images"
+    echo -e "  ${DIM}# Remove containers, images, and volumes${NC}"
+    echo "  container-remove --all --images --volumes"
     echo ""
-    echo -e "  ${DIM}# See what would be removed${NC}"
-    echo "  container-cleanup --all --dry-run"
+    echo -e "  ${DIM}# See what would be removed (dry run)${NC}"
+    echo "  container-remove --all --images --dry-run"
     echo ""
     echo -e "${RED}⚠ Important:${NC}"
-    echo "  This permanently removes containers."
-    echo -e "  Recreate with: ${GREEN}container-create <name>${NC}"
+    echo "  Container removal is permanent. GPU released immediately."
+    echo -e "  Recreate anytime with: ${GREEN}container-create <name>${NC}"
     echo ""
 }
 
@@ -113,6 +116,57 @@ show_container_info() {
     fi
 }
 
+# Prompt for image/volume removal in interactive mode
+prompt_image_volume_removal() {
+    local guided="$1"
+    local remove_images=false
+    local remove_volumes=false
+
+    # Send all prompts to stderr so they display to user (stdout is captured for return value)
+    echo "" >&2
+    echo -e "${YELLOW}━━━ Additional Cleanup Options ━━━${NC}" >&2
+    echo "" >&2
+
+    if [ "$guided" = "true" ]; then
+        echo -e "${CYAN}ℹ ${NC}${BOLD}Understanding Docker Images vs Containers:${NC}" >&2
+        echo -e "  • ${BOLD}Dockerfile${NC} = Recipe (text file with build instructions)" >&2
+        echo -e "  • ${BOLD}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)" >&2
+        echo -e "  • ${BOLD}Container${NC} = Running instance (where your work happens)" >&2
+        echo "" >&2
+        echo -e "${GREEN}✓${NC} Your Dockerfile is safe in ~/dockerfiles/" >&2
+        echo -e "${GREEN}✓${NC} You can rebuild the image anytime from the Dockerfile" >&2
+        echo "" >&2
+    fi
+
+    # Ask about images
+    echo -e "${YELLOW}⚠${NC} Also remove the Docker ${BOLD}image${NC} used by this container? (Dockerfile still remains)" >&2
+    if [ "$guided" = "true" ]; then
+        echo -e "   ${DIM}(Removes the blueprint, but you still have the Dockerfile)${NC}" >&2
+    fi
+    echo -e "   ${GREEN}Default: No${NC} - images are preserved" >&2
+    read -p "Remove image? [y/N]: " REMOVE_IMAGE
+    if [[ "$REMOVE_IMAGE" =~ ^[Yy]$ ]]; then
+        remove_images=true
+    fi
+    echo "" >&2
+
+    # Ask about volumes
+    echo -e "${YELLOW}⚠${NC} Also remove anonymous ${BOLD}volumes${NC} associated with this container?" >&2
+    if [ "$guided" = "true" ]; then
+        echo -e "   ${DIM}(Only removes dangling volumes not used by other containers)${NC}" >&2
+        echo -e "   ${DIM}(Your workspace files in ~/workspace/ are ALWAYS safe)${NC}" >&2
+    fi
+    echo -e "   ${GREEN}Default: No${NC} - volumes are preserved" >&2
+    read -p "Remove volumes? [y/N]: " REMOVE_VOLUMES
+    if [[ "$REMOVE_VOLUMES" =~ ^[Yy]$ ]]; then
+        remove_volumes=true
+    fi
+    echo "" >&2
+
+    # Only return value goes to stdout (everything else went to stderr)
+    echo "${remove_images}|${remove_volumes}"
+}
+
 cleanup_gpu_state() {
     local container_tag="$1"
 
@@ -122,9 +176,44 @@ cleanup_gpu_state() {
     fi
 }
 
+# Remove image associated with a container
+remove_container_image() {
+    local container_tag="$1"
+    local container_name="$2"
+
+    # Get the image used by this container
+    local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null)
+
+    if [ -z "$image" ]; then
+        echo -e "${DIM}  (No image to remove)${NC}"
+        return 0
+    fi
+
+    # Check if image exists
+    if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${image}$"; then
+        echo -e "${DIM}  (Image already removed: $image)${NC}"
+        return 0
+    fi
+
+    # Remove the image
+    if docker rmi "$image" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Removed image: $image"
+        return 0
+    else
+        # Might be in use by other containers
+        echo -e "${YELLOW}⚠${NC} Could not remove image: $image"
+        echo -e "   ${DIM}(May be in use by other containers)${NC}"
+        return 0
+    fi
+}
+
 cleanup_container() {
     local container_name="$1"
     local force="$2"
+    local interactive="$3"
+    local guided="$4"
+    local remove_images_arg="$5"
+    local remove_volumes_arg="$6"
     local container_tag="${container_name}._.$USER_ID"
 
     # Check if container exists
@@ -144,11 +233,31 @@ cleanup_container() {
     show_container_info "$container_tag"
     echo ""
 
-    # Confirm
+    # Interactive prompt for image/volume removal (only in interactive mode, not --all)
+    local remove_image="$remove_images_arg"
+    local remove_volume="$remove_volumes_arg"
+
+    if [ "$interactive" = "true" ] && [ "$force" != "true" ]; then
+        IFS='|' read -r remove_image remove_volume <<< "$(prompt_image_volume_removal "$guided")"
+    fi
+
+    # Confirm container removal
     if [ "$force" != "true" ]; then
-        echo -e "${YELLOW}⚠ This will permanently remove the container${NC}"
+        echo -e "${YELLOW}⚠ This will permanently remove:${NC}"
+        echo -e "  • ${BOLD}Container${NC}: $container_name"
+
+        # Show what else will be removed based on user selection
+        if [ "$remove_image" = "true" ]; then
+            local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null || echo "unknown")
+            echo -e "  • ${BOLD}Docker image${NC}: $image"
+        fi
+
+        if [ "$remove_volume" = "true" ]; then
+            echo -e "  • ${YELLOW}${BOLD}Anonymous volumes${NC} (if any dangling volumes exist)"
+        fi
+
         echo ""
-        read -p "Remove this container? [y/N]: " CONFIRM
+        read -p "Confirm removal? [y/N]: " CONFIRM
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             echo "Skipped."
             return 0
@@ -159,10 +268,21 @@ cleanup_container() {
     if [ -f "$MLC_REMOVE" ]; then
         # Remove via mlc-remove (AIME Tier 1)
         if bash "$MLC_REMOVE" "$container_name" -f -s > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Removed: $container_name (via mlc-remove)"
+            echo -e "${GREEN}✓${NC} Removed container: $container_name"
 
             # DS01-specific cleanup
             cleanup_gpu_state "$container_tag"
+
+            # Remove image if requested
+            if [ "$remove_image" = "true" ]; then
+                remove_container_image "$container_tag" "$container_name"
+            fi
+
+            # Remove volumes if requested
+            if [ "$remove_volume" = "true" ]; then
+                docker volume prune -f > /dev/null 2>&1
+                echo -e "${GREEN}✓${NC} Removed unused volumes"
+            fi
 
             # Clean up DS01 metadata
             local info_file="$HOME/ds01-config/containers/${container_name}.info"
@@ -176,10 +296,21 @@ cleanup_container() {
 
     # Fallback to docker rm
     if docker rm "$container_tag" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Removed: $container_name"
+        echo -e "${GREEN}✓${NC} Removed container: $container_name"
 
         # DS01-specific cleanup
         cleanup_gpu_state "$container_tag"
+
+        # Remove image if requested
+        if [ "$remove_image" = "true" ]; then
+            remove_container_image "$container_tag" "$container_name"
+        fi
+
+        # Remove volumes if requested
+        if [ "$remove_volume" = "true" ]; then
+            docker volume prune -f > /dev/null 2>&1
+            echo -e "${GREEN}✓${NC} Removed unused volumes"
+        fi
 
         # Clean up metadata
         local info_file="$HOME/ds01-config/containers/${container_name}.info"
@@ -411,25 +542,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}${BOLD}    Container Cleanup${NC}"
+echo -e "${CYAN}${BOLD}    Container Remove${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
 if [ "$GUIDED" = true ]; then
     IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
 
-    echo -e "${CYAN}ℹ ${NC}${BOLD}What cleanup removes:${NC}"
-    echo -e "  • ${BOLD}Containers${NC} - Only stopped containers (not running ones)"
-    echo -e "  • ${BOLD}GPU allocations${NC} - Released immediately (good citizen!)"
-    echo -e "  • ${BOLD}Images${NC} - Only unused/dangling images (with --images flag)"
-    echo -e "  • ${BOLD}Volumes${NC} - Only anonymous volumes not attached to containers (with --volumes flag)"
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Understanding Docker: Recipe → Blueprint → Instance${NC}"
+    echo -e "  ${BOLD}1. Dockerfile${NC} (Recipe)"
+    echo -e "     • Text file with build instructions"
+    echo -e "     • Location: ${DIM}~/dockerfiles/${NC}"
+    echo -e "     • ${GREEN}Always preserved${NC} - never removed"
     echo ""
-    echo -e "${RED}⚠ Important:${NC} ${BOLD}What is NOT removed:${NC}"
-    echo -e "  • ${GREEN}✓${NC} Your workspace files (always safe)"
+    echo -e "  ${BOLD}2. Docker Image${NC} (Blueprint)"
+    echo -e "     • Built from Dockerfile"
+    echo -e "     • Can be rebuilt anytime from recipe"
+    echo -e "     • Removed with ${DIM}--images${NC} flag"
+    echo ""
+    echo -e "  ${BOLD}3. Container${NC} (Running Instance)"
+    echo -e "     • Created from image"
+    echo -e "     • Where your work happens"
+    echo -e "     • ${YELLOW}Always removed${NC} by this command"
+    echo ""
+    echo -e "${CYAN}ℹ ${NC}${BOLD}What gets removed:${NC}"
+    echo -e "  • ${BOLD}Container${NC} - Always (the running instance)"
+    echo -e "  • ${BOLD}GPU allocation${NC} - Always (released immediately)"
+    echo -e "  • ${BOLD}Docker image${NC} - Optional (with ${DIM}--images${NC} flag)"
+    echo -e "  • ${BOLD}Volumes${NC} - Optional (with ${DIM}--volumes${NC} flag)"
+    echo ""
+    echo -e "${RED}⚠ Important:${NC} ${BOLD}What is NEVER removed:${NC}"
+    echo -e "  • ${GREEN}✓${NC} Workspace files (${DIM}~/workspace/<project>/${NC})"
+    echo -e "  • ${GREEN}✓${NC} Dockerfiles (${DIM}~/dockerfiles/${NC})"
     echo -e "  • ${GREEN}✓${NC} Running containers"
-    echo -e "  • ${GREEN}✓${NC} Container configurations"
-    echo -e "  • ${GREEN}✓${NC} Dockerfiles"
+    echo -e "  • ${GREEN}✓${NC} Project configuration files"
     echo ""
-    echo -e "${CYAN}ℹ ${NC}${BOLD}Cleanup vs. Stop - When to use each:${NC}"
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Remove vs. Stop - When to use each:${NC}"
     echo -e "  ${BOLD}Stop:${NC} Taking a break, might restart soon"
     if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
         echo -e "    • ${GREEN}container-stop${NC} - Halts container, GPU held for ${CYAN}$gpu_hold${NC}"
@@ -440,9 +587,9 @@ if [ "$GUIDED" = true ]; then
     fi
     echo -e "    • Use when: Done for the day but continuing tomorrow"
     echo ""
-    echo -e "  ${BOLD}Cleanup:${NC} Completely done with this container"
-    echo -e "    • ${GREEN}container-cleanup${NC} - Removes container, GPU freed immediately"
-    echo -e "    • Use when: Project finished or switching to different setup"
+    echo -e "  ${BOLD}Remove:${NC} Completely done with this container"
+    echo -e "    • ${GREEN}container-remove${NC} - Removes container, GPU freed immediately"
+    echo -e "    • Use when: Project finished or major reconfiguration needed"
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Your resource limits:${NC}"
     if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
@@ -454,11 +601,11 @@ if [ "$GUIDED" = true ]; then
     if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ]; then
         echo -e "  • GPU hold after stop: ${CYAN}$gpu_hold${NC} (auto-release window)"
     fi
-    echo -e "  • Manual cleanup is fastest way to free GPU for others"
+    echo -e "  • Manual removal is fastest way to free GPU for others"
     echo ""
-    echo -e "${CYAN}ℹ ${NC}${BOLD}Why cleanup?${NC}"
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Why remove containers?${NC}"
     echo -e "  Over time, stopped containers accumulate and consume disk space."
-    echo -e "  Regular cleanup keeps the system healthy and frees resources."
+    echo -e "  Regular removal keeps the system healthy and frees resources."
     echo -e "  You can always recreate containers with ${GREEN}container-create${NC}."
     echo ""
 fi
@@ -467,8 +614,29 @@ if [ "$DRY_RUN" = "true" ]; then
     echo -e "${YELLOW}━━━ DRY RUN MODE ━━━${NC}\n"
 fi
 
+# Add warnings when using --images/--volumes without --force
+if [ "$FORCE" != "true" ] && [ "$CLEANUP_IMAGES" = "true" ]; then
+    echo -e "${YELLOW}━━━ WARNING: Image Removal Requested ━━━${NC}"
+    echo -e "${YELLOW}⚠${NC} You requested ${BOLD}--images${NC} flag"
+    echo -e "  This will remove Docker images after container removal."
+    echo -e "  ${GREEN}✓${NC} Your Dockerfiles in ~/dockerfiles/ are safe"
+    echo -e "  ${GREEN}✓${NC} You can rebuild images anytime from Dockerfiles"
+    echo ""
+fi
+
+if [ "$FORCE" != "true" ] && [ "$CLEANUP_VOLUMES" = "true" ]; then
+    echo -e "${YELLOW}━━━ WARNING: Volume Removal Requested ━━━${NC}"
+    echo -e "${YELLOW}⚠${NC} You requested ${BOLD}--volumes${NC} flag"
+    echo -e "  This will remove dangling volumes."
+    echo -e "  ${GREEN}✓${NC} Your workspace files in ~/workspace/ are safe"
+    echo -e "  ${GREEN}✓${NC} Only unused anonymous volumes will be removed"
+    echo ""
+fi
+
 # If no container name or --all flag, prompt to select stopped container (DS01 UX)
+INTERACTIVE_MODE=false
 if [ -z "$CONTAINER_NAME" ] && [ "$CLEANUP_ALL" = false ]; then
+    INTERACTIVE_MODE=true
     echo -e "${CYAN}Select stopped container to remove:${NC}"
     echo -e "${DIM}(Tip: Use --all to remove all stopped containers)${NC}"
     echo ""
@@ -482,7 +650,9 @@ fi
 
 # Clean specific container
 if [ -n "$CONTAINER_NAME" ]; then
-    cleanup_container "$CONTAINER_NAME" "$FORCE"
+    # Interactive mode: prompt for image/volume removal (overrides flags for single container)
+    # Non-interactive mode: use flags
+    cleanup_container "$CONTAINER_NAME" "$FORCE" "$INTERACTIVE_MODE" "$GUIDED" "$CLEANUP_IMAGES" "$CLEANUP_VOLUMES"
     exit $?
 fi
 
@@ -497,7 +667,7 @@ else
         echo -e "${GREEN}✓${NC} No stopped containers\n"
     else
         echo -e "${YELLOW}Found $stopped_count stopped container(s)${NC}\n"
-        echo "Remove all with: ${GREEN}container-cleanup --all${NC}\n"
+        echo "Remove all with: ${GREEN}container-remove --all${NC}\n"
     fi
 fi
 
@@ -514,7 +684,7 @@ fi
 # Final status
 if [ "$DRY_RUN" != "true" ] && [ "$CLEANUP_ALL" = "true" ]; then
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}    ✓ Cleanup Complete${NC}"
+    echo -e "${GREEN}${BOLD}    ✓ Removal Complete${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
     echo -e "${YELLOW}💡 Tips:${NC}"
