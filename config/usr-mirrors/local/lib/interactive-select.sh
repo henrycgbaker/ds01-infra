@@ -57,7 +57,13 @@ select_container() {
             mapfile -t containers < <(docker ps --filter "name=\._\.$user_id" --format "{{.Names}}" | sed "s/\._\.$user_id$//" | sort)
             ;;
         stopped)
-            mapfile -t containers < <(docker ps -a --filter "name=\._\.$user_id" --filter "status=exited" --format "{{.Names}}" | sed "s/\._\.$user_id$//" | sort)
+            # Find ALL non-running containers (created, exited, stopped, paused, dead, etc.)
+            # Get all containers except those with status=running
+            mapfile -t containers < <(docker ps -a --filter "name=\._\.$user_id" --format "{{.Names}} {{.Status}}" | \
+                grep -v "Up " | \
+                awk '{print $1}' | \
+                sed "s/\._\.$user_id$//" | \
+                sort)
             ;;
         all|*)
             mapfile -t containers < <(docker ps -a --filter "name=\._\.$user_id" --format "{{.Names}}" | sed "s/\._\.$user_id$//" | sort)
