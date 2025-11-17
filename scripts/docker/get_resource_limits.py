@@ -110,9 +110,10 @@ class ResourceLimitParser:
         if "storage_tmp" in limits:
             args.append(f'--tmpfs=/tmp:size={limits["storage_tmp"]}')
 
-        # Cgroup parent (for systemd slices)
+        # Cgroup parent (per-user slice for granular monitoring)
+        # Hierarchy: ds01.slice → ds01-{group}.slice → ds01-{group}-{username}.slice
         group = limits.get('_group', 'student')
-        args.append(f'--cgroup-parent=ds01-{group}.slice')
+        args.append(f'--cgroup-parent=ds01-{group}-{username}.slice')
 
         return args
     
@@ -148,7 +149,7 @@ class ResourceLimitParser:
         output += f"    GPU hold after stop:      {limits.get('gpu_hold_after_stop', 'N/A')}\n"
         output += f"    Max runtime:              {limits.get('max_runtime', 'unlimited')}\n"
         output += f"\n  Enforcement:\n"
-        output += f"    Systemd slice:            ds01-{group}.slice\n"
+        output += f"    Systemd slice:            ds01-{group}-{username}.slice\n"
 
         return output
 

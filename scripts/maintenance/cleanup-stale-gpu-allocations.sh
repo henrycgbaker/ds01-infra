@@ -9,8 +9,10 @@
 set -e
 
 # Configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+# Resolve symlinks to get actual script location
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
 LOG_DIR="/var/log/ds01"
 LOG_FILE="$LOG_DIR/gpu-stale-cleanup.log"
@@ -43,7 +45,12 @@ if [ $EXITCODE -eq 0 ]; then
     done
 
     # Count releases from output
-    RELEASE_COUNT=$(echo "$OUTPUT" | grep -c "Released" || echo "0")
+    RELEASE_COUNT=$(echo "$OUTPUT" | grep "Released" | wc -l)
+
+    # Default to 0 if empty
+    if [ -z "$RELEASE_COUNT" ]; then
+        RELEASE_COUNT=0
+    fi
 
     if [ "$RELEASE_COUNT" -gt 0 ]; then
         log "✓ Released $RELEASE_COUNT stale GPU allocation(s)"
