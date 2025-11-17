@@ -637,7 +637,8 @@ if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
         echo ""
     else
         echo -e "${BOLD}Next steps:${NC}"
-        echo -e "  • Start container: ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo -e "  • Start container: ${GREEN}container-start $CONTAINER_NAME${NC}"
+        echo -e "  • Run container (enter): ${GREEN}container-run $CONTAINER_NAME${NC}"
         echo -e "  • View containers: ${GREEN}container-list${NC}"
         echo -e "  • Check resources: ${GREEN}container-stats${NC}"
         echo ""
