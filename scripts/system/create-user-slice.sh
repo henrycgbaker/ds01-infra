@@ -30,8 +30,9 @@ SLICE_NAME="ds01-${GROUP}-${USERNAME}.slice"
 PARENT_SLICE="ds01-${GROUP}.slice"
 SLICE_FILE="/etc/systemd/system/${SLICE_NAME}"
 
-# Check if parent slice exists
-if ! systemctl status "$PARENT_SLICE" &>/dev/null; then
+# Check if parent slice exists (check for slice file OR active slice)
+PARENT_SLICE_FILE="/etc/systemd/system/${PARENT_SLICE}"
+if [ ! -f "$PARENT_SLICE_FILE" ]; then
     echo "Error: Parent slice $PARENT_SLICE does not exist"
     echo "Run: sudo /opt/ds01-infra/scripts/system/setup-resource-slices.sh"
     exit 1

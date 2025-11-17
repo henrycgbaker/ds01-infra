@@ -87,9 +87,10 @@ select_image_interactive() {
 
         echo "" >&2
 
-        # Get list of user's images - filter by maintainer label
+        # Get list of user's images - filter by DS01 naming pattern
         local images=()
-        mapfile -t images < <(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" 2>/dev/null | grep -v "REPOSITORY")
+        local user_id=$(id -u)
+        mapfile -t images < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$user_id/" | grep -v "REPOSITORY")
 
         # Remove empty entries
         local filtered_images=()
@@ -892,25 +893,24 @@ if [ -z "$IMAGE_NAME" ]; then
     exit 1
 fi
 
-# Check if image exists AS-IS first (don't add prefix if it's already there)
+# Check if image exists
+USER_ID=$(id -u)
 if docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
-    # Image exists as-is, use it
+    # Image exists as-is (full path like ds01-1001/my-project)
     :
-elif [[ ! "$IMAGE_NAME" =~ ^${USERNAME}- ]]; then
-    # Try with username prefix
-    PREFIXED_NAME="${USERNAME}-${IMAGE_NAME}"
-    if docker images --format "{{.Repository}}" | grep -q "^${PREFIXED_NAME}$"; then
-        IMAGE_NAME="$PREFIXED_NAME"
-    else
-        # Neither version exists, show error
+elif [[ ! "$IMAGE_NAME" =~ ^ds01- ]]; then
+    # Add DS01 prefix: ds01-{user-id}/{project}
+    IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
+    if ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
+        # Image doesn't exist, show error
         echo -e "${RED}✗ Image '$IMAGE_NAME' not found${NC}\n"
         echo "Available images:"
         echo ""
         # Use image-list command to show available images properly
         if command -v image-list &> /dev/null; then
-            image-list 2>/dev/null || docker images --format "  {{.Repository}}" --filter "reference=${USERNAME}-*"
+            image-list 2>/dev/null || docker images --format "  {{.Repository}}" | grep "^ds01-$USER_ID/"
         else
-            docker images --format "  {{.Repository}}" --filter "reference=${USERNAME}-*"
+            docker images --format "  {{.Repository}}" | grep "^ds01-$USER_ID/"
         fi
         echo ""
         echo -e "Create new image with: ${GREEN}image-create${NC}"
@@ -921,15 +921,18 @@ fi
 # Find Dockerfile
 DOCKERFILE=""
 
-# Check info file first
-INFO_FILE="$HOME/ds01-config/images/${IMAGE_NAME}.info"
+# Check info file first (sanitize filename - replace / with _)
+METADATA_FILE=$(echo "$IMAGE_NAME" | tr '/' '_')
+INFO_FILE="$HOME/ds01-config/images/${METADATA_FILE}.info"
 if [ -f "$INFO_FILE" ]; then
     DOCKERFILE=$(grep "^Dockerfile:" "$INFO_FILE" | cut -d: -f2- | xargs)
 fi
 
-# Fallback to standard location
+# Fallback to standard location - extract project name from image
+# If IMAGE_NAME is ds01-1001/my-project, PROJECT_NAME is my-project
+PROJECT_NAME="${IMAGE_NAME##*/}"
 if [ -z "$DOCKERFILE" ] || [ ! -f "$DOCKERFILE" ]; then
-    DOCKERFILE="$DOCKERFILES_DIR/${IMAGE_NAME}.Dockerfile"
+    DOCKERFILE="$DOCKERFILES_DIR/${PROJECT_NAME}.Dockerfile"
 fi
 
 # Check if Dockerfile exists
@@ -1051,7 +1054,7 @@ if [[ ! "$REBUILD_CONFIRM" =~ ^[Yy]$ ]]; then
 fi
 
 # Build command
-BUILD_CMD="docker build -t $IMAGE_NAME -f $DOCKERFILE"
+BUILD_CMD="docker build -t $IMAGE_NAME:latest -f $DOCKERFILE"
 if [ "$NO_CACHE" = true ]; then
     BUILD_CMD="$BUILD_CMD --no-cache"
 fi
@@ -1142,8 +1145,9 @@ if eval "$BUILD_CMD"; then
     fi
 
     # Check for containers using this image
-    CONTAINER_BASE_NAME="${IMAGE_NAME#$USERNAME-}"
-    CONTAINER_BASE_NAME="${CONTAINER_BASE_NAME%-image}"
+    # Extract project name from image (ds01-1001/my-project → my-project)
+    CONTAINER_BASE_NAME="${IMAGE_NAME##*/}"
+    CONTAINER_BASE_NAME="${CONTAINER_BASE_NAME%-image}"  # Remove -image suffix if present
     FULL_CONTAINER_NAME="$CONTAINER_BASE_NAME._.$(id -u)"
 
     # Phase 3: Recreate Container?

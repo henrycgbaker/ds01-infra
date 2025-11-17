@@ -199,7 +199,7 @@ if [ -z "$CONTAINER_NAME" ]; then
     echo ""
     echo "Containers are created from Docker images as blueprints."
     echo ""
-    echo -e "  ${BOLD}1) Use existing custom image${NC}"
+    echo -e "  ${BOLD}1) Use existing custom image${NC} ${GREEN}(recommended)${NC}"
     echo "     Select from images you've built with image-create"
     echo ""
     echo -e "  ${BOLD}2) Use base framework${NC} (PyTorch/TensorFlow from AIME catalog)"
@@ -217,8 +217,9 @@ if [ -z "$CONTAINER_NAME" ]; then
 
             # List available images
             if command -v docker &>/dev/null; then
-                # Get only user's custom images (using maintainer label, same as image-list)
-                mapfile -t IMAGE_ARRAY < <(docker images --filter "label=maintainer=$USERNAME" --format "{{.Repository}}" 2>/dev/null | grep -v "^<none>$" | sort -u)
+                # Get only user's custom images (using DS01 naming pattern, same as image-list)
+                USER_ID_LOCAL=$(id -u)
+                mapfile -t IMAGE_ARRAY < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$USER_ID_LOCAL/" | grep -v "^<none>$" | sort -u)
                 IMAGE_COUNT=${#IMAGE_ARRAY[@]}
 
                 if [ "$IMAGE_COUNT" -gt 0 ]; then
@@ -240,15 +241,14 @@ if [ -z "$CONTAINER_NAME" ]; then
                         echo ""
 
                         # Derive container name from image name
-                        # Images are named: ${IMAGE_NAME}-${USERNAME} (e.g., test-2-datasciencelab)
-                        # Remove username suffix to get container name
-                        CONTAINER_NAME="$IMAGE_OR_FRAMEWORK"
-                        CONTAINER_NAME="${CONTAINER_NAME%-$USERNAME}"  # Remove -username suffix
-                        CONTAINER_NAME="${CONTAINER_NAME%-image}"      # Remove -image suffix if present
+                        # Images are named: ds01-{user-id}/{project} (e.g., ds01-1001/my-project)
+                        # Extract project name from repository path
+                        CONTAINER_NAME="${IMAGE_OR_FRAMEWORK##*/}"  # Extract everything after last /
+                        CONTAINER_NAME="${CONTAINER_NAME%-image}"   # Remove -image suffix if present
 
                         echo -e "${BOLD}Step 2: Container Name${NC}"
                         echo ""
-                        echo -e "Default name based on image: ${CYAN}$CONTAINER_NAME${NC}"
+                        echo -e "Default container name based on image: ${CYAN}$CONTAINER_NAME${NC}"
                         echo ""
                         read -p "Use this name or enter a different one [$CONTAINER_NAME]: " CUSTOM_NAME </dev/tty
 
@@ -258,34 +258,99 @@ if [ -z "$CONTAINER_NAME" ]; then
 
                         # Check if container with this name already exists
                         TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
-                        while docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; do
+                        if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; then
                             echo ""
                             echo -e "${YELLOW}⚠ Container '$CONTAINER_NAME' already exists${NC}"
                             echo ""
-                            echo -e "A container with this name is already created. You can:"
-                            echo -e "  • Use the existing container (type 'n' below)"
-                            echo -e "  • Choose a different name (type 'y' below)"
+                            echo -e "${BOLD}What would you like to do?${NC}"
                             echo ""
-                            read -p "Choose a different name? [Y/n]: " RENAME </dev/tty
-                            if [[ ! "$RENAME" =~ ^[Nn]$ ]]; then
-                                echo ""
-                                read -p "New container name: " NEW_NAME </dev/tty
-                                if [ -n "$NEW_NAME" ]; then
+                            echo -e "  ${GREEN}1${NC}) ${BOLD}Use existing container${NC}"
+                            echo -e "     ${DIM}Start the existing container instead${NC}"
+                            echo ""
+                            echo -e "  ${GREEN}2${NC}) ${BOLD}Recreate container${NC}"
+                            echo -e "     ${DIM}Delete existing and create fresh (GPU will be released & reallocated)${NC}"
+                            echo ""
+                            echo -e "  ${GREEN}3${NC}) ${BOLD}Create with different name${NC}"
+                            echo -e "     ${DIM}Keep existing, create new with another name${NC}"
+                            echo ""
+                            read -p "Choice [1-3]: " CHOICE </dev/tty
+                            echo ""
+
+                            case $CHOICE in
+                                1)
+                                    echo "Using existing container '$CONTAINER_NAME'"
+                                    echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
+                                    echo ""
+                                    exit 0
+                                    ;;
+                                2)
+                                    echo -e "${CYAN}Recreating container '$CONTAINER_NAME'...${NC}"
+                                    echo ""
+
+                                    # Stop container if running
+                                    CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$TEMP_TAG" 2>/dev/null || echo "")
+                                    if [ "$CONTAINER_STATUS" = "running" ]; then
+                                        echo -e "${YELLOW}⚠${NC} Stopping running container..."
+                                        docker stop "$TEMP_TAG" &>/dev/null || true
+                                        echo -e "${GREEN}✓${NC} Container stopped"
+                                    fi
+
+                                    # Release GPU allocation if exists
+                                    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+                                    if [ -f "$GPU_ALLOCATOR" ]; then
+                                        echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
+                                        if python3 "$GPU_ALLOCATOR" release "$TEMP_TAG" 2>&1; then
+                                            echo -e "${GREEN}✓${NC} GPU released"
+                                        else
+                                            echo -e "${YELLOW}⚠${NC} No GPU to release (or already released)"
+                                        fi
+                                    fi
+
+                                    # Remove container
+                                    echo -e "${YELLOW}⚠${NC} Removing existing container..."
+                                    if docker rm -f "$TEMP_TAG" &>/dev/null; then
+                                        echo -e "${GREEN}✓${NC} Container removed"
+                                    fi
+
+                                    # Clean up metadata
+                                    METADATA_FILE="/var/lib/ds01/container-metadata/${TEMP_TAG}.json"
+                                    if [ -f "$METADATA_FILE" ]; then
+                                        sudo rm -f "$METADATA_FILE" 2>/dev/null || true
+                                    fi
+
+                                    echo ""
+                                    echo -e "${GREEN}✓${NC} Ready to create new container..."
+                                    echo ""
+                                    ;;
+                                3)
+                                    echo -e "${CYAN}Create with different name${NC}"
+                                    echo ""
+                                    read -p "New container name: " NEW_NAME </dev/tty
+
+                                    if [ -z "$NEW_NAME" ]; then
+                                        echo -e "${RED}✗ Container name cannot be empty${NC}"
+                                        exit 1
+                                    fi
+
                                     CONTAINER_NAME=$(echo "$NEW_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
                                     TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
+
+                                    # Check if new name also exists
+                                    if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; then
+                                        echo -e "${RED}✗ Container '$CONTAINER_NAME' also exists!${NC}"
+                                        echo -e "${YELLOW}ℹ${NC} Run the command again to choose another name"
+                                        exit 1
+                                    fi
+
+                                    echo -e "${GREEN}✓${NC} Will create container '$CONTAINER_NAME'"
                                     echo ""
-                                else
-                                    echo -e "${RED}✗ Invalid name${NC}"
+                                    ;;
+                                *)
+                                    echo -e "${RED}✗ Invalid choice${NC}"
                                     exit 1
-                                fi
-                            else
-                                echo ""
-                                echo "Using existing container '$CONTAINER_NAME'"
-                                echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
-                                echo ""
-                                exit 0
-                            fi
-                        done
+                                    ;;
+                            esac
+                        fi
 
                         echo ""
                     else
@@ -350,34 +415,99 @@ if [ -z "$CONTAINER_NAME" ]; then
 
             # Check if container with this name already exists
             TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
-            while docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; do
+            if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; then
                 echo ""
                 echo -e "${YELLOW}⚠ Container '$CONTAINER_NAME' already exists${NC}"
                 echo ""
-                echo -e "A container with this name is already created. You can:"
-                echo -e "  • Use the existing container (type 'n' below)"
-                echo -e "  • Choose a different name (type 'y' below)"
+                echo -e "${BOLD}What would you like to do?${NC}"
                 echo ""
-                read -p "Choose a different name? [Y/n]: " RENAME </dev/tty
-                if [[ ! "$RENAME" =~ ^[Nn]$ ]]; then
-                    echo ""
-                    read -p "New container name: " NEW_NAME </dev/tty
-                    if [ -n "$NEW_NAME" ]; then
+                echo -e "  ${GREEN}1${NC}) ${BOLD}Use existing container${NC}"
+                echo -e "     ${DIM}Start the existing container instead${NC}"
+                echo ""
+                echo -e "  ${GREEN}2${NC}) ${BOLD}Recreate container${NC}"
+                echo -e "     ${DIM}Delete existing and create fresh (GPU will be released & reallocated)${NC}"
+                echo ""
+                echo -e "  ${GREEN}3${NC}) ${BOLD}Create with different name${NC}"
+                echo -e "     ${DIM}Keep existing, create new with another name${NC}"
+                echo ""
+                read -p "Choice [1-3]: " CHOICE </dev/tty
+                echo ""
+
+                case $CHOICE in
+                    1)
+                        echo "Using existing container '$CONTAINER_NAME'"
+                        echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
+                        echo ""
+                        exit 0
+                        ;;
+                    2)
+                        echo -e "${CYAN}Recreating container '$CONTAINER_NAME'...${NC}"
+                        echo ""
+
+                        # Stop container if running
+                        CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$TEMP_TAG" 2>/dev/null || echo "")
+                        if [ "$CONTAINER_STATUS" = "running" ]; then
+                            echo -e "${YELLOW}⚠${NC} Stopping running container..."
+                            docker stop "$TEMP_TAG" &>/dev/null || true
+                            echo -e "${GREEN}✓${NC} Container stopped"
+                        fi
+
+                        # Release GPU allocation if exists
+                        GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+                        if [ -f "$GPU_ALLOCATOR" ]; then
+                            echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
+                            if python3 "$GPU_ALLOCATOR" release "$TEMP_TAG" 2>&1; then
+                                echo -e "${GREEN}✓${NC} GPU released"
+                            else
+                                echo -e "${YELLOW}⚠${NC} No GPU to release (or already released)"
+                            fi
+                        fi
+
+                        # Remove container
+                        echo -e "${YELLOW}⚠${NC} Removing existing container..."
+                        if docker rm -f "$TEMP_TAG" &>/dev/null; then
+                            echo -e "${GREEN}✓${NC} Container removed"
+                        fi
+
+                        # Clean up metadata
+                        METADATA_FILE="/var/lib/ds01/container-metadata/${TEMP_TAG}.json"
+                        if [ -f "$METADATA_FILE" ]; then
+                            sudo rm -f "$METADATA_FILE" 2>/dev/null || true
+                        fi
+
+                        echo ""
+                        echo -e "${GREEN}✓${NC} Ready to create new container..."
+                        echo ""
+                        ;;
+                    3)
+                        echo -e "${CYAN}Create with different name${NC}"
+                        echo ""
+                        read -p "New container name: " NEW_NAME </dev/tty
+
+                        if [ -z "$NEW_NAME" ]; then
+                            echo -e "${RED}✗ Container name cannot be empty${NC}"
+                            exit 1
+                        fi
+
                         CONTAINER_NAME=$(echo "$NEW_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
                         TEMP_TAG="${CONTAINER_NAME}._.${USER_ID}"
+
+                        # Check if new name also exists
+                        if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${TEMP_TAG}$"; then
+                            echo -e "${RED}✗ Container '$CONTAINER_NAME' also exists!${NC}"
+                            echo -e "${YELLOW}ℹ${NC} Run the command again to choose another name"
+                            exit 1
+                        fi
+
+                        echo -e "${GREEN}✓${NC} Will create container '$CONTAINER_NAME'"
                         echo ""
-                    else
-                        echo -e "${RED}✗ Invalid name${NC}"
+                        ;;
+                    *)
+                        echo -e "${RED}✗ Invalid choice${NC}"
                         exit 1
-                    fi
-                else
-                    echo ""
-                    echo "Using existing container '$CONTAINER_NAME'"
-                    echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
-                    echo ""
-                    exit 0
-                fi
-            done
+                        ;;
+                esac
+            fi
             echo ""
 
             if [ "$GUIDED" = true ]; then
@@ -449,43 +579,153 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"
     echo -e "${YELLOW}⚠  Container '$CONTAINER_NAME' already exists${NC}"
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "A container with this name is already created."
+
+    # Check GPU allocation status
+    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+    GPU_STATUS=""
+    if [ -f "$GPU_ALLOCATOR" ]; then
+        GPU_INFO=$(python3 "$GPU_ALLOCATOR" status 2>/dev/null | grep -A1 "$CONTAINER_TAG" || echo "")
+        if [ -n "$GPU_INFO" ]; then
+            GPU_STATUS=" ${DIM}(with GPU allocated)${NC}"
+        fi
+    fi
+
+    echo -e "${BOLD}What would you like to do?${NC}"
     echo ""
-    echo -e "${BOLD}Your options:${NC}"
-    echo -e "  • Start existing container: ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "  • Remove and recreate:      ${GREEN}container-cleanup $CONTAINER_NAME${NC}"
-    echo -e "  • Choose different name:    ${GREEN}container-create <new-name> ...${NC}"
+    echo -e "  ${GREEN}1${NC}) ${BOLD}Use existing container${NC}"
+    echo -e "     ${DIM}Start the existing container instead${NC}"
     echo ""
-    echo -e "${CYAN}ℹ ${NC}Your workspace files are always safe - removing a container doesn't delete them."
+    echo -e "  ${GREEN}2${NC}) ${BOLD}Recreate container${NC}${GPU_STATUS}"
+    echo -e "     ${DIM}Delete existing and create fresh (GPU will be released & reallocated)${NC}"
     echo ""
-    exit 1
+    echo -e "  ${GREEN}3${NC}) ${BOLD}Create with different name${NC}"
+    echo -e "     ${DIM}Keep existing, create new with another name${NC}"
+    echo ""
+    echo -e "  ${GREEN}4${NC}) ${BOLD}Cancel${NC}"
+    echo ""
+    read -p "Choice [1-4]: " -n 1 -r CHOICE </dev/tty
+    echo ""
+    echo ""
+
+    case $CHOICE in
+        1)
+            echo -e "${CYAN}Starting existing container...${NC}"
+            echo ""
+            exec container-run "$CONTAINER_NAME"
+            ;;
+        2)
+            echo -e "${CYAN}Recreating container '$CONTAINER_NAME'...${NC}"
+            echo ""
+
+            # Stop container if running
+            CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev/null || echo "")
+            if [ "$CONTAINER_STATUS" = "running" ]; then
+                echo -e "${YELLOW}⚠${NC} Stopping running container..."
+                docker stop "$CONTAINER_TAG" &>/dev/null || true
+                echo -e "${GREEN}✓${NC} Container stopped"
+            fi
+
+            # Release GPU allocation if exists
+            if [ -f "$GPU_ALLOCATOR" ]; then
+                echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
+                if python3 "$GPU_ALLOCATOR" release "$CONTAINER_TAG" 2>&1; then
+                    echo -e "${GREEN}✓${NC} GPU released"
+                else
+                    echo -e "${YELLOW}⚠${NC} No GPU to release (or already released)"
+                fi
+            fi
+
+            # Remove container
+            echo -e "${YELLOW}⚠${NC} Removing existing container..."
+            if docker rm -f "$CONTAINER_TAG" &>/dev/null; then
+                echo -e "${GREEN}✓${NC} Container removed"
+            fi
+
+            # Clean up metadata
+            METADATA_FILE="/var/lib/ds01/container-metadata/${CONTAINER_TAG}.json"
+            if [ -f "$METADATA_FILE" ]; then
+                sudo rm -f "$METADATA_FILE" 2>/dev/null || true
+            fi
+
+            echo ""
+            echo -e "${GREEN}✓${NC} Ready to create new container..."
+            echo ""
+            ;;
+        3)
+            echo -e "${CYAN}Create with different name${NC}"
+            echo ""
+            read -p "New container name: " NEW_NAME </dev/tty
+
+            # Validate new name
+            if [[ -z "$NEW_NAME" ]]; then
+                echo -e "${RED}✗ Container name cannot be empty${NC}"
+                exit 1
+            fi
+
+            if [[ ! "$NEW_NAME" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+                echo -e "${RED}✗ Invalid name: use only letters, numbers, hyphens, underscores${NC}"
+                exit 1
+            fi
+
+            # Check if new name already exists
+            NEW_TAG="${NEW_NAME}._.${USER_ID}"
+            if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${NEW_TAG}$"; then
+                echo -e "${RED}✗ Container '$NEW_NAME' also exists!${NC}"
+                echo -e "${YELLOW}ℹ${NC} Please choose a different name or select option 2 to recreate"
+                exit 1
+            fi
+
+            # Update container name for creation
+            CONTAINER_NAME="$NEW_NAME"
+            CONTAINER_TAG="$NEW_TAG"
+            echo -e "${GREEN}✓${NC} Will create container '$CONTAINER_NAME'"
+            echo ""
+            ;;
+        4|*)
+            echo -e "${CYAN}Cancelled${NC}"
+            exit 0
+            ;;
+    esac
 fi
 
 # Determine framework/image
-FRAMEWORK="pytorch"
+FRAMEWORK="Pytorch"  # Default with proper capitalization for AIME
 IMAGE_NAME=""
 
 if [ -n "$IMAGE_OR_FRAMEWORK" ]; then
     # Check if it's a framework name or custom image
     case "${IMAGE_OR_FRAMEWORK,,}" in
         pytorch|torch)
-            FRAMEWORK="pytorch"
+            FRAMEWORK="Pytorch"  # Capitalized for AIME compatibility
             ;;
         tensorflow|tf)
-            FRAMEWORK="tensorflow"
+            FRAMEWORK="Tensorflow"  # Capitalized for AIME compatibility
             ;;
         *)
             # Assume it's a custom image name
+            # If not prefixed with ds01-, add it
+            USER_ID_CHECK=$(id -u)
+            check_name="$IMAGE_OR_FRAMEWORK"
+            if [[ ! "$check_name" =~ ^ds01- ]]; then
+                check_name="ds01-${USER_ID_CHECK}/${IMAGE_OR_FRAMEWORK}"
+            fi
+
             # Check if image exists locally
-            if docker image inspect "$IMAGE_OR_FRAMEWORK" &>/dev/null; then
-                IMAGE_NAME="$IMAGE_OR_FRAMEWORK"
+            if docker image inspect "$check_name" &>/dev/null; then
+                # Use full image name with :latest tag (matches ds01 naming convention)
+                IMAGE_NAME="$check_name:latest"
                 # Try to detect framework from image labels
-                FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "aime.mlc.DS01_FRAMEWORK"}}' "$IMAGE_NAME" 2>/dev/null || echo "pytorch")
+                FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "aime.mlc.DS01_FRAMEWORK"}}' "$check_name" 2>/dev/null || echo "Pytorch")
                 if [ -z "$FRAMEWORK" ]; then
-                    FRAMEWORK="pytorch"
+                    FRAMEWORK="Pytorch"
                 fi
+                # Ensure framework is capitalized (labels might be lowercase)
+                case "${FRAMEWORK,,}" in
+                    pytorch|torch) FRAMEWORK="Pytorch" ;;
+                    tensorflow|tf) FRAMEWORK="Tensorflow" ;;
+                esac
             else
-                echo -e "${YELLOW}⚠ Image '$IMAGE_OR_FRAMEWORK' not found locally${NC}"
+                echo -e "${YELLOW}⚠ Image '$check_name' not found locally${NC}"
                 echo ""
                 echo "Using as framework name: $IMAGE_OR_FRAMEWORK"
                 FRAMEWORK="$IMAGE_OR_FRAMEWORK"
@@ -560,6 +800,11 @@ fi
 # Add CPU-only flag
 if [ "$CPU_ONLY" = true ]; then
     WRAPPER_ARGS+=("--cpu-only")
+fi
+
+# Add custom image flag (CRITICAL: tells wrapper to use custom image instead of AIME base)
+if [ -n "$IMAGE_NAME" ]; then
+    WRAPPER_ARGS+=("--image=$IMAGE_NAME")
 fi
 
 # Show what we're doing
@@ -649,10 +894,5 @@ else
     echo -e "${RED}✗ Container creation failed (exit code: $EXIT_CODE)${NC}"
     echo ""
     echo -e "${YELLOW}Common issues:${NC}"
-    echo "  • Docker permission denied: Ask admin to add you to docker group"
-    echo "  • Workspace path doesn't exist: Check -w option"
-    echo "  • Out of disk space: Contact admin"
-    echo "  • GPU unavailable: Try --cpu-only"
-    echo ""
     exit $EXIT_CODE
 fi
