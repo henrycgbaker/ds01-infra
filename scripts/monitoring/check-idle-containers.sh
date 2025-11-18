@@ -283,7 +283,7 @@ NOTIFEOF
     fi
 
     # Mark container as stopped in GPU allocator (starts GPU hold timer)
-    local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+    local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
     if [ -f "$gpu_allocator" ]; then
         if python3 "$gpu_allocator" mark-stopped "$container" &>/dev/null; then
             log_color "GPU marked as stopped for: $container" "$GREEN"

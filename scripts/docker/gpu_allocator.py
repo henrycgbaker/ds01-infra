@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
 """
-GPU Allocation Manager for DS01 Server (MIG-aware, Priority-based)
-Handles dynamic GPU/MIG allocation with priority and reservations
+GPU Allocation Manager for DS01 Server [DEPRECATED]
+
+⚠️  DEPRECATED: This file is no longer maintained.
+    Use gpu-allocator-smart.py instead (stateless, Docker-first design).
+
+This version maintains state files (/var/lib/ds01/gpu-state.json) which can
+become stale. The new gpu-allocator-smart.py reads state directly from Docker
+labels and HostConfig, ensuring consistency.
+
+Migration: All DS01 scripts now use gpu-allocator-smart.py.
+Kept for reference only.
 """
+
+import sys
+print("⚠️  WARNING: gpu_allocator.py is DEPRECATED", file=sys.stderr)
+print("   Use: gpu-allocator-smart.py (stateless, Docker-first)", file=sys.stderr)
+print("", file=sys.stderr)
 
 import json
 import subprocess
