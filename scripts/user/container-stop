@@ -213,15 +213,15 @@ stop_container() {
             # Check if SIGKILL was needed
             local timeout_ms=$((timeout * 1000))
             if [ "$elapsed_ms" -ge "$timeout_ms" ]; then
-                echo -e "${YELLOW}✓${NC} Container stopped (${elapsed_s}s - required SIGKILL)"
+                echo -e "${YELLOW}✓${NC} Container stopped (${elapsed_s}s - required SIGKILL)\n"
                 if [ "$verbose" = true ]; then
                     echo -e "${DIM}  • Process didn't respond to SIGTERM within ${timeout}s${NC}"
                     echo -e "${DIM}  • SIGKILL sent to force termination${NC}"
                 fi
             else
-                echo -e "${GREEN}✓${NC} Container stopped (${elapsed_s}s)"
+                echo -e "${GREEN}✓${NC} Container stopped (${elapsed_s}s)\n"
                 if [ "$verbose" = true ]; then
-                    echo -e "${DIM}  • Graceful shutdown successful (via mlc-stop)${NC}"
+                    echo -e "${DIM}  • Graceful shutdown successfu${NC}\n"
                 fi
             fi
             return 0
@@ -499,7 +499,7 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
         if "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force; then
             echo ""
             echo -e "${GREEN}✓${NC} Container removed. GPU freed immediately."
-            echo -e "${GREEN}✓${NC} Your workspace files are safe in: ${DIM}~/workspace/$CONTAINER_NAME/${NC}"
+            echo -e "${GREEN}✓${NC} Your workspace files are safe in: ${DIM}~/workspace/$CONTAINER_NAME/${NC}\n"
             echo -e "To resume, you can recreate the container anytime from the image/dockerfile"
             echo ""
         else
