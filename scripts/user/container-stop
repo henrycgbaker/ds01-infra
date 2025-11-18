@@ -54,6 +54,7 @@ usage() {
     echo "  -f, --force     Force stop (kill immediately)"
     echo "  -t, --timeout   Timeout in seconds (default: 10)"
     echo "  -a, --all       Stop all your containers"
+    echo "  -v, --verbose   Show detailed shutdown process (SIGTERM/SIGKILL timing)"
     echo "  -h, --help      Show this help message"
     echo ""
     echo -e "${CYAN}Description:${NC}"
@@ -82,14 +83,13 @@ usage() {
     echo -e "  • Remove:  ${GREEN}container-remove <name>${NC}"
     echo -e "  • Status:  ${GREEN}container-list${NC}"
     echo ""
-    echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-stop for container stopping"
-    echo ""
 }
 
 stop_container() {
     local container_name="$1"
     local force="$2"
     local timeout="$3"
+    local verbose="$4"
 
     local container_tag="${container_name}._.$USER_ID"
 
@@ -138,9 +138,32 @@ stop_container() {
                 return 1
             fi
         else
-            echo -e "${CYAN}Stopping gracefully (timeout: ${timeout}s)...${NC}"
+            echo -e "${CYAN}Sending SIGTERM to container (${timeout}s graceful timeout)...${NC}"
+            if [ "$verbose" = true ]; then
+                echo -e "${DIM}  • SIGTERM sent, waiting for graceful shutdown...${NC}"
+            fi
+
+            # Track timing
+            local start_time=$(date +%s%3N)  # milliseconds
             if docker stop -t "$timeout" "$container_tag" > /dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC} Container stopped"
+                local end_time=$(date +%s%3N)
+                local elapsed_ms=$((end_time - start_time))
+                local elapsed_s=$(echo "scale=2; $elapsed_ms / 1000" | bc)
+
+                # Check if SIGKILL was needed (took longer than timeout)
+                local timeout_ms=$((timeout * 1000))
+                if [ "$elapsed_ms" -ge "$timeout_ms" ]; then
+                    echo -e "${YELLOW}✓${NC} Container stopped (${elapsed_s}s - required SIGKILL)\n"
+                    if [ "$verbose" = true ]; then
+                        echo -e "${DIM}  • Process didn't respond to SIGTERM within ${timeout}s${NC}"
+                        echo -e "${DIM}  • SIGKILL sent to force termination${NC}"
+                    fi
+                else
+                    echo -e "${GREEN}✓${NC} Container stopped (${elapsed_s}s)"
+                    if [ "$verbose" = true ]; then
+                        echo -e "${DIM}  • Graceful shutdown successful${NC}\n"
+                    fi
+                fi
                 return 0
             else
                 echo -e "${RED}✗${NC} Failed to stop container"
@@ -157,7 +180,7 @@ stop_container() {
         fi
         # mlc-stop -f for force
         if bash "$MLC_STOP" "$container_name" -f -s > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Container force stopped (via mlc-stop)"
+            echo -e "${GREEN}✓${NC} Container force stopped"
             return 0
         else
             # Fallback to docker kill
@@ -170,18 +193,61 @@ stop_container() {
             fi
         fi
     else
-        echo -e "${CYAN}Stopping gracefully (timeout: ${timeout}s)...${NC}"
+        echo -e "${CYAN}Sending SIGTERM to container (${timeout}s graceful timeout)...${NC}"
         if [ "$GUIDED" = true ]; then
             echo -e "${CYAN}ℹ ${NC}Graceful stop sends SIGTERM, allowing processes to save state and exit cleanly."
         fi
+        if [ "$verbose" = true ]; then
+            echo -e "${DIM}  • Using mlc-stop for graceful shutdown...${NC}"
+        fi
+
+        # Track timing
+        local start_time=$(date +%s%3N)  # milliseconds
+
         # Call mlc-stop with script mode (-s for non-interactive)
         if bash "$MLC_STOP" "$container_name" -s > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Container stopped (via mlc-stop)"
+            local end_time=$(date +%s%3N)
+            local elapsed_ms=$((end_time - start_time))
+            local elapsed_s=$(echo "scale=2; $elapsed_ms / 1000" | bc)
+
+            # Check if SIGKILL was needed
+            local timeout_ms=$((timeout * 1000))
+            if [ "$elapsed_ms" -ge "$timeout_ms" ]; then
+                echo -e "${YELLOW}✓${NC} Container stopped (${elapsed_s}s - required SIGKILL)"
+                if [ "$verbose" = true ]; then
+                    echo -e "${DIM}  • Process didn't respond to SIGTERM within ${timeout}s${NC}"
+                    echo -e "${DIM}  • SIGKILL sent to force termination${NC}"
+                fi
+            else
+                echo -e "${GREEN}✓${NC} Container stopped (${elapsed_s}s)"
+                if [ "$verbose" = true ]; then
+                    echo -e "${DIM}  • Graceful shutdown successful (via mlc-stop)${NC}"
+                fi
+            fi
             return 0
         else
             # Fallback to docker stop
+            if [ "$verbose" = true ]; then
+                echo -e "${DIM}  • mlc-stop failed, falling back to docker stop...${NC}"
+            fi
+
             if docker stop -t "$timeout" "$container_tag" > /dev/null 2>&1; then
-                echo -e "${GREEN}✓${NC} Container stopped"
+                local end_time=$(date +%s%3N)
+                local elapsed_ms=$((end_time - start_time))
+                local elapsed_s=$(echo "scale=2; $elapsed_ms / 1000" | bc)
+
+                local timeout_ms=$((timeout * 1000))
+                if [ "$elapsed_ms" -ge "$timeout_ms" ]; then
+                    echo -e "${YELLOW}✓${NC} Container stopped (${elapsed_s}s - required SIGKILL)"
+                    if [ "$verbose" = true ]; then
+                        echo -e "${DIM}  • SIGKILL used after timeout${NC}"
+                    fi
+                else
+                    echo -e "${GREEN}✓${NC} Container stopped (${elapsed_s}s)"
+                    if [ "$verbose" = true ]; then
+                        echo -e "${DIM}  • Graceful shutdown successful (via docker stop)${NC}"
+                    fi
+                fi
                 return 0
             else
                 echo -e "${RED}✗${NC} Failed to stop container"
@@ -197,6 +263,7 @@ GUIDED=false
 FORCE=false
 TIMEOUT=10
 STOP_ALL=false
+VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -211,6 +278,10 @@ while [[ $# -gt 0 ]]; do
         -t|--timeout)
             TIMEOUT="$2"
             shift 2
+            ;;
+        -v|--verbose)
+            VERBOSE=true
+            shift
             ;;
         -a|--all)
             STOP_ALL=true
@@ -258,7 +329,7 @@ if [ "$STOP_ALL" = true ]; then
 
     while IFS= read -r name; do
         [ -z "$name" ] && continue
-        if stop_container "$name" "$FORCE" "$TIMEOUT"; then
+        if stop_container "$name" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
             SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
         else
             FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -309,7 +380,6 @@ if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; 
     fi
     echo ""
     echo -e "${CYAN}ℹ ${NC}${BOLD}Behind the scenes:${NC}"
-    echo -e "  • DS01 uses AIME's ${GREEN}mlc-stop${NC} for the actual stopping operation"
     echo -e "  • This ensures consistent container lifecycle management"
     echo -e "  • DS01 adds safety checks and user confirmations"
     echo ""
@@ -333,13 +403,11 @@ if [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
 fi
 
 # Warning message (DS01 safety check)
-echo -e "${RED}⚠ This will STOP the container${NC}"
+echo -e "${RED}⚠ This will STOP the container${NC}\n"
 echo -e "${BOLD}All processes will be terminated, including:${NC}"
 echo -e "  • Training jobs"
 echo -e "  • Jupyter sessions"
 echo -e "  • SSH connections"
-echo ""
-echo -e "${YELLOW}💡 Tip:${NC} To exit without stopping: Just type ${GREEN}exit${NC} (container keeps running)"
 echo ""
 
 read -p "Continue? [y/N]: " CONFIRM
@@ -350,17 +418,16 @@ fi
 echo ""
 
 # Stop container
-if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
-    echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}    ✓ Container Stopped${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
 
     # Mark container as stopped (starts GPU hold timer)
     CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
     if [ -f "$GPU_ALLOCATOR" ]; then
         python3 "$GPU_ALLOCATOR" mark-stopped "$CONTAINER_TAG" >/dev/null 2>&1 || true
     fi
+
+    # Get container hold time (needed for messages below)
+    CONTAINER_HOLD=$(python3 "$RESOURCE_PARSER" "$USERNAME" --container-hold-time 2>/dev/null || echo "12h")
 
     # Check if container has GPU allocated and show warning
     if [ -f "$GPU_ALLOCATOR" ]; then
@@ -374,34 +441,73 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT"; then
             echo -e "${YELLOW}${BOLD}    ⚠ GPU Still Allocated${NC}"
             echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 
-            echo -e "${BOLD}Important:${NC} Your container still has a GPU allocated!"
-            echo ""
+            if [ "$GUIDED" = true ]; then
+                echo -e "${BOLD}Your container still has a GPU allocated!${NC}"
+                echo ""
 
-            if [ "$gpu_hold" = "indefinite" ] || [ "$gpu_hold" = "null" ] || [ "$gpu_hold" = "None" ]; then
-                echo -e "  • GPU will be held ${CYAN}indefinitely${NC} (until you cleanup)"
-            else
-                echo -e "  • GPU will be held for ${CYAN}$gpu_hold${NC}"
-                echo -e "  • After that, GPU will be auto-released"
+                if [ "$gpu_hold" = "indefinite" ] || [ "$gpu_hold" = "null" ] || [ "$gpu_hold" = "None" ]; then
+                    echo -e "${BOLD}GPU will be held ${CYAN}indefinitely${NC} (until you cleanup)"
+                else
+                    echo -e "${BOLD}GPU will be held for ${CYAN}$gpu_hold${NC}"
+                    echo -e "  • After that, GPU will be auto-released"
+                fi
+                echo -e "  • Other users cannot use this GPU during this time"
+                echo ""
+
+                echo -e "${BOLD}Container will be held for ${CYAN}$CONTAINER_HOLD${NC}"
+                echo -e "  • After that, container will be auto-removed"
+                echo -e "  • ${YELLOW}Treat containers as ephemeral compute envs${NC}"
+                echo ""
+                echo -e "  This removes the container and ${BOLD}immediately frees the GPU${NC} for others."
+                echo ""
+                echo -e "${CYAN}ℹ ${NC}${DIM}Your workspace files are always safe - cleanup only removes the container.${NC}"
+                echo ""
+                echo -e "  ${GREEN}What's preserved:${NC}"
+                echo -e "    • Workspace files  ${DIM}(~/workspace/$CONTAINER_NAME/)${NC}"
+                echo -e "    • Dockerfile       ${DIM}(~/dockerfiles/)${NC}"
+                echo -e "    • Project configs"
+                echo ""
+                echo -e "  ${YELLOW}What's removed:${NC}"
+                echo -e "    • Container instance  ${DIM}(recreate anytime with: container-create $CONTAINER_NAME)${NC}"
+                echo -e "    • GPU allocation      ${DIM}(freed immediately)${NC}"
+                echo ""
             fi
-            echo -e "  • Other users cannot use this GPU during this time"
-            echo ""
-
-            echo -e "${BOLD}Be a good citizen:${NC}"
-            echo -e "  If you're done with this container, release the GPU now:"
-            echo -e "    ${GREEN}container-remove $CONTAINER_NAME${NC}"
-            echo ""
-            echo -e "  This removes the container and ${BOLD}immediately frees the GPU${NC} for others."
-            echo ""
-            echo -e "${CYAN}ℹ ${NC}${DIM}Your workspace files are always safe - cleanup only removes the container.${NC}"
-            echo ""
         fi
     fi
 
-    echo -e "${BOLD}Next Steps:${NC}"
-    echo -e "  • Restart:   ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "  • Cleanup:   ${GREEN}container-remove $CONTAINER_NAME${NC} ${DIM}(releases GPU)${NC}"
-    echo -e "  • View all:  ${GREEN}container-list${NC}"
+    # Prompt to remove container (2a: Container lifecycle automation)
+    echo -e "${BOLD}Be a good citizen:${NC} if you're done with this container, release the GPU now: ${GREEN}container-remove $CONTAINER_NAME${NC}"   
+
+    if [ "$CONTAINER_HOLD" != "never" ] && [ "$CONTAINER_HOLD" != "None" ]; then
+        echo -e "${CYAN}ℹ${NC} ${DIM}If not removed, container will auto-remove after ${CONTAINER_HOLD}.${NC}"
+        echo ""
+    fi
+
+    read -p "Remove container now? [Y/n] (default: yes): " REMOVE_NOW
     echo ""
+
+    if [[ "$REMOVE_NOW" =~ ^[Nn]$ ]]; then
+        echo -e "${GREEN}Container kept.${NC} Restart with: ${GREEN}container-run $CONTAINER_NAME${NC}"
+        if [ "$gpu_hold" != "indefinite" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "None" ]; then
+            echo -e "${DIM}Note: GPU held for $gpu_hold, then released${NC}"
+        fi
+        echo ""
+    else
+        echo -e "${CYAN}Removing container...${NC}"
+        echo ""
+        # Call container-remove with --force flag (skip confirmations since user already confirmed)
+        if "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force; then
+            echo ""
+            echo -e "${GREEN}✓${NC} Container removed. GPU freed immediately."
+            echo -e "${GREEN}✓${NC} Your workspace files are safe in: ${DIM}~/workspace/$CONTAINER_NAME/${NC}"
+            echo -e "To resume, you can recreate the container anytime from the image/dockerfile"
+            echo ""
+        else
+            echo -e "${YELLOW}⚠${NC} Container removal failed. You can remove it manually later:"
+            echo -e "  ${GREEN}container-remove $CONTAINER_NAME${NC}"
+            echo ""
+        fi
+    fi
 else
     echo ""
     echo -e "${RED}Failed to stop container${NC}\n"

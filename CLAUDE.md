@@ -743,6 +743,63 @@ When modifying resource allocation logic:
   - Documentation: Updated CLAUDE.md, help messages, examples
 - **Backward compatibility**: Command name change only (all functionality preserved)
 
+**Container Lifecycle Management (November 18, 2025):** ✅ **COMPLETE**
+Solves the "stale GPU allocation" problem where containers hold GPU resources after being stopped.
+
+**Problem:** Resource allocation happens at container creation, but GPUs may become unavailable by restart time (landscape changed).
+
+**Solution: Multi-pronged approach (2a + 2b + 2c)**
+
+**2a: Interactive Removal Prompt (`container-stop` enhancement)**
+- After successful container stop, prompt user: "Work complete? Remove container now? [Y/n]"
+- Default: Yes (encourages cleanup)
+- Shows what's preserved (workspace, Dockerfile) vs. removed (container, GPU)
+- If user confirms: Calls `container-remove --force` automatically
+- Displays `container_hold_after_stop` timeout to educate user
+
+**2b: Automated Container Removal**
+- **New config parameter**: `container_hold_after_stop` in `resource-limits.yaml`
+  - Students: 6h (encourage cleanup)
+  - Researchers: 24h (more flexibility)
+  - Default: 12h
+  - Admins: null (never auto-remove, commented out)
+- **New maintenance script**: `/opt/ds01-infra/scripts/maintenance/cleanup-stale-containers.sh`
+  - Finds stopped containers
+  - Checks stop timestamp from metadata or Docker FinishedAt
+  - Removes containers exceeding `container_hold_after_stop` timeout
+  - Logs to `/var/log/ds01/container-stale-cleanup.log`
+- **Cron job**: `/etc/cron.d/ds01-container-cleanup`
+  - Runs hourly at :30 past the hour
+  - Staggered from GPU cleanup (:15) for load distribution
+- **Resource parser update**: `get_resource_limits.py` now supports `--container-hold-time` flag
+
+**2c: GPU Availability Validation (`container-run` & `container-start` enhancements)**
+- Before starting container, check if allocated GPU still exists
+- Uses `nvidia-smi -i $GPU_ID` to verify accessibility
+- If GPU unavailable: Clear error message with step-by-step solution
+  - Explains resource landscape has changed
+  - Shows command to recreate container
+  - Reassures workspace files are safe
+- Prevents cryptic Docker errors when GPU missing
+- Graceful failure with actionable guidance
+
+**Benefits:**
+- **Prevents stale allocations**: Containers don't sit stopped with GPU allocated
+- **User education**: Prompts encourage best practices
+- **Automatic hygiene**: System self-maintains after timeout
+- **Clear error messages**: When GPU unavailable, user knows exactly what to do
+- **Configurable**: Per-group timeouts match usage patterns
+- **Safe**: Workspace files always preserved
+
+**Files Modified:**
+- `config/resource-limits.yaml` - Added `container_hold_after_stop` parameter
+- `scripts/docker/get_resource_limits.py` - Parse new parameter
+- `scripts/user/container-stop` - Interactive removal prompt
+- `scripts/user/container-run` - GPU availability check
+- `scripts/user/container-start` - GPU availability check
+- `scripts/maintenance/cleanup-stale-containers.sh` - New cleanup script
+- `config/etc-mirrors/cron.d/ds01-container-cleanup` - New cron job
+
 **CLI Ecosystem Overhaul (November 10, 2025):**
 - Added `--info` flag support: All dispatchers and Tier 2 commands now accept `--info` as alias for `--help`
 - Completed `--guided` flag coverage: All 16 Tier 2 commands now support educational beginner mode

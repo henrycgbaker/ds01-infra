@@ -380,18 +380,18 @@ Creating container via mlc-create-wrapper...
 
 
 ### Container-stop
-- [ ] the current design problem: resource allocation happens at container create (assigned GPU/MIG) ==> if after a task/work is done, the user (unwisely) decides to keep the same container (but not running, just stopped), then it still has the same GPU/MIG ID allocated. The problem is that that GPU/MIG may no longer be available (if keeping container around just to reload it another day). I.e. the resource availability landscape may have changed. This might lead to failure to re-start/re-run the container? 
+- [x] the current design problem: resource allocation happens at container create (assigned GPU/MIG) ==> if after a task/work is done, the user (unwisely) decides to keep the same container (but not running, just stopped), then it still has the same GPU/MIG ID allocated. The problem is that that GPU/MIG may no longer be available (if keeping container around just to reload it another day). I.e. the resource availability landscape may have changed. This might lead to failure to re-start/re-run the container? 
     - strategise the Refactor: What is best practice here in industry?
-    - one option: move resource allocation to the container start /stop stage? - this seems to be standard in SLURM / Kubernetes, but is quite a big refactor?
-        - another (perhaps complimentary option): force / automate / encourage removal of containers after a work task complete?
+    - one option: move resource allocation to the container start/stop stage? - this seems to be standard in SLURM / Kubernetes, but is quite a big refactor?
+        - another (perhaps alternative complimentary option): force / automate / encourage removal of containers after a work task complete?
             - e.g. at the end of the `container stop` GUI (give y/n option to call `container remove` with default=y)
             - e.g. as a crontab job (just as GPU is removed after 0.25h (resource yaml: `gpu_hold_after_stop: 0.25h `) -> automate container removal (add in `container_remove_after_stop`)after e.g. 0.5h of being stopped)
             - e.g. as a warning message when a user ties to restart an old container and (if resource no longer available) they get a resource allocation problem notification -> instructs them to remove container and recreate it.
             - or add in a --rm flag into the docker call? or does this stop it being interactive?
-        - SLURM / K8s?
-    - [ ] [once have resolved whether to allocate resources at start / stop] resolve this: it `container stop currently prints: "Stopping gracefully (timeout: 10s)..." -> is it actually stopping them properly? or is it timeout-ing. 
-        - add GPU release info messages (if that's what's happening?) because i thought it wasn't initially releaseing the gpu at stop, but then you look at ds01 dashboard and it seems ther are 
-        - similarly, for container start add gpu allocation message
+        - SLURM / K8s? (too big a refactor, perhaps in future)
+    - [x] [once have resolved whether to allocate resources at start / stop] resolve this: it `container stop currently prints: "Stopping gracefully (timeout: 10s)..." -> is it actually stopping them properly? or is it timeout-ing. 
+    - [x] add GPU release info messages (into container remove)
+    - [x] similarly, for container start add gpu allocation message
 
 ### Container-cleanup
 - [x] container-cleanup → calls mlc-remove + GPU cleanup ==> need to check this GPU cleanup logic is safe!
@@ -406,6 +406,9 @@ Creating container via mlc-create-wrapper...
         - Default GUI behaviour should remove JUST container by default -> but presents user with a choice (with yellow warning motice) -> y/n also remove 1) image, 2) volumes ('no' by default). 
         - in the --guided mode, include explanation (.e.g if remove images then still have dockerfille + explain what happens if remove volumes, etc)
         - if comes with arguments --images and --volumes, unless the -f / --force flag there, then flash warnings -> require: y/n confirmation
+
+- [ ] for container stop / container remove: cron jobs don't seem to be running automatically
+    - e,.g. 
 
 
 # Container starts
@@ -424,8 +427,6 @@ Creating container via mlc-create-wrapper...
     - instead of calling eachother: they same-tier commands give user concise update what they did and bash command to implement next stage
 - [x] also make sure ALL Tier 1 base commands from aime are fully incorporated into ds01 3 tier structure.
 
-### Container Cleanup
-
 ### Container Stats 
 - [x] buggy: "unknown flag: --filter"
 - [x] check the description is correct
@@ -434,9 +435,11 @@ Creating container via mlc-create-wrapper...
 - [ ] reorganise scripts dir to make more sense between admin vs user vs docker, etc scripts 
     - admin is too broad -> it should be dissagregated by functionality
 
+
 ### ds01 dashboard
-- [ ] currently shows full GPU utilisation % -> ALSO show each MIG's util %
-- [ ] currently showws each MIG's containers -> ALSO show full GPU's containers
+- [x] currently shows full GPU utilisation % -> ALSO show each MIG's util %
+- [x] currently showws each MIG's containers -> ALSO show full GPU's containers
+- [ ] add subcommands / arguments to split up dashboard into several smaller subcommands (e.g. just allocations, just logs, etc)
 - [ ] resolve the ds01-managed issue
     - i think this comes from `ds01-run`
     - this command will be depreciated soon, as I don't think it does anything useful??
@@ -463,138 +466,8 @@ Creating container via mlc-create-wrapper...
     - [x] stopping idle container 
     - [x] enforcing max runtime limits
     - [x] cleaning up stopped containers (GPU hold limit)
-- [ ] update design so that resource allocation happens at `container start / run` not `container create`
-    - this will require quite a lot of refactoring + moving away from `mlc-open` -> `mlc-open-patched` OR direct docker command that also replicates as much of `mlc-open` as possible.
-    - see below:
-    ARCHITECTURE CHANGES
+- [x] update design so that resource allocation happens at `container start / run` not `container create` DECIDED AGAINST THIS - EITHER DO BY IMMPLEMENTING SLURM OR LEAVE AS IS
 
-    Core Allocation Flow:
-    1. ✅ Remove GPU allocation from container-create
-    2. ✅ Add GPU allocation to container-run and container-start
-    3. ✅ Release GPU immediately on container-stop (no hold timer)
-    4. ✅ Remove GPU release from container-cleanup (already released)
-    5. ✅ Implement CUDA_VISIBLE_DEVICES injection into container
-
-    Technical Implementation:
-    - Create containers with --gpus all (or --gpus count=MAX_GPUS)
-    - Allocate GPU when user runs container-run/container-start
-    - Set CUDA_VISIBLE_DEVICES via docker exec -e when entering
-    - Release GPU when container-stop (no hold period)
-    - have clear separation between `container start` vs `container run` 
-
-    ---
-    DETAILED CHECKLIST
-
-    1. Core Scripts - Allocation Logic
-
-    - /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh
-        - Remove gpu_allocator.py allocate call
-        - Change from --gpus device=$GPU_ID to --gpus count=$MAX_GPUS or --gpus all
-        - Keep resource limits enforcement (CPU, memory, etc.)
-    - /opt/ds01-infra/scripts/user/container-run
-        - Add gpu_allocator.py allocate call before entering container
-        - Replace mlc-open with custom docker exec -e CUDA_VISIBLE_DEVICES=$GPU_ID
-        - Handle auto-start if container stopped
-        - Update guided mode explanations (GPU allocated now, not at create)
-    - /opt/ds01-infra/scripts/user/container-start
-        - Add gpu_allocator.py allocate call
-        - Store GPU allocation in metadata
-        - Update guided explanations
-    - /opt/ds01-infra/scripts/user/container-stop
-        - Add gpu_allocator.py release call (immediate release)
-        - Remove all "GPU hold" messaging
-        - Update guided explanations (GPU freed immediately on stop)
-    - /opt/ds01-infra/scripts/user/container-cleanup
-        - Remove gpu_allocator.py release call (already released on stop)
-        - Update "Cleanup vs Stop" explanations
-        - Remove gpu_hold from comparison messaging
-
-    2. GPU Allocator State Management
-
-    - /opt/ds01-infra/scripts/docker/gpu_allocator.py
-        - Remove mark_stopped() function (no longer needed)
-        - Remove release_stale() function (GPUs released on stop)
-        - Remove stopped_at timestamp logic
-        - Simplify to: allocate (on run), release (on stop)
-        - Keep orphan cleanup (for crashed/deleted containers)
-    - /opt/ds01-infra/scripts/maintenance/cleanup-stale-gpu-allocations.sh
-        - Simplify to only clean orphaned allocations (container deleted but allocation remains)
-        - Remove hold timeout logic
-        - Or delete entirely if not needed
-    - /etc/cron.d/ds01-gpu-cleanup (if exists)
-        - Update or remove depending on cleanup script changes
-
-    3. Configuration
-
-    - /opt/ds01-infra/config/resource-limits.yaml
-        - Remove gpu_hold_after_stop parameter from all groups
-        - Keep idle_timeout (still auto-stops idle running containers)
-        - Keep max_runtime (absolute max running time)
-    - /opt/ds01-infra/scripts/docker/get_resource_limits.py
-        - Remove --gpu-hold-time flag
-        - Update get_user_lifecycle_limits() to only return 2 values (idle_timeout, max_runtime)
-
-    4. User-Facing Scripts - Update Messaging
-
-    - /opt/ds01-infra/scripts/user/container-exit
-        - Remove gpu_hold from get_user_lifecycle_limits() call
-        - Remove GPU hold messaging from output
-        - Update resource limits display (only show idle_timeout, max_runtime)
-        - Update "Exit vs Stop vs Cleanup" section
-    - /opt/ds01-infra/scripts/user/get-limits
-        - Remove gpu_hold_after_stop from display
-        - Update resource limits section
-    - /opt/ds01-infra/scripts/user/container-list
-        - Update GPU status display (only show "Allocated" for running containers)
-        - Stopped containers show "None" for GPU
-
-    5. Monitoring & Dashboard
-
-    - /opt/ds01-infra/scripts/monitoring/gpu-status-dashboard.py
-        - Update to show allocations only for running containers
-        - Remove stopped container GPU tracking
-    - /opt/ds01-infra/scripts/monitoring/mlc-stats-wrapper.sh
-        - Should work as-is (shows actual GPU usage)
-    - /opt/ds01-infra/scripts/monitoring/container-dashboard.sh
-        - Update GPU allocation display if needed
-
-    6. Documentation
-
-    - /opt/ds01-infra/CLAUDE.md
-        - Rewrite "GPU Allocation Flow" section (allocate at run, not create)
-        - Update "On Container Stop" (immediate release, no hold)
-        - Update "Automatic GPU Release" (orphan cleanup only)
-        - Remove "GPU Hold After Stop" from recent changes
-        - Update all lifecycle documentation
-    - /opt/ds01-infra/docs/gpu-allocation-implementation.md (if exists)
-        - Update allocation strategy documentation
-    - /opt/ds01-infra/README.md
-        - Update GPU allocation description if mentioned
-
-    7. Testing & Validation
-
-    - Test container-create (should work without GPU allocation)
-    - Test container-run (should allocate GPU dynamically)
-    - Test container-stop (should release GPU immediately)
-    - Test container-start (should allocate GPU)
-    - Test container-cleanup (should work without GPU release)
-    - Test competing for scarce GPUs (multiple users)
-    - Test CUDA_VISIBLE_DEVICES inside containers (nvidia-smi, pytorch)
-    - Verify no orphaned allocations in /var/lib/ds01/gpu-state.json
-
-    ---
-    CRITICAL TECHNICAL DECISION
-
-    How to inject CUDA_VISIBLE_DEVICES?
-
-    Option 1: Replace mlc-open with custom docker exec
-    docker exec -it -e CUDA_VISIBLE_DEVICES=$GPU_ID $CONTAINER_TAG bash
-
-    Option 2: Modify container env via docker update before entering
-    docker update --env CUDA_VISIBLE_DEVICES=$GPU_ID $CONTAINER_TAG
-    docker exec -it $CONTAINER_TAG bash  # env persists
-
-    Recommendation: Option 1 (per-session env var, cleaner, more flexible)
 
     # Robustness Checks
     - [ ] test for local / admin / student / researcher users
