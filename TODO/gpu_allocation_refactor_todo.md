@@ -50,18 +50,24 @@ All DS01 tools become stateless query layers over Docker, with smart allocation 
    - Validates GPU UUID still exists before starting
    - Clear error messages if GPU missing
 
+### ✅ Completed (Phase 5 - 2025-11-18)
+6. **Stateless GPU Allocator** (`gpu-allocator-smart.py`)
+   - No state files - reads current state from Docker via gpu-state-reader
+   - Uses gpu-availability-checker for allocation decisions
+   - Logs events to /var/log/ds01/gpu-allocations.log
+   - Compatible API with old gpu_allocator.py (drop-in replacement)
+   - mlc-create-wrapper.sh updated to use new allocator
+
 ### 🔄 In Progress
-- Old gpu_allocator.py still used for allocation (creates metadata files)
-- Need to migrate to stateless allocator
 - Dashboard and container-list still use old methods
 
 ### 📋 TODO (Next Steps)
-- Create gpu-allocator-smart.py (stateless, uses gpu-state-reader)
 - Update ds01-dashboard to use ds01-resource-query.py
 - Update container-list to use ds01-resource-query.py
 - Add auto-reallocation to container-start
-- Phase out /var/lib/ds01/gpu-state.json
-- Phase out /var/lib/ds01/container-metadata/*.json files
+- Deprecate old gpu_allocator.py (kept for reference)
+- Remove /var/lib/ds01/gpu-state.json dependency
+- Remove /var/lib/ds01/container-metadata/*.json dependency
 
 ---
 
