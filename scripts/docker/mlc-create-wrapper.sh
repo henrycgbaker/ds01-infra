@@ -454,7 +454,7 @@ fi
 
 if [ -n "$CGROUP_PARENT" ]; then
     MLC_ARGS="$MLC_ARGS --cgroup-parent=$CGROUP_PARENT"
-    log_info "Setting cgroup-parent: $CGROUP_PARENT (at creation)"
+    log_info "Setting cgroup-parent: $CGROUP_PARENT"
 fi
 
 # Dry run mode

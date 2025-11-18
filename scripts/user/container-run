@@ -276,6 +276,54 @@ if [ "$GUIDED" = false ]; then
     fi
 fi
 
+# Check GPU availability before starting (2c: Resource allocation validation)
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+if [ -f "$GPU_ALLOCATOR" ]; then
+    # Get container's allocated GPU from metadata
+    CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
+    METADATA_FILE="/var/lib/ds01/container-metadata/${CONTAINER_TAG}.json"
+
+    if [ -f "$METADATA_FILE" ]; then
+        # Extract allocated GPU from metadata
+        ALLOCATED_GPU=$(grep -o '"allocated_gpu": *"[^"]*"' "$METADATA_FILE" 2>/dev/null | cut -d'"' -f4)
+
+        if [ -n "$ALLOCATED_GPU" ] && [ "$ALLOCATED_GPU" != "null" ]; then
+            # Check if this GPU is still available/accessible
+            # Use nvidia-smi to verify GPU exists and is accessible
+            if [[ "$ALLOCATED_GPU" == *":"* ]]; then
+                # MIG instance (format: "0:1")
+                GPU_ID=$(echo "$ALLOCATED_GPU" | cut -d':' -f1)
+            else
+                # Full GPU
+                GPU_ID="$ALLOCATED_GPU"
+            fi
+
+            # Verify GPU is accessible
+            if ! nvidia-smi -i "$GPU_ID" &>/dev/null; then
+                echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${RED}${BOLD}    ⚠ Resource Allocation Problem${NC}"
+                echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                echo -e "${BOLD}This container was allocated GPU:${NC} $ALLOCATED_GPU"
+                echo "That GPU is no longer available (resource landscape changed)."
+                echo ""
+                echo -e "${BOLD}Solution:${NC} Recreate container with fresh resource allocation"
+                echo ""
+                echo -e "  1. Get your container's framework:"
+                echo -e "     ${DIM}docker inspect ${CONTAINER_TAG} | grep -i pytorch\\|tensorflow${NC}"
+                echo ""
+                echo -e "  2. Remove and recreate:"
+                echo -e "     ${GREEN}container-remove $CONTAINER_NAME${NC}"
+                echo -e "     ${GREEN}container-create $CONTAINER_NAME <framework>${NC}"
+                echo ""
+                echo -e "${GREEN}✓${NC} Your workspace files are safe in: ${DIM}~/workspace/$CONTAINER_NAME/${NC}"
+                echo ""
+                exit 1
+            fi
+        fi
+    fi
+fi
+
 # Check if mlc-open exists (base system)
 if [ -f "$MLC_OPEN" ] && [ -x "$MLC_OPEN" ]; then
     # Use base system mlc-open
