@@ -13,7 +13,7 @@ validate_resource_request() {
     
     # Check current allocations
     CURRENT_CONTAINERS=$(docker ps --filter "label=aime.mlc.DS01_USER=$username" -q | wc -l)
-    CURRENT_MIGS=$(python3 /opt/ds01-infra/scripts/docker/gpu_allocator.py user-status "$username")
+    CURRENT_MIGS=$(python3 /opt/ds01-infra/scripts/docker/gpu-allocator-smart.py user-status "$username")
     
     # Validate and return appropriate error message
     # Use templates from resource-limits.yaml 

@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
 GPU_STATE="/var/lib/ds01/gpu-state.json"
 METADATA_DIR="/var/lib/ds01/container-metadata"
 LOG_FILE="/var/log/ds01/reconciliation.log"
