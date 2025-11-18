@@ -349,8 +349,8 @@ else
         log_info "Specific GPU requested: $REQUESTED_GPU"
         GPU_ARG="-g=$REQUESTED_GPU"
     else
-        # Priority-based GPU allocation via gpu_allocator.py
-        GPU_ALLOCATOR="$SCRIPT_DIR/gpu_allocator.py"
+        # Priority-based GPU allocation via gpu-allocator-smart.py (stateless)
+        GPU_ALLOCATOR="$SCRIPT_DIR/gpu-allocator-smart.py"
 
         if [ -f "$GPU_ALLOCATOR" ] && [ -f "$RESOURCE_PARSER" ]; then
             # Get user's GPU limits and priority
