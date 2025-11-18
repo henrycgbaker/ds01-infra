@@ -8,6 +8,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
 MLC_LIST="$INFRA_ROOT/aime-ml-containers/mlc-list"
+QUERY_TOOL="$INFRA_ROOT/scripts/docker/ds01-resource-query.py"
 
 # Colors
 BLUE='\033[94m'
@@ -72,43 +73,34 @@ format_uptime() {
     echo "$status" | sed 's/Up //' | sed 's/Exited.*/stopped/'
 }
 
-get_container_list_via_mlc() {
+get_container_list_via_query() {
     local show_all="$1"
 
-    # Check if mlc-list exists
-    if [ ! -f "$MLC_LIST" ]; then
-        # Fallback to docker directly if mlc-list not available
-        local filter_args=""
+    # Use new query tool if available
+    if [ -f "$QUERY_TOOL" ]; then
+        local status_filter="all"
         if [ "$show_all" != "true" ]; then
-            filter_args="--filter status=running"
+            status_filter="running"
         fi
-        docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null
-        return
-    fi
 
-    # Call mlc-list to get containers
-    # mlc-list automatically filters by current user via aime.mlc.USER label
-    local mlc_output
-    if [ "$show_all" = "true" ]; then
-        mlc_output=$(bash "$MLC_LIST" 2>/dev/null || true)
+        # Get containers as JSON
+        python3 "$QUERY_TOOL" containers --user "$USERNAME" --status "$status_filter" --json 2>/dev/null || {
+            # Fallback to docker if query tool fails
+            get_container_list_docker "$show_all"
+        }
     else
-        # mlc-list shows all by default, we filter for running only
-        mlc_output=$(bash "$MLC_LIST" 2>/dev/null || true)
+        # Fallback to docker
+        get_container_list_docker "$show_all"
     fi
+}
 
-    # Parse mlc-list output to extract container names
-    # mlc-list output format typically shows container names with ._.UID suffix
-    # We extract the full container name (with ._.UID)
-    echo "$mlc_output" | grep "._.$USER_ID" | awk '{print $1}' | grep -v "^$" || true
-
-    # If mlc-list failed or returned nothing, fallback to docker
-    if [ -z "$mlc_output" ] || [ "$(echo "$mlc_output" | grep -c "._.$USER_ID" || true)" -eq 0 ]; then
-        local filter_args=""
-        if [ "$show_all" != "true" ]; then
-            filter_args="--filter status=running"
-        fi
-        docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null || true
+get_container_list_docker() {
+    local show_all="$1"
+    local filter_args=""
+    if [ "$show_all" != "true" ]; then
+        filter_args="--filter status=running"
     fi
+    docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null || true
 }
 
 show_simple() {
@@ -135,80 +127,69 @@ show_simple() {
         echo ""
     fi
 
-    # Get containers via mlc-list (or docker fallback)
-    local containers=$(get_container_list_via_mlc "$show_all")
+    # Get containers via query tool (or docker fallback)
+    local containers_json=$(get_container_list_via_query "$show_all")
 
-    if [ -z "$containers" ]; then
-        if [ "$show_all" = "true" ]; then
-            echo -e "${YELLOW}No containers found${NC}\n"
-        else
-            echo -e "${YELLOW}No running containers${NC}\n"
-            echo -e "${DIM}Show all containers: ${GREEN}container-list --all${NC}"
+    # Check if we got JSON or plain text
+    if echo "$containers_json" | jq empty 2>/dev/null; then
+        # Parse JSON output from query tool
+        local total=$(echo "$containers_json" | jq 'length')
+
+        if [ "$total" -eq 0 ]; then
+            if [ "$show_all" = "true" ]; then
+                echo -e "${YELLOW}No containers found${NC}\n"
+            else
+                echo -e "${YELLOW}No running containers${NC}\n"
+                echo -e "${DIM}Show all containers: ${GREEN}container-list --all${NC}"
+                echo ""
+            fi
+            echo -e "${BOLD}Create a container:${NC}"
+            echo -e "  ${GREEN}container-create my-project${NC}"
             echo ""
+            return
         fi
-        echo -e "${BOLD}Create a container:${NC}"
-        echo -e "  ${GREEN}container-create my-project${NC}"
-        echo ""
-        return
-    fi
 
-    # Filter for running only if needed
-    local filtered_containers=""
-    if [ "$show_all" = "true" ]; then
-        filtered_containers="$containers"
+        local running=$(echo "$containers_json" | jq '[.[] | select(.running == true)] | length')
+
+        # Display each container from JSON
+        local count=0
+        echo "$containers_json" | jq -c '.[]' | while read -r container; do
+            count=$((count + 1))
+
+            local name=$(echo "$container" | jq -r '.name' | sed "s/\._\.$USER_ID//")
+            local status=$(echo "$container" | jq -r '.status')
+            local is_running=$(echo "$container" | jq -r '.running')
+            local gpu_allocated=$(echo "$container" | jq -r '.gpu_allocated // empty')
+
+            # Get image from docker (not in query JSON yet)
+            local full_name=$(echo "$container" | jq -r '.name')
+            local image=$(docker inspect --format "{{.Config.Image}}" "$full_name" 2>/dev/null | cut -d: -f1)
+            local uptime=$(format_uptime "$status")
+
+            # Status indicator
+            echo -e "${BOLD}$count. ${CYAN}$name${NC}"
+            echo -e "   Status: $(format_status "$status")"
+            echo -e "   Image:  ${DIM}$image${NC}"
+            echo -e "   Time:   ${DIM}$uptime${NC}"
+
+            # Show GPU allocation from Docker labels
+            if [ -n "$gpu_allocated" ] && [ "$gpu_allocated" != "null" ]; then
+                if [ "$is_running" = "true" ]; then
+                    echo -e "   GPU:    ${GREEN}GPU $gpu_allocated${NC}"
+                else
+                    echo -e "   GPU:    ${DIM}GPU $gpu_allocated (stopped)${NC}"
+                fi
+            fi
+
+            echo ""
+        done
     else
-        # Only show running containers
-        while IFS= read -r full_name; do
-            [ -z "$full_name" ] && continue
-            local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
-            if [[ "$status" == Up* ]]; then
-                filtered_containers="${filtered_containers}${full_name}\n"
-            fi
-        done <<< "$containers"
-        filtered_containers=$(echo -e "$filtered_containers" | grep -v "^$")
-    fi
-
-    if [ -z "$filtered_containers" ]; then
-        echo -e "${YELLOW}No running containers${NC}\n"
-        echo -e "${DIM}Show all containers: ${GREEN}container-list --all${NC}"
-        echo ""
+        # Fallback to old display method
+        echo -e "${YELLOW}Query tool unavailable, using basic view${NC}\n"
+        # Simple docker ps output
+        docker ps -a --filter "name=._.$USER_ID" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>/dev/null || true
         return
     fi
-
-    # Count
-    local total=$(echo "$filtered_containers" | grep -v "^$" | wc -l | tr -d ' ')
-    local running=$(docker ps --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null | wc -l | tr -d ' ')
-
-    # Display each container
-    local count=0
-    while IFS= read -r full_name; do
-        [ -z "$full_name" ] && continue
-        count=$((count + 1))
-
-        # Extract short name
-        local name=$(echo "$full_name" | sed "s/\._\.$USER_ID//")
-
-        # Get info via docker inspect (DS01-specific display)
-        local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
-        local image=$(docker inspect --format "{{.Config.Image}}" "$full_name" 2>/dev/null | cut -d: -f1)
-        local uptime=$(format_uptime "$status")
-
-        # Status indicator
-        echo -e "${BOLD}$count. ${CYAN}$name${NC}"
-        echo -e "   Status: $(format_status "$status")"
-        echo -e "   Image:  ${DIM}$image${NC}"
-        echo -e "   Time:   ${DIM}$uptime${NC}"
-
-        # Show GPU if running
-        if [[ "$status" == Up* ]]; then
-            local gpu=$(docker inspect --format "{{.HostConfig.DeviceRequests}}" "$full_name" 2>/dev/null)
-            if [[ "$gpu" != "[]" ]] && [[ "$gpu" != "<no value>" ]]; then
-                echo -e "   GPU:    ${GREEN}Allocated${NC}"
-            fi
-        fi
-
-        echo ""
-    done <<< "$filtered_containers"
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Total:${NC} $total container(s)  •  ${GREEN}$running running${NC}"
