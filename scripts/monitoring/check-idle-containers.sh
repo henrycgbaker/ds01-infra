@@ -34,30 +34,35 @@ get_idle_timeout() {
     local username="$1"
     
     # Use Python to parse YAML and get timeout
-    python3 - <<PYEOF
+    USERNAME="$username" CONFIG_FILE="$CONFIG_FILE" python3 - <<'PYEOF'
 import yaml
 import sys
+import os
 
 try:
-    with open("$CONFIG_FILE") as f:
+    username = os.environ['USERNAME']
+    config_file = os.environ['CONFIG_FILE']
+
+    with open(config_file) as f:
         config = yaml.safe_load(f)
-    
+
     # Check user overrides first
-    if 'user_overrides' in config and '$username' in config['user_overrides']:
-        timeout = config['user_overrides']['$username'].get('idle_timeout')
-        if timeout:
-            print(timeout)
-            sys.exit(0)
-    
+    if 'user_overrides' in config and config['user_overrides'] is not None:
+        if username in config['user_overrides']:
+            timeout = config['user_overrides'][username].get('idle_timeout')
+            if timeout:
+                print(timeout)
+                sys.exit(0)
+
     # Check groups
-    if 'groups' in config:
+    if 'groups' in config and config['groups'] is not None:
         for group_name, group_config in config['groups'].items():
-            if 'members' in group_config and '$username' in group_config['members']:
+            if 'members' in group_config and username in group_config['members']:
                 timeout = group_config.get('idle_timeout')
                 if timeout:
                     print(timeout)
                     sys.exit(0)
-    
+
     # Default timeout
     default_timeout = config.get('defaults', {}).get('idle_timeout', '48h')
     print(default_timeout)
@@ -198,7 +203,7 @@ To disable this warning (if actively training):
   touch /workspace/.keep-alive
 
 To stop now and free resources:
-  mlc-stop $(echo $container | cut -d'.' -f1)
+  container-stop $(echo $container | cut -d'.' -f1)
 
 Questions? Email: 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -218,19 +223,19 @@ WARNEOF
 stop_idle_container() {
     local username="$1"
     local container="$2"
-    
+
     log_color "Stopping idle container: $container (user: $username)" "$YELLOW"
-    
+
     # Check for .keep-alive file
     if docker exec "$container" test -f /workspace/.keep-alive 2>/dev/null; then
         log_color "Container $container has .keep-alive file - skipping" "$GREEN"
         return
     fi
-    
+
     # Create notification
     local user_home=$(eval echo "~$username")
     local notification_file="$user_home/.ds01-stopped-notification"
-    
+
     cat > "$notification_file" << NOTIFEOF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ℹ️  CONTAINER AUTO-STOPPED
@@ -243,7 +248,7 @@ Reason: Idle timeout reached
 Your work in /workspace is safe and persists.
 
 To restart your container:
-  mlc-open $(echo $container | cut -d'.' -f1)
+  container-run $(echo $container | cut -d'.' -f1)
 
 To prevent auto-stop in future:
   1. Keep training/scripts running, OR
@@ -251,86 +256,156 @@ To prevent auto-stop in future:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 NOTIFEOF
-    
+
     chown "$username:$username" "$notification_file" 2>/dev/null || true
-    
-    # Stop the container
-    docker stop "$container" 2>/dev/null || true
-    
-    # Clean up state file
+
+    # Stop the container using DS01 workflow
+    # First try mlc-stop, fallback to docker stop
+    local stopped=false
+    local mlc_stop="$INFRA_ROOT/aime-ml-containers/mlc-stop"
+    local container_name=$(echo "$container" | cut -d'.' -f1)
+
+    if [ -f "$mlc_stop" ]; then
+        if bash "$mlc_stop" "$container_name" -f -s &>/dev/null; then
+            stopped=true
+            log_color "Stopped via mlc-stop: $container" "$GREEN"
+        fi
+    fi
+
+    if [ "$stopped" = false ]; then
+        if docker stop -t 10 "$container" &>/dev/null; then
+            stopped=true
+            log_color "Stopped via docker stop: $container" "$GREEN"
+        else
+            log_color "Failed to stop container: $container" "$RED"
+            return 1
+        fi
+    fi
+
+    # Mark container as stopped in GPU allocator (starts GPU hold timer)
+    local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+    if [ -f "$gpu_allocator" ]; then
+        if python3 "$gpu_allocator" mark-stopped "$container" &>/dev/null; then
+            log_color "GPU marked as stopped for: $container" "$GREEN"
+        else
+            log "Warning: Failed to mark GPU as stopped for: $container"
+        fi
+    fi
+
+    # Clean up idle monitoring state file
     rm -f "$STATE_DIR/${container}.state"
-    
-    log_color "Container $container stopped successfully" "$GREEN"
+
+    log_color "Container $container stopped successfully (GPU hold timer started)" "$GREEN"
 }
 
 # Main monitoring loop
 monitor_containers() {
     log_color "Starting idle container monitoring" "$BLUE"
-    
-    # Get all running DS01 containers
-    local containers=$(docker ps --filter "label=aime.mlc.DS01_USER" --format "{{.Names}}")
-    
+
+    # Get all running containers (using AIME naming convention: name._.uid)
+    # This is more robust than relying on labels
+    local containers=$(docker ps --format "{{.Names}}" | grep '\._\.' || true)
+
     if [ -z "$containers" ]; then
-        log "No DS01 containers running"
+        log "No containers running (AIME naming convention)"
         return
     fi
-    
+
+    local monitored_count=0
+    local stopped_count=0
+    local warned_count=0
+
     for container in $containers; do
-        # Extract username and user ID
-        local username=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER"}}' 2>/dev/null)
-        local user_id=$(docker inspect "$container" --format='{{index .Config.Labels "aime.mlc.DS01_USER_ID"}}' 2>/dev/null)
-        
+        # Verify container still exists (race condition protection)
+        if ! docker ps --format "{{.Names}}" | grep -q "^${container}$"; then
+            log "Container $container no longer exists, skipping"
+            continue
+        fi
+
+        # Extract user ID from container name (format: name._.uid)
+        local user_id=$(echo "$container" | rev | cut -d'.' -f1 | rev)
+
+        # Get username from user ID
+        local username=$(getent passwd "$user_id" | cut -d: -f1 2>/dev/null || echo "")
+
         if [ -z "$username" ]; then
+            log "Warning: Cannot resolve username for UID $user_id (container: $container), skipping"
             continue
         fi
-        
-        # Get timeout for this user
-        local timeout_str=$(get_idle_timeout "$username")
-        local timeout_seconds=$(timeout_to_seconds "$timeout_str")
-        
-        # Skip if no timeout set
-        if [ "$timeout_seconds" -eq 0 ]; then
-            log "Container $container (user: $username) has no idle timeout"
+
+        ((monitored_count++))
+
+        # Wrap in error handling to prevent one container from breaking the whole loop
+        if ! process_container "$container" "$username"; then
+            log_color "Error processing container $container, continuing with next" "$RED"
             continue
-        fi
-        
-        # Check if container is active
-        local active=$(is_container_active "$container")
-        
-        if [ "$active" = "true" ]; then
-            update_activity "$container" "true"
-            log "Container $container (user: $username) is active"
-            continue
-        fi
-        
-        # Get last activity time
-        local last_activity=$(get_last_activity "$container")
-        local now=$(date +%s)
-        local idle_seconds=$((now - last_activity))
-        local idle_hours=$((idle_seconds / 3600))
-        
-        # Calculate warning threshold (80% of timeout)
-        local warning_seconds=$((timeout_seconds * 80 / 100))
-        
-        local state_file="$STATE_DIR/${container}.state"
-        source "$state_file"
-        
-        log "Container $container (user: $username): idle for ${idle_hours}h (timeout: $timeout_str)"
-        
-        # Check if we should warn
-        if [ "$idle_seconds" -ge "$warning_seconds" ] && [ "$WARNED" != "true" ]; then
-            local hours_until_stop=$(( (timeout_seconds - idle_seconds) / 3600 ))
-            send_warning "$username" "$container" "$hours_until_stop"
-            sed -i "s/^WARNED=.*/WARNED=true/" "$state_file"
-        fi
-        
-        # Check if we should stop
-        if [ "$idle_seconds" -ge "$timeout_seconds" ]; then
-            stop_idle_container "$username" "$container"
         fi
     done
-    
-    log_color "Idle monitoring check complete" "$BLUE"
+
+    log_color "Idle monitoring check complete: monitored=$monitored_count, warned=$warned_count, stopped=$stopped_count" "$BLUE"
+}
+
+# Process a single container (extracted for error handling)
+process_container() {
+    local container="$1"
+    local username="$2"
+
+    # Get timeout for this user
+    local timeout_str=$(get_idle_timeout "$username")
+    local timeout_seconds=$(timeout_to_seconds "$timeout_str")
+
+    # Skip if no timeout set
+    if [ "$timeout_seconds" -eq 0 ]; then
+        log "Container $container (user: $username) has no idle timeout"
+        return 0
+    fi
+
+    # Check if container is active
+    local active=$(is_container_active "$container")
+
+    if [ "$active" = "true" ]; then
+        update_activity "$container" "true"
+        log "Container $container (user: $username) is active"
+        return 0
+    fi
+
+    # Get last activity time
+    local last_activity=$(get_last_activity "$container")
+    local now=$(date +%s)
+    local idle_seconds=$((now - last_activity))
+    local idle_hours=$((idle_seconds / 3600))
+
+    # Calculate warning threshold (80% of timeout)
+    local warning_seconds=$((timeout_seconds * 80 / 100))
+
+    local state_file="$STATE_DIR/${container}.state"
+
+    # Initialize state file if missing
+    if [ ! -f "$state_file" ]; then
+        log "Initializing state file for $container"
+        echo "LAST_ACTIVITY=$last_activity" > "$state_file"
+        echo "LAST_CPU=0.0" >> "$state_file"
+        echo "WARNED=false" >> "$state_file"
+    fi
+
+    source "$state_file"
+
+    log "Container $container (user: $username): idle for ${idle_hours}h (timeout: $timeout_str)"
+
+    # Check if we should warn
+    if [ "$idle_seconds" -ge "$warning_seconds" ] && [ "$WARNED" != "true" ]; then
+        local hours_until_stop=$(( (timeout_seconds - idle_seconds) / 3600 ))
+        send_warning "$username" "$container" "$hours_until_stop"
+        sed -i "s/^WARNED=.*/WARNED=true/" "$state_file"
+    fi
+
+    # Check if we should stop
+    if [ "$idle_seconds" -ge "$timeout_seconds" ]; then
+        stop_idle_container "$username" "$container"
+        return 0
+    fi
+
+    return 0
 }
 
 # Run monitoring
