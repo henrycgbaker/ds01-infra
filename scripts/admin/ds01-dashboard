@@ -60,11 +60,12 @@ fi
 echo ""
 
 # GPU Allocation Status (MIG-aware)
-if [ -f /opt/ds01-infra/scripts/docker/gpu_allocator.py ]; then
+QUERY_TOOL="/opt/ds01-infra/scripts/docker/ds01-resource-query.py"
+if [ -f "$QUERY_TOOL" ]; then
     echo -e "${BOLD}GPU ALLOCATION STATUS${NC}"
     echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
 
-    # Use Python to format GPU status with MIG utilization
+    # Use new query tool for GPU status
     python3 << 'PYEOF'
 import sys
 import subprocess
@@ -119,10 +120,50 @@ def get_physical_gpu_util():
         return {}
 
 try:
-    from gpu_allocator import GPUAllocationManager
+    # Use new query tool for GPU status (Docker-first, no state files)
+    from gpu_state_reader import GPUStateReader
+    from gpu_availability_checker import GPUAvailabilityChecker
 
-    manager = GPUAllocationManager()
-    status = manager.get_status()
+    state_reader = GPUStateReader()
+    availability_checker = GPUAvailabilityChecker()
+
+    # Get status from Docker
+    allocations = state_reader.get_all_allocations()
+    summary = availability_checker.get_allocation_summary()
+
+    # Convert to old format for compatibility with display code
+    status = {
+        'mig_enabled': len(allocations) > 0 and '.' in list(allocations.keys())[0],
+        'total_gpus': summary['total_gpus'],
+        'total_allocated_containers': summary['allocated'],
+        'gpus': []
+    }
+
+    # Build GPU list for display
+    for gpu_slot, info in sorted(allocations.items()):
+        if '.' in gpu_slot:
+            # MIG instance (e.g., "1.2")
+            physical_gpu, mig_id = gpu_slot.split('.')
+            status['gpus'].append({
+                'id': gpu_slot,
+                'physical_gpu': physical_gpu,
+                'type': 'mig',
+                'profile': '2g.20gb',  # Profile info not yet in reader
+                'uuid': info['uuid'],
+                'container_count': len(info['containers']),
+                'containers': info['containers'],
+            })
+        else:
+            # Full GPU
+            status['gpus'].append({
+                'id': gpu_slot,
+                'physical_gpu': gpu_slot,
+                'type': 'physical_gpu',
+                'container_count': len(info['containers']),
+                'containers': info['containers'],
+                'memory_used': 0,
+                'memory_total': 1,
+            })
 
     # Get MIG process memory and physical GPU utilization
     mig_memory = get_mig_process_memory()
@@ -243,7 +284,7 @@ except Exception as e:
     import traceback
     print(f"  Error reading GPU allocation status: {e}")
     traceback.print_exc()
-    print(f"  Run: python3 /opt/ds01-infra/scripts/docker/gpu_allocator.py status")
+    print(f"  Run: python3 /opt/ds01-infra/scripts/docker/ds01-resource-query.py gpus")
     print()
 PYEOF
 
