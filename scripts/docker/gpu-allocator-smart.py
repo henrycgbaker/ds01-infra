@@ -42,14 +42,14 @@ class GPUAllocatorSmart:
     def _get_user_limits(self, username: str) -> Dict:
         """Get user's resource limits from config"""
         # Check user_overrides first
-        user_overrides = self.config.get('user_overrides', {})
+        user_overrides = self.config.get('user_overrides', {}) or {}
         if username in user_overrides:
             return user_overrides[username]
 
         # Check groups
-        groups = self.config.get('groups', {})
+        groups = self.config.get('groups', {}) or {}
         for group_name, group_config in groups.items():
-            if username in group_config.get('members', []):
+            if group_config and username in group_config.get('members', []):
                 return group_config
 
         # Default group
@@ -58,7 +58,7 @@ class GPUAllocatorSmart:
             return groups[default_group]
 
         # Fallback defaults
-        return self.config.get('defaults', {})
+        return self.config.get('defaults', {}) or {}
 
     def _get_user_priority(self, username: str) -> int:
         """Get user's allocation priority"""
