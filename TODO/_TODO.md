@@ -480,7 +480,6 @@ Creating container via mlc-create-wrapper...
     - [x] `scripts/system/setup-resource-slices.sh` - Update for new YAML structure
 
 
-
     # Configs
     - [ ] when fully set up: delete the setup scripts (in the /opt/scripts/system)
 
