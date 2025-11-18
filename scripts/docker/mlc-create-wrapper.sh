@@ -457,6 +457,25 @@ if [ -n "$CGROUP_PARENT" ]; then
     log_info "Setting cgroup-parent: $CGROUP_PARENT"
 fi
 
+# Add DS01 labels for stateless GPU tracking
+ALLOCATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+MLC_ARGS="$MLC_ARGS --ds01-label ds01.managed=true"
+MLC_ARGS="$MLC_ARGS --ds01-label ds01.user=$CURRENT_USER"
+MLC_ARGS="$MLC_ARGS --ds01-label ds01.created_at=$ALLOCATED_AT"
+
+if [ -n "$ALLOCATED_GPU" ]; then
+    MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.allocated=$ALLOCATED_GPU"
+    MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.allocated_at=$ALLOCATED_AT"
+
+    if [ -n "$DOCKER_ID" ]; then
+        MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.uuid=$DOCKER_ID"
+    fi
+
+    if [ -n "$PRIORITY" ]; then
+        MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.priority=$PRIORITY"
+    fi
+fi
+
 # Dry run mode
 if [ "$DRY_RUN" = true ]; then
     log_info "DRY RUN MODE - No containers will be created"
@@ -471,8 +490,18 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
+# Source container logger
+if [ -f "$SCRIPT_DIR/../lib/container-logger.sh" ]; then
+    source "$SCRIPT_DIR/../lib/container-logger.sh"
+fi
+
 # Call mlc-patched.py (DS01-enhanced AIME v2)
 log_info "Creating container with mlc-patched.py (AIME v2)..."
+
+# Log operation start
+if command -v log_container_operation &>/dev/null; then
+    log_container_operation "create_start" "$CURRENT_USER" "$CONTAINER_TAG" "${ALLOCATED_GPU:-none}" "pending" "Starting container creation"
+fi
 
 # Capture output to suppress verbose logging (only show errors)
 MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
@@ -480,6 +509,11 @@ MLC_EXIT_CODE=$?
 
 if [ $MLC_EXIT_CODE -ne 0 ]; then
     log_error "Container creation failed (exit code: $MLC_EXIT_CODE)"
+
+    # Log failure
+    if command -v log_container_operation &>/dev/null; then
+        log_container_operation "create_failed" "$CURRENT_USER" "$CONTAINER_TAG" "${ALLOCATED_GPU:-none}" "failed" "mlc-patched.py exit code $MLC_EXIT_CODE"
+    fi
 
     # Show mlc-patched.py error output
     if [ -n "$MLC_OUTPUT" ]; then
