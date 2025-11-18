@@ -135,9 +135,49 @@ start_container() {
                 echo -e "${GREEN}✓${NC} Your workspace files are safe in: ${DIM}~/workspace/$container_name/${NC}"
                 echo ""
 
-                # Future: Add auto-reallocation here
-                # GPU_AVAILABILITY_CHECKER="$INFRA_ROOT/scripts/docker/gpu-availability-checker.py"
-                # Offer to auto-reallocate if GPUs are available
+                # Check if auto-reallocation is possible
+                AVAILABILITY_CHECKER="$INFRA_ROOT/scripts/docker/gpu-availability-checker.py"
+                RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
+
+                if [ -f "$AVAILABILITY_CHECKER" ] && [ -f "$RESOURCE_PARSER" ]; then
+                    # Check if GPUs are available
+                    MAX_GPUS=$(python3 "$RESOURCE_PARSER" "$USERNAME" --max-gpus 2>/dev/null || echo "1")
+                    AVAILABLE_CHECK=$(python3 "$AVAILABILITY_CHECKER" check-user "$USERNAME" "$MAX_GPUS" 2>/dev/null || echo "")
+
+                    if echo "$AVAILABLE_CHECK" | grep -q "CAN_ALLOCATE"; then
+                        echo -e "${BOLD}Auto-reallocation available:${NC}"
+                        echo "  GPUs are currently available. You can automatically reallocate."
+                        echo ""
+                        read -p "  Reallocate GPU and recreate container? (y/N): " -n 1 -r
+                        echo ""
+
+                        if [[ $REPLY =~ ^[Yy]$ ]]; then
+                            echo ""
+                            echo -e "${CYAN}Reallocating GPU and recreating container...${NC}"
+
+                            # Get framework from container
+                            FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "aime.mlc.FRAMEWORK"}}' "$container_tag" 2>/dev/null | cut -d'-' -f1)
+
+                            if [ -n "$FRAMEWORK" ] && [ "$FRAMEWORK" != "<no value>" ]; then
+                                # Remove and recreate
+                                echo -e "${DIM}Removing old container...${NC}"
+                                container-remove "$container_name" --force 2>/dev/null || docker rm -f "$container_tag" 2>/dev/null || true
+
+                                echo -e "${DIM}Creating new container with fresh GPU allocation...${NC}"
+                                if container-create "$container_name" "$FRAMEWORK"; then
+                                    echo ""
+                                    echo -e "${GREEN}✓${NC} Container recreated successfully with new GPU"
+                                    return 0
+                                else
+                                    echo -e "${RED}✗${NC} Failed to recreate container"
+                                    return 1
+                                fi
+                            else
+                                echo -e "${YELLOW}Could not detect framework - manual recreation required${NC}"
+                            fi
+                        fi
+                    fi
+                fi
 
                 return 1
             fi
