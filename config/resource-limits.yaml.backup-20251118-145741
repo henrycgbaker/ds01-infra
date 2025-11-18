@@ -22,11 +22,11 @@ defaults:
   storage_tmp: 50G                  # Max storage in /tmp (inside container)
   
   # Container lifecycle
-  max_containers_per_user: 2        # Max simultaneous containers
-  max_runtime: 0.05h                # TEST: 3 minutes
-  idle_timeout: 0.02h                # TEST: ~1 minute
-  gpu_hold_after_stop: 0.01h          # TEST: 36 seconds
-  container_hold_after_stop: 0.02h      # TEST: ~1 minute
+  max_containers_per_user: 3        # Max simultaneous containers
+  max_runtime: 12h                 # Max walltime (null = no limit)
+  idle_timeout: 0.5h                 # Auto-stop after X hours of GPU inactivity
+  gpu_hold_after_stop: 0.25h          # How long to hold GPU after container stopped (null = indefinite)
+  container_hold_after_stop: 0.5h      # Auto-remove container after X hours stopped (null = never auto-remove)
   max_tasks: 512                    # Max tasks for systemd slice
   
   # Priority for allocation (1=lowest, 100=highest)
@@ -42,14 +42,14 @@ groups:
     
   researcher:
     members: []
-    max_mig_instances: 8        
+    max_mig_instances: 8            # Can use up to 4 MIG instances or 1 full GPU
     max_cpus: 32
     memory: 64g
     memory_swap: 64g
     shm_size: 32g
     storage_workspace: 500G
     storage_data: 1T
-    max_runtime: 0.05h                # TEST: 3 minutes
+    max_runtime: null
     max_tasks: 2048
     max_containers_per_user: 5
     priority: 50                    # Medium priority
@@ -63,10 +63,10 @@ groups:
     shm_size: 64g
     storage_workspace: 2T
     storage_data: 5T
-    #idle_timeout: 0.02h                # TEST: ~1 minute
-    #max_runtime: 0.05h                # TEST: 3 minutes
-    #gpu_hold_after_stop: 0.01h          # TEST: 36 seconds
-    #container_hold_after_stop: 0.02h      # TEST: ~1 minute
+    #idle_timeout: null              # No timeout
+    #max_runtime: null               # No limit
+    #gpu_hold_after_stop: 0.01h         # Hold GPU for 1h after stop (or set to null for indefinite)
+    #container_hold_after_stop: null    # Never auto-remove (or set to e.g. "48h")
     max_containers_per_user: 10
     max_tasks: null
     priority: 90                    # High priority

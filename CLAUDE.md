@@ -47,7 +47,7 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - Dispatchers: Support both `command subcommand` and `command-subcommand` syntax
 - `project-init`: dir-create → git-init → readme-create → image-create → container-create → container-run
 - `user-setup` (Complete onboarding): Educational first-time onboarding (ssh-setup → project-init → vscode-setup)
-- Command variants: `user-setup`, `user setup`, `new-user`
+   - Command variants: `user-setup`, `user setup`, `new-user`
 
 **Enhancement Layer:**
 - Resource limits via YAML + systemd cgroups
