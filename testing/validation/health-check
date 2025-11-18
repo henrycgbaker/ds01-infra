@@ -1,0 +1,58 @@
+#!/bin/bash
+# DS01 System Health Check - Run all validation checks
+# Returns exit code 0 if all pass, 1 if any fail
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+TOTAL=0
+PASSED=0
+FAILED=0
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}DS01 System Health Check${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+run_check() {
+    local name="$1"
+    local script="$2"
+
+    ((TOTAL++))
+    echo -ne "${BOLD}$name${NC}... "
+
+    if bash "$script" 2>&1 | tail -1; then
+        ((PASSED++))
+        return 0
+    else
+        ((FAILED++))
+        return 1
+    fi
+}
+
+# Run all checks
+run_check "GPU Consistency     " "$SCRIPT_DIR/check-gpu-consistency.sh"
+run_check "GPU-Docker Match    " "$SCRIPT_DIR/check-gpu-docker-match.sh"
+run_check "Container List Sync " "$SCRIPT_DIR/check-container-list-sync.sh"
+run_check "Metadata Files      " "$SCRIPT_DIR/check-metadata-files.sh"
+
+# Summary
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+if [ $FAILED -eq 0 ]; then
+    echo -e "${GREEN}✓ All checks passed ($PASSED/$TOTAL)${NC}"
+    exit 0
+else
+    echo -e "${RED}✗ $FAILED check(s) failed ($PASSED/$TOTAL passed)${NC}"
+    echo ""
+    echo "To fix issues, run:"
+    echo "  /opt/ds01-infra/scripts/maintenance/reconcile-gpu-state.sh"
+    exit 1
+fi

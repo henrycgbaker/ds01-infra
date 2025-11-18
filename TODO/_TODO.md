@@ -179,7 +179,7 @@
 - [ ] confirm the initial ssh config setup makes sense
 - [x] for the container name, does it make sense to have the username before? surely easier just to call it the image/project name?
     - naming convention: <projet><username><container/image>?
-- [ ] resolve container naming convention
+- [x] resolve container naming convention
     - currently inconsistent: some commandsimplements with username suffix, some don't
     - maybe remove username suffix if the username is in a label -> make sure to remove all dependencies (e.g. list / search / stop / remove etc might search for user-affiliated containers via the label)
 - [x]  currently mlc-create --show-limits => again it makes more sense to have naming convention more intuitive
@@ -393,6 +393,9 @@ Creating container via mlc-create-wrapper...
     - [x] add GPU release info messages (into container remove)
     - [x] similarly, for container start add gpu allocation message
 
+### Container list
+- [ ] add --running, --stopped (incl all not-running),  --all
+
 ### Container-cleanup
 - [x] container-cleanup → calls mlc-remove + GPU cleanup ==> need to check this GPU cleanup logic is safe!
 - [x] `container cleanup` -> no way to just delete volumes without naming them:
@@ -439,22 +442,18 @@ Creating container via mlc-create-wrapper...
 ### ds01 dashboard
 - [x] currently shows full GPU utilisation % -> ALSO show each MIG's util %
 - [x] currently showws each MIG's containers -> ALSO show full GPU's containers
-- [ ] add subcommands / arguments to split up dashboard into several smaller subcommands (e.g. just allocations, just logs, etc)
-- [ ] resolve the ds01-managed issue
-    - i think this comes from `ds01-run`
-    - this command will be depreciated soon, as I don't think it does anything useful??
-    - [ ] instead everything will go through `container create` -> this process needs to be associated with approrpiate cgroup
-        - [ ] all under ds01 slice
-            - students -> under student group (and then within that each user's own slice for granular monitoring)
-            - researchers-> under researcher group (and then within that each user's own slice for granular monitoring)
-            - admin -> under admin group (and then within that each user's own slice for granular monitoring)
-        - [ ] strategise first: is this sufficient for monitoring, allocating, tracking? or is there a better way to structure this?
-    - [ ] once this is implemented, and `ds01-run` removed, clean up the ds01 dashboard 
-        - [ ] e.g. do not need "DS01 System Containers:"
-        - [ ] e.g. active users should be ALL users on the server - like actually all of them, not just "No DS01-managed containers currently running"
-- [ ] I would like the GPU / MIG allocation and tracking sytem (and the dashboard & logs) to be robust to occasional changes in MIG configs
-    - might be that we have only full G/PUs sometimes, or only MIGs, or different sized MIGs, or some other combination
-    - the whole system needs to be robust to those changed
+- [x] resolve the ds01-managed issue
+- [x] GPU / MIG allocation and tracking sytem (and the dashboard & logs) to be robust to occasional changes in MIG configs
+- [ ] also refactor dashboard command:
+    - `dashboard` (remove sys info, gpu status (i.e. MIG or not), recent gpu allocations, quick actions)
+    - `dashboard --full` (everything as currently is)
+    - `dashboard mig-status` (shows which GPUs have MIG mode vs full GPU)
+    - `dashboard util` (GPU & MIG info on util & memory... so i) GPU util, ii) all the current `GPU ALLOCATION STATUS`, iii) all the current `SYSTEM RESOURCES` )
+    - `dashboard container` (shows current `CONTAINER OVERVIEW`)
+    - `dashboard users` (shows current `SYSTEM USERS`)
+    - `dashboard allocations` (shows 20 last `RECENT GPU ALLOCATIONS`)
+
+
 
 # Resource Allocation
 - [x] work on MIG instance partitioning script (/opt/ds01-infra/scripts/admin/ds01-mig-partition)
@@ -467,7 +466,14 @@ Creating container via mlc-create-wrapper...
     - [x] enforcing max runtime limits
     - [x] cleaning up stopped containers (GPU hold limit)
 - [x] update design so that resource allocation happens at `container start / run` not `container create` DECIDED AGAINST THIS - EITHER DO BY IMMPLEMENTING SLURM OR LEAVE AS IS
-
+- [ ] MAKE IT POSSIBLE FOR USERS TO CREATE CONTAINERS WHICH HAVE MULTIPLE PHYSICAL GPUs / MIG INSTANCES EXPOSED TO THE CONTAINER. 
+   - e.g. maybe a user wants to use an larger open source LLM that requires memory / compute for more than one MIG instance.
+   - IF their user cgroup limits allow (`max_mig_instances`), they should be able to request additional mig instances / GPUs be exposed to their container. 
+   - `max_mig_instances` applies to each container; of which they can only have `max_containers_per_user` (e.g. if they have `max_mig_instances`:2 and `max_containers_per_user`:2 they should be able to run 2 containers, each with 2 mig-insrtances)
+   - it should be possible to have multiple MIG instances across different physical GPUs (? maybe at a future insgtance we will use an allocation algo that prioritises intra-GPU MIGs, but for now it's fine to distribute them)
+   - we will need to expose this in `container create` (both when run as a script, and by inserting a new decision point into the interactive GUI after choice of GPU mode). 
+   - the decision point in the interactive GUI should default to 1 MIG instance (recommended), but also offer users choice of more if needed (with more explanation in --guided)
+   - docker resource allocation system should be robust to multiple MIGs/GPUs being allocated to a single container (so the container labels need to be able to hold records of multiple MIGs/GPUs)
 
     # Robustness Checks
     - [ ] test for local / admin / student / researcher users
@@ -512,8 +518,16 @@ Creating container via mlc-create-wrapper...
 
 # Testing
 - [ ] set up unit, functional, integraton tests
-    
-# User & Permission Management
+
+
+# USer guide for inside container:
+- [ ] select open at workspace (can I change this myself in configs?)
+- [ ] just git clone
+- [ ] need to find the specific Python environment where your PyTorch and other packages are installed
+- [ ] selecting kernel -> local python ev, or global one?
+
+# System-wide
+## User & Permission Management
 ### cgroups
 - [ ] not sure if i optimally set up cgroups correctly 
 - [ ] within user-group slice, each user should then get their own slice -> can see how much each user is using (in logs / reports)?
@@ -523,9 +537,11 @@ Creating container via mlc-create-wrapper...
 #### User groups
 - [ ] sort out user groups (incl using docker-users in the scripts, rather than docker -> remove docker group)
 
-# File/Dir Clean Up of SSD
+## File/Dir Clean Up of SSD
 - [ ] once identified current users -> send message out via dsl for saving important work -> begin deleting.
 - [ ] clean up disk
 - [ ] clean up old / images / containers
     - [ ] many remaining images to clean up (`sudo docker images`) -> `sudo docker image prune -a`
 
+## time
+- [x] correct the time settings

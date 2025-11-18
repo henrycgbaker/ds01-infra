@@ -212,6 +212,15 @@ def get_flags():
         help='Cgroup parent slice (e.g., ds01-admin.slice). '
              'Used for systemd resource management in DS01.'
     )
+    parser_create.add_argument(
+        '--ds01-label',
+        action='append',
+        dest='ds01_labels',
+        default=[],
+        metavar='KEY=VALUE',
+        help='DS01 metadata labels for GPU tracking (can be specified multiple times). '
+             'Used internally by DS01 for stateless GPU allocation tracking.'
+    )
     # ========== END DS01 PATCH ==========
 
     # Parser for the "list" command
@@ -785,22 +794,37 @@ def get_host_gpu_architecture():
         lines_by_type = defaultdict(list)
 
         for line in apt_output.split("\n"):
-            if "cuda-" in line:
+            if "cuda" in line.lower():
                 lines_by_type["cuda"].append(line)
             elif "rocm" in line:
                 lines_by_type["rocm"].append(line)
         
         if lines_by_type["cuda"]:
             cuda_lines = "\n".join(lines_by_type["cuda"])
+            host_cuda_version = None
+
+            # Try pattern 1: cuda-12-3 style
             match = re.search(r'cuda-(\d+\-\d+(\-\d+)?)', cuda_lines)
-            if not match:
-                match = re.search(r'cuda-toolkit-(\d+\-\d+(\-\d+)?)', cuda_lines)
-            
             if match:
                 version_str = match.group(1)  # e.g. '12-3-1'
                 parts = version_str.split("-")
                 host_cuda_version = float(".".join(parts[:2]))  # e.g. 12.3
-                
+
+            # Try pattern 2: cuda-toolkit-12-3 style
+            if not host_cuda_version:
+                match = re.search(r'cuda-toolkit-(\d+\-\d+(\-\d+)?)', cuda_lines)
+                if match:
+                    version_str = match.group(1)
+                    parts = version_str.split("-")
+                    host_cuda_version = float(".".join(parts[:2]))
+
+            # Try pattern 3: libcudnn8 version like "8.9.7.29-1+cuda12.2"
+            if not host_cuda_version:
+                match = re.search(r'\+cuda(\d+)\.(\d+)', cuda_lines)
+                if match:
+                    host_cuda_version = float(f"{match.group(1)}.{match.group(2)}")
+
+            if host_cuda_version:
                 if host_cuda_version <= 11.8:
                     return "CUDA", "CUDA_AMPERE", host_cuda_version
                 elif 12.8 <= host_cuda_version:
@@ -1441,7 +1465,8 @@ def build_docker_create_command(
         num_gpus,
         volumes,
         shm_size=None,           # DS01 PATCH: Resource limits
-        cgroup_parent=None       # DS01 PATCH: Resource limits
+        cgroup_parent=None,      # DS01 PATCH: Resource limits
+        ds01_labels=None         # DS01 PATCH: GPU tracking labels
     ):
     """Constructs a 'docker create' command customized for a machine learning container environment.
 
@@ -1515,6 +1540,12 @@ def build_docker_create_command(
     # Add cgroup parent if provided (DS01 systemd integration)
     if cgroup_parent:
         base_docker_cmd.extend(['--cgroup-parent', cgroup_parent])
+
+    # Add DS01 labels for GPU tracking (stateless allocation)
+    if ds01_labels:
+        for label in ds01_labels:
+            if '=' in label:
+                base_docker_cmd.extend(['--label', label])
     # ========== END DS01 PATCH ==========
 
     base_docker_cmd.extend([
@@ -2055,7 +2086,8 @@ def main():
                 args.num_gpus,
                 volumes,
                 shm_size=getattr(args, 'shm_size', None),           # DS01 PATCH
-                cgroup_parent=getattr(args, 'cgroup_parent', None)  # DS01 PATCH
+                cgroup_parent=getattr(args, 'cgroup_parent', None), # DS01 PATCH
+                ds01_labels=getattr(args, 'ds01_labels', [])        # DS01 PATCH
             )
             
             # ToDo: compare subprocess.Popen with subprocess.run
