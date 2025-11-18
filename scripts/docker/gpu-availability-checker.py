@@ -228,6 +228,18 @@ def main():
             print(f"  Reason: {result['reason']}")
         print(f"\n  Available GPUs: {len(result['available_gpus'])}")
 
+    elif command == "check-user" and len(sys.argv) > 2:
+        # Simple check for container-start script
+        username = sys.argv[2]
+        max_gpus = int(sys.argv[3]) if len(sys.argv) > 3 else None
+
+        result = checker.get_user_available_gpus(username, max_gpus)
+
+        if result['can_allocate']:
+            print("CAN_ALLOCATE")
+        else:
+            print(f"CANNOT_ALLOCATE: {result['reason']}")
+
     elif command == "suggest" and len(sys.argv) > 2:
         username = sys.argv[2]
         max_gpus = int(sys.argv[3]) if len(sys.argv) > 3 else None
