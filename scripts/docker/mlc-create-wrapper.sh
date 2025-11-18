@@ -337,7 +337,7 @@ else
     RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${CURRENT_USER}.slice/ds01-${USER_GROUP}.slice/")
 fi
 
-# GPU allocation via gpu_allocator.py (DS01 priority-based allocation)
+# GPU allocation via gpu-allocator-smart.py (DS01 priority-based, stateless)
 GPU_ARG=""
 ALLOCATED_GPU=""
 
@@ -362,7 +362,7 @@ else
                 MAX_GPUS=999
             fi
 
-            log_info "Allocating GPU via gpu_allocator.py (priority: $PRIORITY, max: $MAX_GPUS)..."
+            log_info "Allocating GPU via gpu-allocator-smart.py (priority: $PRIORITY, max: $MAX_GPUS)..."
 
             # Allocate GPU
             ALLOC_OUTPUT=$(python3 "$GPU_ALLOCATOR" allocate "$CURRENT_USER" "$CONTAINER_TAG" "$MAX_GPUS" "$PRIORITY" 2>&1)
