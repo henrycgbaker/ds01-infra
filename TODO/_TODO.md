@@ -452,6 +452,29 @@ Creating container via mlc-create-wrapper...
     - `dashboard container` (shows current `CONTAINER OVERVIEW`)
     - `dashboard users` (shows current `SYSTEM USERS`)
     - `dashboard allocations` (shows 20 last `RECENT GPU ALLOCATIONS`)
+- [ ] DASHBOARD IS A MESS COME BACK TO
+
+GPU/MIG allocation & 'dashboard'
+- target: 
+    - containers are created and a GPU/MIG target ID is "assigned". 
+    - "Assigned" does not make it actively "allocated" (i,e, reserved"), just that it will try to attatch to that target GPU/MIG on start.
+    - If user starts container, then the system will try to "allocate" the "assigned" target GPU/MIG.
+    - if it is successfully "allocated", it means it is actively being used and is reserved for exclusive use by the user.
+    - If a container's "assigned" GPU?MIG ID is already in use (i.e. is now "allocated" and so reserved) by another user, then it is blocked (not "allocated"), and the user must recreate the container so that a new (available) GPU/MIG can be "assigned"/targeted based on the algorithm.
+    - once a container is stopped (either by user, or by cron jon automation), then the GPU is "released". This means it is un-allocated, and goes back into circulations
+    - so: assigned = targeted; allocated = reserved; blocked = contended; released = available
+- what is it the setup at present
+            Current Setup
+
+            No "assigned vs allocated" distinction exists. System is simpler:
+
+            1. Container created → GPU assigned + allocated (reserved) immediately
+                - Stored in Docker HostConfig.DeviceRequests (single source of truth)
+                - Also logged in /var/lib/ds01/container-metadata/{container}.json
+            2. Container stopped → GPU still allocated (remains bound to container)
+                - No release on stop - GPU stays reserved
+                - Other users cannot use it
+            3. Container removed → GPU released (back to pool)
 
 
 
@@ -523,7 +546,7 @@ Creating container via mlc-create-wrapper...
 # USer guide for inside container:
 - [ ] select open at workspace (can I change this myself in configs?)
 - [ ] just git clone
-- [ ] need to find the specific Python environment where your PyTorch and other packages are installed
+- [ ] need to find the specific Python environment where your PyTorch and other packages are installedco
 - [ ] selecting kernel -> local python ev, or global one?
 
 # System-wide

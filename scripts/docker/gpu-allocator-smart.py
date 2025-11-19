@@ -9,14 +9,25 @@ import sys
 import json
 import yaml
 import subprocess
+import importlib.util
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Tuple
 
-# Import our helper modules
-sys.path.insert(0, str(Path(__file__).parent))
-from gpu_state_reader import GPUStateReader
-from gpu_availability_checker import GPUAvailabilityChecker
+# Import our helper modules (handle hyphenated filenames)
+SCRIPT_DIR = Path(__file__).parent
+
+# Dynamic import for gpu-state-reader.py
+spec = importlib.util.spec_from_file_location('gpu_state_reader', str(SCRIPT_DIR / 'gpu-state-reader.py'))
+gpu_state_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gpu_state_module)
+GPUStateReader = gpu_state_module.GPUStateReader
+
+# Dynamic import for gpu-availability-checker.py
+spec = importlib.util.spec_from_file_location('gpu_availability_checker', str(SCRIPT_DIR / 'gpu-availability-checker.py'))
+gpu_avail_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gpu_avail_module)
+GPUAvailabilityChecker = gpu_avail_module.GPUAvailabilityChecker
 
 
 class GPUAllocatorSmart:
