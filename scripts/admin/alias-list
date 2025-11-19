@@ -30,13 +30,17 @@ echo -e "  ${GREEN}project init${NC}           Create new project"
 echo ""
 
 echo -e "${BOLD}Container Management:${NC}"
+echo -e "  ${GREEN}container deploy${NC}     Create AND start container (Tier 3 orchestrator)"
+echo -e "  ${GREEN}container retire${NC}     Stop AND remove container (Tier 3 orchestrator)"
 echo -e "  ${GREEN}container create${NC}     Create a new container"
 echo -e "  ${GREEN}container run${NC}        Start and attach to container"
+echo -e "  ${GREEN}container start${NC}      Start container in background"
 echo -e "  ${GREEN}container stop${NC}       Stop a running container"
+echo -e "  ${GREEN}container pause${NC}      Pause container (freeze processes, keep GPU)"
+echo -e "  ${GREEN}container remove${NC}     Remove stopped containers"
 echo -e "  ${GREEN}container exit${NC}       Exit container (without stopping)"
 echo -e "  ${GREEN}container list${NC}       List your containers"
 echo -e "  ${GREEN}container stats${NC}      Resource usage statistics"
-echo -e "  ${GREEN}container cleanup${NC}    Remove stopped containers"
 echo ""
 
 echo -e "${BOLD}Image Management:${NC}"
@@ -182,7 +186,7 @@ if [ -d /usr/local/bin ]; then
         done
     else
         echo -e "${YELLOW}  No DS01 symlinks found in /usr/local/bin${NC}"
-        echo -e "  Run: ${CYAN}sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh${NC}"
+        echo -e "  Run: ${CYAN}sudo /opt/ds01-infra/scripts/system/update-symlinks.sh${NC}"
     fi
 else
     echo -e "${YELLOW}  /usr/local/bin not accessible${NC}"

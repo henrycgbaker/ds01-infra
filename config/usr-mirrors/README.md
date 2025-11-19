@@ -28,12 +28,12 @@ Each `.link` file contains:
 To create all symlinks in `/usr/local/bin/`:
 
 ```bash
-sudo /opt/ds01-infra/scripts/system/setup-user-commands.sh
+sudo /opt/ds01-infra/scripts/system/update-symlinks.sh
 ```
 
 This script:
-1. Reads the records in this directory
-2. Creates symlinks in `/usr/local/bin/`
+1. Creates symlinks for all DS01 commands in `/usr/local/bin/`
+2. Organized by 4-tier architecture (Base, Atomic, Orchestrators, Workflows)
 3. Makes DS01 commands available system-wide
 
 ## Verifying Symlinks
@@ -53,5 +53,5 @@ If user commands are added or changed:
 
 1. Update the command list in `scripts/system/create-symlink-records.sh`
 2. Run: `scripts/system/create-symlink-records.sh`
-3. Run: `sudo scripts/system/setup-user-commands.sh`
+3. Run: `sudo scripts/system/update-symlinks.sh`
 4. Commit the new `.link` files to git
