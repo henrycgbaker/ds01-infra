@@ -34,18 +34,30 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - All wrapped commands add DS01 UX: interactive GUI, --guided mode, GPU management, safety checks
 - See `/opt/ds01-infra/docs/COMMAND_LAYERS.md` for details
 
-**TIER 2: Modular Unit Commands** (Single-purpose, parallely-isolated & modular, reusable)
+**TIER 2: Atomic Unit Commands** (Single-purpose, modular, reusable)
 - **Container Management** (8): `container-{create|run|start|stop|list|stats|remove|exit}`
   - Wrap AIME commands with DS01 UX (interactive GUI, --guided mode, GPU management)
+  - Each command does ONE thing and does it well
 - **Image Management** (4): `image-{create|list|update|delete}`
   - 4-phase workflow: Framework → Jupyter → Data Science → Use Case
   - Shows AIME base packages, supports pip version specifiers
 - **Project Setup** (5): `{dir|git|readme|ssh|vscode}-{create|init|setup}`
 - All support `--guided` flag for educational mode
 
-**TIER 3: Workflow Orchestrators** (Multi-step workflows)
+**TIER 3: Container Orchestrators** (Combine Tier 2 atomic commands)
+- **Ephemeral container model**: Containers are temporary compute, workspaces persist
+- `container-deploy`: Creates AND starts containers (container-create → container-start/run)
+  - Prompts: "Start in background or open terminal?"
+  - Supports `--background` and `--open` flags
+  - Default behavior for quick deployment
+- `container-retire`: Stops AND removes containers (container-stop → container-remove)
+  - Immediately releases GPU for others
+  - Preserves workspace files, Dockerfiles, and images
+  - Encourages "good citizen" resource management
+
+**TIER 4: Workflow Orchestrators** (Complete multi-step workflows)
 - Dispatchers: Support both `command subcommand` and `command-subcommand` syntax
-- `project-init`: dir-create → git-init → readme-create → image-create → container-create → container-run
+- `project-init`: dir-create → git-init → readme-create → image-create → container-deploy
 - `user-setup` (Complete onboarding): Educational first-time onboarding (ssh-setup → project-init → vscode-setup)
    - Command variants: `user-setup`, `user setup`, `new-user`
 
@@ -54,6 +66,37 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - GPU allocation state management (MIG support)
 - Container lifecycle automation
 - Monitoring and metrics
+
+### Ephemeral Container Philosophy
+
+DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms, and Kubernetes:
+
+**Core Principle:** Containers = temporary compute sessions | Workspaces = permanent storage
+
+**User Workflows:**
+- **Quick Deploy**: `container-deploy my-project` → create + start in one command
+- **Work Session**: Code, train models, experiment (files saved to workspace)
+- **Quick Retire**: `container-retire my-project` → stop + remove + GPU freed immediately
+
+**What's Ephemeral (removed):**
+- Container instance (can be recreated anytime)
+- GPU allocation (freed immediately on retire)
+
+**What's Persistent (always safe):**
+- Workspace files (`~/workspace/<project>/`)
+- Dockerfiles (`~/dockerfiles/`)
+- Docker images (blueprints for recreation)
+- Project configuration
+
+**Benefits:**
+- **Resource Efficiency**: GPUs freed immediately, no stale allocations
+- **Clear Mental Model**: "Shut down laptop when done" = `container-retire`
+- **Cloud-Native Skills**: Prepares students for AWS/GCP/Kubernetes workflows
+- **Simpler State**: Only running/removed states (no stopped-but-allocated limbo)
+
+**For Users Who Need Persistence:**
+- `container-stop --keep-container` flag available in Phase 2
+- Default encourages best practices
 
 ### AIME v2 Integration
 
@@ -68,7 +111,7 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - Containers: `{project-name}._.{user-id}` (AIME convention)
 - Dockerfiles: `~/dockerfiles/{project-name}.Dockerfile`
 
-**Workflow:** image-create (4 phases) → builds custom image → container-create → mlc-patched.py → resource limits → GPU allocation
+**Workflow:** image-create (4 phases) → builds custom image → container-deploy (create + start) → mlc-patched.py → resource limits → GPU allocation
 
 ### Core Components
 
@@ -107,6 +150,36 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - `config/etc-mirrors/logrotate.d/` → `/etc/logrotate.d/`
 
 ## Common Commands
+
+### User Commands (Recommended)
+
+**Tier 3 Orchestrators (Ephemeral Model):**
+```bash
+# Deploy container (create + start)
+container-deploy my-project                    # Interactive mode
+container-deploy my-project --open             # Create and open terminal
+container-deploy my-project --background       # Create and start in background
+container-deploy my-project --guided           # Beginner mode with explanations
+
+# Retire container (stop + remove + free GPU)
+container-retire my-project                    # Interactive mode
+container-retire my-project --force            # Skip confirmations
+container-retire my-project --images           # Also remove Docker image
+```
+
+**Tier 2 Atomic Commands (Advanced/Step-by-Step):**
+```bash
+# Container lifecycle (manual control)
+container-create my-project                    # Create only
+container-start my-project                     # Start in background
+container-run my-project                       # Start and enter
+container-stop my-project                      # Stop only
+container-remove my-project                    # Remove only
+
+# Container inspection
+container-list                                 # View all containers
+container-stats                                # Resource usage
+```
 
 ### Development/Testing
 ```bash
@@ -224,12 +297,16 @@ Cron jobs run as root and check ALL containers against each owner's specific res
 
 ```
 scripts/
-├── docker/              # Container creation, GPU allocation
+├── docker/              # Container creation, GPU allocation (Tier 1)
 │   ├── mlc-create-wrapper.sh, mlc-patched.py
 │   ├── get_resource_limits.py, gpu_allocator.py
-├── user/                # User-facing commands
-│   ├── container-*, image-*, {dir|git|readme|ssh|vscode}-*
-│   ├── user-setup, new-project, *-dispatcher.sh
+├── user/                # User-facing commands (Tier 2, 3, 4)
+│   ├── Tier 2 (Atomic): container-{create|start|run|stop|remove|list|stats|exit}
+│   ├── Tier 2 (Atomic): image-{create|list|update|delete}
+│   ├── Tier 2 (Atomic): {dir|git|readme|ssh|vscode}-*
+│   ├── Tier 3 (Orchestrators): container-{deploy|retire}
+│   ├── Tier 4 (Workflows): user-setup, project-init, *-dispatcher.sh
+│   └── v1-backup/       # Backup of container workflow scripts before refactor
 ├── system/              # System administration
 │   ├── setup-resource-slices.sh, create-user-slice.sh
 │   ├── add-user-to-docker.sh, update-symlinks.sh
