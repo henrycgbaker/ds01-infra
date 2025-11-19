@@ -324,6 +324,19 @@ if [ -f "$GPU_ALLOCATOR" ]; then
     fi
 fi
 
+# Check if container is paused and unpause if needed
+CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev/null || echo "")
+if [ "$CONTAINER_STATUS" = "paused" ]; then
+    echo -e "${YELLOW}○${NC} Container is paused. Unpausing..."
+    if docker unpause "$CONTAINER_TAG" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Container unpaused"
+        echo ""
+    else
+        echo -e "${RED}✗${NC} Failed to unpause container"
+        exit 1
+    fi
+fi
+
 # Check if mlc-open exists (base system)
 if [ -f "$MLC_OPEN" ] && [ -x "$MLC_OPEN" ]; then
     # Use base system mlc-open
