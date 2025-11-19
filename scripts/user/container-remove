@@ -264,6 +264,67 @@ cleanup_container() {
         fi
     fi
 
+    # Prompt to save changes to image (interactive mode only)
+    if [ "$interactive" = "true" ] && [ "$force" != "true" ]; then
+        echo ""
+        echo -e "${CYAN}━━━ Save Changes to Image ━━━${NC}"
+        echo ""
+
+        # Get the image used by this container
+        local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null || echo "")
+
+        if [ -n "$image" ]; then
+            if [ "$guided" = "true" ]; then
+                echo -e "${CYAN}ℹ ${NC}${BOLD}Before removing this container:${NC}"
+                echo ""
+                echo "  Did you install new packages or make configuration changes?"
+                echo "  You can save them back to the Docker image for future use."
+                echo ""
+                echo -e "${BOLD}What gets saved:${NC}"
+                echo "  • New pip/conda packages installed"
+                echo "  • Configuration file changes"
+                echo "  • System packages (apt/yum)"
+                echo ""
+                echo -e "${BOLD}What does NOT get saved:${NC}"
+                echo "  • Your workspace files (already safe in ~/workspace/)"
+                echo "  • Running processes"
+                echo ""
+            fi
+
+            echo -e "${YELLOW}💡${NC} Save container changes to image: ${CYAN}$image${NC}?"
+            echo -e "   ${DIM}(This updates the image with any packages/configs you installed)${NC}"
+            echo ""
+            read -p "Save changes to image? [y/N]: " SAVE_IMAGE </dev/tty
+
+            if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
+                echo ""
+                echo -e "${CYAN}Committing changes to image...${NC}"
+
+                # Commit container changes to image
+                if docker commit "$container_tag" "$image" > /dev/null 2>&1; then
+                    echo -e "${GREEN}✓${NC} Changes saved to image: $image"
+                    echo ""
+                    echo -e "${BOLD}What was saved:${NC}"
+                    echo "  • All package installations (pip, conda, apt, etc.)"
+                    echo "  • Configuration file changes"
+                    echo "  • System modifications"
+                    echo ""
+                    echo -e "${DIM}Next time you run: ${GREEN}container-deploy $container_name${NC}"
+                    echo -e "${DIM}The container will include these changes${NC}"
+                    echo ""
+                else
+                    echo -e "${YELLOW}⚠${NC} Failed to commit changes to image"
+                    echo ""
+                fi
+            else
+                echo ""
+                echo -e "${YELLOW}Skipped.${NC} Changes will be lost when container is removed."
+                echo -e "${DIM}Tip: You can rebuild from Dockerfile at any time${NC}"
+                echo ""
+            fi
+        fi
+    fi
+
     # Check if mlc-remove exists
     if [ -f "$MLC_REMOVE" ]; then
         # Remove via mlc-remove (AIME Tier 1)
