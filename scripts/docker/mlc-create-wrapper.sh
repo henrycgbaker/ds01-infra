@@ -508,17 +508,66 @@ MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
 MLC_EXIT_CODE=$?
 
 if [ $MLC_EXIT_CODE -ne 0 ]; then
+    echo ""
     log_error "Container creation failed (exit code: $MLC_EXIT_CODE)"
+    echo ""
 
     # Log failure
     if command -v log_container_operation &>/dev/null; then
         log_container_operation "create_failed" "$CURRENT_USER" "$CONTAINER_TAG" "${ALLOCATED_GPU:-none}" "failed" "mlc-patched.py exit code $MLC_EXIT_CODE"
     fi
 
-    # Show mlc-patched.py error output
-    if [ -n "$MLC_OUTPUT" ]; then
-        echo "$MLC_OUTPUT"
+    # Show detailed diagnostic information
+    echo -e "${YELLOW}═══ Diagnostic Information ═══${NC}"
+    echo ""
+
+    # Show GPU allocation details
+    if [ -n "$ALLOCATED_GPU" ]; then
+        echo -e "${BLUE}GPU Allocation:${NC}"
+        echo "  Allocated GPU: $ALLOCATED_GPU"
+        echo "  Docker ID: ${DOCKER_ID:-unknown}"
+        echo "  Priority: ${PRIORITY:-unknown}"
+        echo ""
     fi
+
+    # Show resource limits being applied
+    echo -e "${BLUE}Resource Limits:${NC}"
+    echo "$RESOURCE_LIMITS" | tr ' ' '\n' | sed 's/^/  /'
+    echo ""
+
+    # Show mlc-patched.py error output (full output, last 30 lines)
+    if [ -n "$MLC_OUTPUT" ]; then
+        echo -e "${BLUE}mlc-patched.py Output:${NC}"
+        echo "$MLC_OUTPUT" | tail -30 | sed 's/^/  /'
+        echo ""
+    else
+        echo -e "${BLUE}mlc-patched.py Output:${NC}"
+        echo "  (no output captured)"
+        echo ""
+    fi
+
+    # Show helpful troubleshooting steps
+    echo -e "${YELLOW}═══ Troubleshooting Steps ═══${NC}"
+    echo ""
+    echo "1. Check Docker daemon:"
+    echo "   docker info"
+    echo ""
+    echo "2. Check GPU availability:"
+    echo "   python3 $GPU_ALLOCATOR status"
+    echo ""
+    echo "3. Check GPU allocator logs:"
+    echo "   tail -20 /var/log/ds01/gpu-allocations.log"
+    echo ""
+    echo "4. Verify custom image exists (if using --image):"
+    if [ -n "$CUSTOM_IMAGE" ]; then
+        echo "   docker images | grep '$CUSTOM_IMAGE'"
+    else
+        echo "   (not using custom image)"
+    fi
+    echo ""
+    echo "5. Check for Python import errors:"
+    echo "   python3 $MLC_PATCHED --help"
+    echo ""
 
     # Release allocated GPU if one was allocated
     if [ -n "$ALLOCATED_GPU" ] && [ -f "$GPU_ALLOCATOR" ]; then
@@ -526,6 +575,7 @@ if [ $MLC_EXIT_CODE -ne 0 ]; then
         python3 "$GPU_ALLOCATOR" release "$CONTAINER_TAG" &>/dev/null || true
     fi
 
+    echo ""
     exit $MLC_EXIT_CODE
 fi
 
@@ -534,15 +584,37 @@ log_info "Applying resource limits to container..."
 
 # Verify container was created
 if ! docker inspect "$CONTAINER_TAG" &>/dev/null; then
+    echo ""
     log_error "Container $CONTAINER_TAG was not created successfully"
+    log_error "mlc-patched.py reported success but container does not exist in Docker"
+    echo ""
+
+    echo -e "${YELLOW}═══ Diagnostic Information ═══${NC}"
     echo ""
 
     # Show mlc-patched.py output for debugging
     if [ -n "$MLC_OUTPUT" ]; then
-        echo -e "${YELLOW}mlc-patched.py output:${NC}"
-        echo "$MLC_OUTPUT"
+        echo -e "${BLUE}mlc-patched.py output:${NC}"
+        echo "$MLC_OUTPUT" | tail -30 | sed 's/^/  /'
         echo ""
     fi
+
+    # List all containers to see if a similar name exists
+    echo -e "${BLUE}Existing containers for user:${NC}"
+    docker ps -a --filter "label=ds01.user=$CURRENT_USER" --format "  {{.Names}} ({{.Status}})" 2>/dev/null || echo "  (none found)"
+    echo ""
+
+    echo -e "${YELLOW}═══ Troubleshooting Steps ═══${NC}"
+    echo ""
+    echo "1. Check Docker daemon status:"
+    echo "   docker info"
+    echo ""
+    echo "2. Check Docker logs for errors:"
+    echo "   sudo journalctl -u docker --since '5 minutes ago' | tail -20"
+    echo ""
+    echo "3. Try listing all containers:"
+    echo "   docker ps -a"
+    echo ""
 
     # Release allocated GPU if one was allocated
     if [ -n "$ALLOCATED_GPU" ] && [ -f "$GPU_ALLOCATOR" ]; then
@@ -550,6 +622,7 @@ if ! docker inspect "$CONTAINER_TAG" &>/dev/null; then
         python3 "$GPU_ALLOCATOR" release "$CONTAINER_TAG" &>/dev/null || true
     fi
 
+    echo ""
     exit 1
 fi
 

@@ -9,12 +9,16 @@ import subprocess
 import json
 import re
 import sys
+import importlib.util
 from typing import Dict, List, Set
 from pathlib import Path
 
-# Import gpu-state-reader
-sys.path.insert(0, str(Path(__file__).parent))
-from gpu_state_reader import GPUStateReader
+# Dynamic import for gpu-state-reader.py (hyphenated filename)
+SCRIPT_DIR = Path(__file__).parent
+spec = importlib.util.spec_from_file_location('gpu_state_reader', str(SCRIPT_DIR / 'gpu-state-reader.py'))
+gpu_state_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(gpu_state_module)
+GPUStateReader = gpu_state_module.GPUStateReader
 
 
 class GPUAvailabilityChecker:
