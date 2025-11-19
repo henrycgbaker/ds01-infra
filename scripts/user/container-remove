@@ -11,8 +11,15 @@ MLC_REMOVE="$INFRA_ROOT/aime-ml-containers/mlc-remove"
 GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
-# Source interactive library
-source /usr/local/lib/interactive-select.sh
+# Source interactive library (with fallback for development)
+if [ -f "/usr/local/lib/interactive-select.sh" ]; then
+    source /usr/local/lib/interactive-select.sh
+elif [ -f "$INFRA_ROOT/scripts/lib/interactive-select.sh" ]; then
+    source "$INFRA_ROOT/scripts/lib/interactive-select.sh"
+else
+    echo "Error: interactive-select.sh not found"
+    exit 1
+fi
 
 BLUE='\033[94m'
 GREEN='\033[0;32m'
