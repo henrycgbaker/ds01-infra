@@ -277,7 +277,7 @@ if [ "$GUIDED" = false ]; then
 fi
 
 # Check GPU availability before starting (2c: Resource allocation validation)
-GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
 if [ -f "$GPU_ALLOCATOR" ]; then
     # Get container's allocated GPU from metadata
     CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
