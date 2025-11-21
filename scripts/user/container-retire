@@ -1,0 +1,317 @@
+#!/bin/bash
+# DS01 Container Retire - Tier 3 Orchestrator
+# Streamlined workflow: Stop container → Remove container (single command)
+# Tier 3 Command - Orchestrates container-stop and container-remove
+
+set -e
+
+# Export orchestrator flag to suppress Tier 2 prompts and auto-remove
+export DS01_ORCHESTRATOR=retire
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
+# Script paths - resolve symlinks to get real path
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if [ -L "$SCRIPT_PATH" ]; then
+    SCRIPT_PATH="$(readlink -f "$SCRIPT_PATH")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 Container Retire${NC}"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Streamlined workflow to completely cleanup a container."
+    echo "  Combines container-stop + container-remove in one command."
+    echo "  Immediately frees GPU and resources for others."
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container retire [name] [options]"
+    echo "  container retire              # Interactive selection"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  name              Container name (optional - will prompt if not provided)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided          Show detailed explanations for beginners"
+    echo "  -f, --force       Skip all confirmation prompts"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo -e "${CYAN}What gets removed:${NC}"
+    echo "  • ${BOLD}Container${NC} - Stopped and removed permanently"
+    echo "  • ${BOLD}GPU allocation${NC} - Freed immediately (good citizen!)"
+    echo ""
+    echo -e "${CYAN}What is ALWAYS preserved:${NC}"
+    echo -e "  ${GREEN}✓${NC} Your workspace files (~/workspace/<project>/)"
+    echo -e "  ${GREEN}✓${NC} Dockerfiles (~/dockerfiles/)"
+    echo -e "  ${GREEN}✓${NC} Docker images (can be removed separately with --images)"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Retire specific container${NC}"
+    echo "  container retire my-project"
+    echo ""
+    echo -e "  ${DIM}# Retire with guided explanations${NC}"
+    echo "  container retire my-project --guided"
+    echo ""
+    echo -e "  ${DIM}# Force retire (skip confirmations)${NC}"
+    echo "  container retire my-project --force"
+    echo ""
+    echo -e "${YELLOW}💡 What happens:${NC}"
+    echo "  1. Stops the container (graceful shutdown)"
+    echo "  2. Removes the container"
+    echo "  3. Frees GPU immediately for others"
+    echo ""
+    echo -e "${CYAN}Alternative commands:${NC}"
+    echo -e "  ${DIM}# Step-by-step (Tier 2 modular commands)${NC}"
+    echo "  container-stop my-project      # Stop only (GPU held temporarily)"
+    echo "  container-remove my-project    # Remove later"
+    echo ""
+    echo -e "  ${DIM}# Recreate when needed${NC}"
+    echo "  container deploy my-project    # Create + Enter"
+    echo ""
+}
+
+# Parse arguments
+CONTAINER_NAME=""
+GUIDED=false
+FORCE=false
+STOP_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            STOP_ARGS+=("$1")
+            shift
+            ;;
+        -f|--force)
+            FORCE=true
+            shift
+            ;;
+        -h|--help|--info)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$CONTAINER_NAME" ]; then
+                CONTAINER_NAME="$1"
+                STOP_ARGS+=("$1")
+            else
+                echo -e "${RED}✗ Too many arguments${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Container Retire${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}ℹ ${NC}${BOLD}What is 'retire'?${NC}"
+    echo ""
+    echo "Retire is a streamlined workflow that:"
+    echo "  1. Stops the container (graceful shutdown)"
+    echo "  2. Removes the container"
+    echo "  3. Frees GPU immediately for other users"
+    echo ""
+    echo "This is equivalent to running:"
+    echo -e "  ${DIM}container-stop <name>${NC}"
+    echo -e "  ${DIM}container-remove <name>${NC}"
+    echo ""
+    echo "But in a single command with unified output."
+    echo ""
+    echo -e "${GREEN}✓${NC} Your workspace files are ALWAYS safe"
+    echo -e "${GREEN}✓${NC} You can recreate the container anytime"
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+fi
+
+# If no container name provided and not forced, we need interactive selection
+# Let container-stop handle the selection (it has interactive select built-in)
+if [ -z "$CONTAINER_NAME" ]; then
+    if [ "$FORCE" = true ]; then
+        echo -e "${RED}✗ Container name required with --force flag${NC}"
+        echo ""
+        usage
+        exit 1
+    fi
+    # container-stop will prompt for selection
+    echo -e "${CYAN}Select container to retire:${NC}"
+    echo ""
+fi
+
+# Get container name for display if we have it
+if [ -n "$CONTAINER_NAME" ]; then
+    CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
+
+    # Check if container exists
+    if ! docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+        echo -e "${RED}✗ Container '$CONTAINER_NAME' not found${NC}"
+        echo ""
+        echo -e "${YELLOW}Available containers:${NC}"
+        container-list
+        exit 1
+    fi
+
+    # Show what will be retired
+    echo -e "${BOLD}Container to retire:${NC} ${CYAN}$CONTAINER_NAME${NC}"
+    echo ""
+
+    # Get container status
+    STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev/null || echo "unknown")
+    IMAGE=$(docker inspect -f '{{.Config.Image}}' "$CONTAINER_TAG" 2>/dev/null || echo "unknown")
+
+    echo -e "${BOLD}Status:${NC} $STATUS"
+    echo -e "${BOLD}Image:${NC}  $IMAGE"
+    echo ""
+
+    if [ "$FORCE" != "true" ]; then
+        echo -e "${YELLOW}⚠ This will:${NC}"
+        echo "  1. Stop the container (all processes terminated)"
+        echo "  2. Remove the container permanently"
+        echo "  3. Free GPU immediately"
+        echo ""
+        echo -e "${GREEN}Preserved:${NC}"
+        echo "  • Workspace files: ~/workspace/$CONTAINER_NAME/"
+        echo "  • Dockerfile: ~/dockerfiles/"
+        echo "  • Docker image: $IMAGE"
+        echo ""
+
+        read -p "Confirm retirement? [y/N]: " CONFIRM
+        if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+            echo "Cancelled."
+            exit 0
+        fi
+        echo ""
+    fi
+fi
+
+# Step 1: Stop container (this will also remove it due to DS01_ORCHESTRATOR=retire)
+echo -e "${CYAN}━━━ Retiring Container ━━━${NC}"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}ℹ ${NC}${BOLD}Stopping and removing container...${NC}"
+    echo ""
+    echo "This process:"
+    echo "  • Sends SIGTERM to allow graceful shutdown"
+    echo "  • Waits for processes to exit cleanly"
+    echo "  • Removes the container"
+    echo "  • Releases GPU allocation"
+    echo ""
+fi
+
+# Call container-stop (which will auto-remove when DS01_ORCHESTRATOR=retire)
+# Suppress most output since we handle messaging here
+if container-stop "${STOP_ARGS[@]}" 2>&1 | grep -E "^(✓|✗|⚠)" || true; then
+    STOP_SUCCESS=true
+else
+    STOP_SUCCESS=false
+fi
+
+# Extract container name if it was selected interactively
+if [ -z "$CONTAINER_NAME" ]; then
+    # Try to get the container name from what was just stopped
+    CONTAINER_NAME=$(docker ps -a --filter "status=exited" --filter "name=._.$USER_ID" --format "{{.Names}}" --latest 2>/dev/null | head -1 | sed "s/\._\.$USER_ID//" || echo "")
+fi
+
+echo ""
+
+# Post-retirement messaging (Tier 3 specific)
+if [ "$STOP_SUCCESS" != "false" ]; then
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✓ Container Retired Successfully${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "${BOLD}What Just Happened?${NC}"
+        echo ""
+        echo "  ✓ Container stopped gracefully"
+        echo "  ✓ Container removed from system"
+        echo "  ✓ GPU freed immediately for other users"
+        echo ""
+        echo -e "${GREEN}Thank you for being a good citizen!${NC}"
+        echo ""
+        echo -e "${BOLD}Your Files Are Safe:${NC}"
+        echo ""
+        if [ -n "$CONTAINER_NAME" ]; then
+            echo -e "  • Workspace: ${CYAN}~/workspace/$CONTAINER_NAME/${NC}"
+            echo -e "  • Dockerfile: ${CYAN}~/dockerfiles/${NC}"
+        else
+            echo -e "  • Workspace: ${CYAN}~/workspace/<project>/${NC}"
+            echo -e "  • Dockerfile: ${CYAN}~/dockerfiles/${NC}"
+        fi
+        echo ""
+        echo -e "${BOLD}To Resume Work:${NC}"
+        echo ""
+        if [ -n "$CONTAINER_NAME" ]; then
+            echo -e "  1. Recreate and enter container:"
+            echo -e "     ${GREEN}container deploy $CONTAINER_NAME${NC}"
+            echo ""
+            echo -e "  2. Or step-by-step:"
+            echo -e "     ${GREEN}container-create $CONTAINER_NAME${NC}"
+            echo -e "     ${GREEN}container-run $CONTAINER_NAME${NC}"
+        else
+            echo -e "  ${GREEN}container deploy <name>${NC}"
+            echo -e "  ${DIM}or${NC}"
+            echo -e "  ${GREEN}container-create <name> && container-run <name>${NC}"
+        fi
+        echo ""
+    else
+        echo -e "${GREEN}✓${NC} Container stopped and removed"
+        echo -e "${GREEN}✓${NC} GPU freed for others"
+        echo ""
+        if [ -n "$CONTAINER_NAME" ]; then
+            echo -e "${DIM}Your files are safe in ~/workspace/$CONTAINER_NAME/${NC}"
+            echo ""
+            echo -e "${BOLD}To resume:${NC}  ${GREEN}container deploy $CONTAINER_NAME${NC}"
+        else
+            echo -e "${DIM}Your files are safe in ~/workspace/<project>/${NC}"
+            echo ""
+            echo -e "${BOLD}To resume:${NC}  ${GREEN}container deploy <name>${NC}"
+        fi
+        echo ""
+    fi
+else
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${RED}${BOLD}✗ Container Retirement Failed${NC}"
+    echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${YELLOW}Troubleshooting:${NC}"
+    if [ -n "$CONTAINER_NAME" ]; then
+        echo -e "  • Check status: ${GREEN}container-list${NC}"
+        echo -e "  • Try manually: ${GREEN}container-stop $CONTAINER_NAME${NC}"
+        echo -e "  • Force stop:   ${GREEN}container-stop $CONTAINER_NAME --force${NC}"
+    else
+        echo -e "  • Check status: ${GREEN}container-list${NC}"
+        echo -e "  • Try step-by-step with Tier 2 commands"
+    fi
+    echo ""
+    exit 1
+fi

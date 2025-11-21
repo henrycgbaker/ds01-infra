@@ -309,11 +309,14 @@ if start_container "$CONTAINER_NAME"; then
     fi
     echo ""
 
-    echo -e "${BOLD}Next Steps:${NC}"
-    echo -e "  • Enter container: ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "  • View status:     ${GREEN}container-list${NC}"
-    echo -e "  • Stop container:  ${GREEN}container-stop $CONTAINER_NAME${NC}"
-    echo ""
+    # Only show next steps if NOT called from Tier 3 orchestrator
+    if [ -z "$DS01_ORCHESTRATOR" ]; then
+        echo -e "${BOLD}Next Steps:${NC}"
+        echo -e "  • Enter container: ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo -e "  • View status:     ${GREEN}container-list${NC}"
+        echo -e "  • Stop container:  ${GREEN}container-stop $CONTAINER_NAME${NC}"
+        echo ""
+    fi
 else
     echo ""
     echo -e "${RED}Failed to start container${NC}\n"
