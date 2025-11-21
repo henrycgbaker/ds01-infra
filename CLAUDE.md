@@ -1,38 +1,36 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Instructions for AI assistants working with this repository.
 
-## Instructions for Claude
+## Guidelines
+
 - Be concise
 - No audit.md/summary.md docs unless explicitly requested
-- If uncertain, strategise/discuss/plan in-chat, then implement directly
+- If uncertain, discuss in-chat then implement directly
 - Update CLAUDE.md if necessary, but don't create extra documentation unless requested
-- When writing a test for a given piece of functionality, always store a copy in relevant `/testing` directory (even if just in `/testing/scratch`, so that it can be reused later as part of a robust testing regime)
+- Store tests in relevant `/testing` directory for reuse
 
-## Overview
+## System Overview
 
-DS01 Infrastructure is a GPU-enabled container management system for multi-user data science workloads. Provides resource quotas, MIG support, priority-based allocation, and automatic lifecycle management on top of `aime-ml-containers`.
+DS01 Infrastructure: GPU-enabled container management for multi-user data science workloads.
 
-**Key capabilities:**
-- Dynamic MIG-aware GPU allocation with priority levels
-- Per-user/group resource limits via systemd cgroups and YAML config
+**Core capabilities:**
+- Dynamic MIG-aware GPU allocation with priority scheduling
+- Per-user/group resource limits (YAML config + systemd cgroups)
 - Container lifecycle automation (idle detection, auto-cleanup)
 - Monitoring and metrics collection
 
-## Architecture
+## Architecture Design Principles
 
-### Three-Tier Hierarchical Design
+### Tiered Hierarchical Design
 
-**TIER 1: Base System** (`aime-ml-containers` v2 at `/opt/aime-ml-containers`)
-- 11 core commands: `mlc create|open|list|stats|start|stop|remove|export|import|update-sys|--version`
-- Python-based (mlc.py ~2,400 lines), 150+ framework images (PyTorch 2.8.0, TensorFlow 2.16.1)
-- Container naming: `$CONTAINER_NAME._.$USER_ID` (multi-user isolation)
+DS01 uses a **modular, layered architecture** that wraps and enhances AIME MLC without replacing it:
 
-**DS01 Integration:**
-- ✅ **Used (7 commands)**: `mlc-patched.py` (create with --image flag), `mlc open` (direct), `mlc stats` (wrapped), `mlc list` (wrapped), `mlc stop` (wrapped), `mlc remove` (wrapped), `mlc start` (wrapped)
-- ❌ **Not used (2 commands)**: `mlc export/import` (no Python implementation in AIME v2)
-- All wrapped commands add DS01 UX: interactive GUI, --guided mode, GPU management, safety checks
-- See `/opt/ds01-infra/docs/COMMAND_LAYERS.md` for details
+**TIER 1: Base System** (`aime-ml-containers` v2)
+- 11 core `mlc` commands providing container lifecycle management
+- 150+ pre-built framework images (PyTorch 2.8.0, TensorFlow 2.16.1, etc.)
+- Container naming: `{container-name}._.{user-id}` (AIME convention)
+- **DS01 approach**: Wrap strategically (mlc-create, mlc-stats), use directly (mlc-open, mlc-list, mlc-stop, etc.)
 
 **TIER 2: Atomic Unit Commands** (Single-purpose, modular, reusable)
 - **Container Management** (8): `container-{create|run|start|stop|list|stats|remove|exit}`
@@ -43,6 +41,7 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
   - Shows AIME base packages, supports pip version specifiers
 - **Project Setup** (5): `{dir|git|readme|ssh|vscode}-{create|init|setup}`
 - All support `--guided` flag for educational mode
+- Can be used standalone or orchestrated
 
 **TIER 3: Container Orchestrators** (Combine Tier 2 atomic commands)
 - **Ephemeral container model**: Containers are temporary compute, workspaces persist
@@ -61,11 +60,10 @@ DS01 Infrastructure is a GPU-enabled container management system for multi-user 
 - `user-setup` (Complete onboarding): Educational first-time onboarding (ssh-setup → project-init → vscode-setup)
    - Command variants: `user-setup`, `user setup`, `new-user`
 
-**Enhancement Layer:**
-- Resource limits via YAML + systemd cgroups
-- GPU allocation state management (MIG support)
-- Container lifecycle automation
-- Monitoring and metrics
+**TIER 4: Workflow Wizards** (Complete onboarding)
+- `user-setup`: Full onboarding (ssh-setup → project-init → vscode-setup)
+- Educational focus for first-time users
+- 69.4% code reduction vs original monolithic version
 
 ### Ephemeral Container Philosophy
 
@@ -100,13 +98,13 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 
 ### AIME v2 Integration
 
-**mlc-patched.py** - Minimal modification (2.5% change) to support custom images:
-- Adds `--image` flag to bypass catalog
+**mlc-patched.py**: Minimal modification (2.5% change) to support custom images
+- Adds `--image` flag to bypass AIME catalog
 - Validates local image existence
 - Adds DS01 labels (`DS01_MANAGED`, `CUSTOM_IMAGE`)
 - 97.5% of AIME logic preserved (easy to upgrade)
 
-**Naming Conventions:**
+**Naming conventions:**
 - Images: `ds01-{user-id}/{project-name}:latest`
 - Containers: `{project-name}._.{user-id}` (AIME convention)
 - Dockerfiles: `~/dockerfiles/{project-name}.Dockerfile`
@@ -120,36 +118,43 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 - `scripts/docker/get_resource_limits.py` - YAML parser
 - `scripts/docker/gpu_allocator.py` - Stateful GPU allocation with priority scheduling
 
-**GPU Allocation:**
-- MIG instances tracked separately (e.g., `0:0`, `0:1`, `0:2`)
-- Priority: user_overrides (100) > admin (90) > researcher (50) > student (10)
-- Least-allocated strategy with time-based reservations
+## Documentation Structure
 
-**Systemd Integration:**
-- 3-tier hierarchy: `ds01.slice` → `ds01-{group}.slice` → `ds01-{group}-{username}.slice`
-- Group slices enforce limits, user slices enable granular monitoring
-- Scripts: `setup-resource-slices.sh` (group), `create-user-slice.sh` (per-user, auto-invoked)
+**Root level (you are here):**
+- `README.md` - System architecture, installation, admin guide
+- `CLAUDE.md` - This file (concise AI assistant reference)
 
-**State Management:**
-- GPU state: `/var/lib/ds01/gpu-state.json`
-- Container metadata: `/var/lib/ds01/container-metadata/{container}.json`
-- Logs: `/var/logs/ds01/gpu-allocations.log`
+**Module-specific READMEs (detailed docs):**
+- `scripts/docker/README.md` - Resource management, GPU allocation, container creation
+- `scripts/user/README.md` - User commands, workflows, tier system details
+- `scripts/system/README.md` - System administration, deployment, user management
+- `scripts/monitoring/README.md` - Monitoring tools, dashboards, metrics collection
+- `scripts/maintenance/README.md` - Cleanup automation, cron jobs, lifecycle management
+- `config/README.md` - YAML configuration, resource limits, policy reference
+- `testing/README.md` - Testing overview, test suites, validation procedures
 
-### Important Paths
+## Key Paths
 
 **Standard deployment:**
 - Config: `/opt/ds01-infra/config/resource-limits.yaml`
 - Scripts: `/opt/ds01-infra/scripts/`
-- State: `/var/lib/ds01/`
-- Logs: `/var/logs/ds01/`
-- Dockerfiles: `~/dockerfiles/` (or `~/workspace/<project>/` with --project-dockerfile)
+- State: `/var/lib/ds01/` (gpu-state.json, container-metadata/)
+- Logs: `/var/log/ds01/` (gpu-allocations.log, cron logs)
+- User dockerfiles: `~/dockerfiles/`
 
-**Config mirrors** (deployed separately):
-- `config/etc-mirrors/systemd/system/` → `/etc/systemd/system/`
-- `config/etc-mirrors/cron.d/` → `/etc/cron.d/`
-- `config/etc-mirrors/logrotate.d/` → `/etc/logrotate.d/`
+**Base system:**
+- AIME MLC: `/opt/aime-ml-containers`
 
-## Common Commands
+## Essential Conventions
+
+**Bash:**
+- Use `set -e`, include usage functions
+- Use `echo -e` for ANSI color codes (not plain `echo`)
+- Shebang must be line 1 (no leading whitespace)
+
+**Python:**
+- Use argparse, provide `main()` function
+- For heredocs in bash: Use quoted delimiter `<<'PYEOF'` and pass variables via environment
 
 ### User Commands (Recommended)
 
@@ -183,46 +188,27 @@ container-stats                                # Resource usage
 
 ### Development/Testing
 ```bash
-# Test resource limits
 python3 scripts/docker/get_resource_limits.py <username>
-python3 scripts/docker/get_resource_limits.py <username> --docker-args
+```
 
-# Test GPU allocator
+**GPU allocator:**
+```bash
 python3 scripts/docker/gpu_allocator.py status
 python3 scripts/docker/gpu_allocator.py allocate <user> <container> <max_gpus> <priority>
-python3 scripts/docker/gpu_allocator.py release <container>
+```
 
-# Validate YAML
+**Validate YAML:**
+```bash
 python3 -c "import yaml; yaml.safe_load(open('config/resource-limits.yaml'))"
 ```
 
-### Deployment
+See module-specific READMEs for detailed testing procedures.
+
+## Common Operations
+
+**Add user to docker:**
 ```bash
-# Initial setup (requires root)
-sudo scripts/system/setup-resource-slices.sh
-sudo scripts/system/update-symlinks.sh
 sudo scripts/system/add-user-to-docker.sh <username>
-
-# Update systemd slices after config changes
-sudo scripts/system/setup-resource-slices.sh
-sudo systemctl daemon-reload
-```
-
-### Monitoring
-```bash
-# System status
-ds01-dashboard                                    # Admin dashboard
-python3 scripts/docker/gpu_allocator.py status    # GPU allocation status
-systemd-cgtop | grep ds01                         # Per-user cgroups
-
-# Cron job logs (automated cleanup)
-tail -f /var/log/ds01/idle-cleanup.log           # Idle timeout enforcement
-tail -f /var/log/ds01/runtime-enforcement.log    # Max runtime enforcement
-tail -f /var/log/ds01/gpu-stale-cleanup.log      # GPU release automation
-tail -f /var/log/ds01/container-stale-cleanup.log # Container removal
-
-# Allocation logs
-tail -f /var/log/ds01/gpu-allocations.log        # GPU allocation events
 ```
 
 ## YAML Configuration
@@ -326,107 +312,31 @@ testing/
 │   └── test-*.sh        # Test scripts
 ```
 
-## Testing Changes
-
-1. **YAML changes**: Test with multiple user types
-   ```bash
-   for user in student1 researcher1 datasciencelab; do
-       python3 scripts/docker/get_resource_limits.py $user
-   done
-   ```
-
-2. **GPU allocator**: Use dry-run mode
-   ```bash
-   python3 scripts/docker/gpu_allocator.py status
-   python3 scripts/docker/gpu_allocator.py allocate testuser testcontainer 1 10
-   python3 scripts/docker/gpu_allocator.py release testcontainer
-   ```
-
-3. **Systemd slices**: Verify creation
-   ```bash
-   sudo scripts/system/setup-resource-slices.sh
-   systemctl status ds01.slice
-   systemd-cgtop | grep ds01
-   ```
-
-4. **Cleanup automation**: Unit tests and integration tests
-   ```bash
-   # Run unit tests (fast, no containers needed)
-   testing/cleanup-automation/test-functions-only.sh
-
-   # Test with short timeouts (set in resource-limits.yaml):
-   # idle_timeout: 0.01h (36s), max_runtime: 0.02h (72s)
-   # Then run scripts manually and verify behavior
-   bash scripts/monitoring/check-idle-containers.sh
-   bash scripts/maintenance/enforce-max-runtime.sh
-
-   # Monitor cron logs
-   tail -f /var/log/ds01/{idle-cleanup,runtime-enforcement}.log
-   ```
-
-   See `testing/cleanup-automation/README.md` for comprehensive testing guide
-
-## Security Considerations
-
-- User isolation: Containers run with user's UID/GID (AIME handles this)
-- GPU pinning: `--gpus device=X` prevents cross-user access
-- Cgroup limits: Prevent resource exhaustion
-- Workspace permissions: User-specific mounts
-
-**Do not:**
-- Store secrets in YAML (readable by all users)
-- Allow cgroup-parent override (bypasses limits)
-- Disable GPU isolation in production
-
-## Codebase Conventions
-
-- **Bash**: Use `set -e`, include usage functions
-- **Python**: Use argparse, provide `main()` function
-- **YAML**: Use `null` for unlimited/disabled, add comments
-- **Logging**: Pipe-delimited format: `timestamp|event|user|container|gpu_id|reason`
-- **Colors**: Use `echo -e` for ANSI codes (not plain `echo`)
-- **Shebang**: Must be line 1 (#!/bin/bash), no leading whitespace
-- **Docker group**: Standard `docker` group for socket access
-- **Image naming**: `{project}-image` format (e.g., `my-thesis-image`)
-- **Flags**: All commands support `-h`, `--help`, `--info`; Tier 2 support `--guided`
-- **Interactive selection**: Source `/opt/ds01-infra/scripts/lib/interactive-select.sh`
-
-### Python Heredocs in Bash (Critical)
-
-When embedding Python in bash scripts via heredocs:
-
-**WRONG** (variable substitution fails):
+**Setup systemd slices:**
 ```bash
-python3 - <<PYEOF
-if '$var' in config:  # Bash substitutes but Python sees literal string!
-PYEOF
+sudo scripts/system/setup-resource-slices.sh
+sudo systemctl daemon-reload
 ```
 
-**CORRECT** (use environment variables):
+**Monitor system:**
 ```bash
-VAR="$var" python3 - <<'PYEOF'  # Note quoted delimiter
-import os
-var = os.environ['VAR']
-if var in config:  # Works correctly
-PYEOF
+ds01-dashboard                           # Admin dashboard
+python3 scripts/docker/gpu_allocator.py status
+tail -f /var/log/ds01/gpu-allocations.log
 ```
 
-**Key points**:
-- Use quoted heredoc delimiter `<<'PYEOF'` to prevent bash substitution
-- Pass bash variables as environment variables
-- Check for `None` before dict operations: `if config['key'] is not None:`
-- See `testing/cleanup-automation/FINDINGS.md` for bug details
+## Security Notes
+
+- User isolation via AIME's UID/GID mapping
+- GPU pinning via `--gpus device=X` prevents cross-user access
+- Systemd cgroups prevent resource exhaustion
+- Never store secrets in YAML (readable by all users)
+- Never allow cgroup-parent override (bypasses limits)
 
 ## Dependencies
 
-**System:**
 - Docker with NVIDIA Container Toolkit
 - Python 3.8+ with PyYAML
-- yq, systemd, nvidia-smi, git
-
-**Base system:**
+- systemd, nvidia-smi, git, yq
 - `aime-ml-containers` at `/opt/aime-ml-containers`
-
-**Groups:**
 - `docker` group for Docker socket access
-
