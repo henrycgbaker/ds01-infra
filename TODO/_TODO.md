@@ -515,9 +515,9 @@ GPU/MIG allocation & 'dashboard'
     # Miscellaneous
 
     # Partitioning & GPU allocation
-    - [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
+    - [x] I set up 3 MIG instances: Initially thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
     - [x] Set up MIG vs MPS?
-    - [x] I set up 3 MIG instances: Claude thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
+    - [x] I set up 3 MIG instances: Initially thought this was 2g.20gb profile each, but actually I have NVIDIA A100-PCIE-40GB -> so need to update this
     - [x] Set up MIG vs MPS?
     - [x] implement GPU allocation properly
     - [x] I set up so that total GPUs allocated hard limit -> change it so that the user limits apply to the containers they can spin up (but not the number of containers total)? or maybe leave it so they have total limit -> means they have to close running containers
