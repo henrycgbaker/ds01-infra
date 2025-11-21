@@ -298,7 +298,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                                     fi
 
                                     # Release GPU allocation if exists
-                                    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+                                    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
                                     if [ -f "$GPU_ALLOCATOR" ]; then
                                         echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
                                         if python3 "$GPU_ALLOCATOR" release "$TEMP_TAG" 2>&1; then
@@ -455,7 +455,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                         fi
 
                         # Release GPU allocation if exists
-                        GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+                        GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
                         if [ -f "$GPU_ALLOCATOR" ]; then
                             echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
                             if python3 "$GPU_ALLOCATOR" release "$TEMP_TAG" 2>&1; then
@@ -583,7 +583,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"
     echo ""
 
     # Check GPU allocation status
-    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
     GPU_STATUS=""
     if [ -f "$GPU_ALLOCATOR" ]; then
         GPU_INFO=$(python3 "$GPU_ALLOCATOR" status 2>/dev/null | grep -A1 "$CONTAINER_TAG" || echo "")

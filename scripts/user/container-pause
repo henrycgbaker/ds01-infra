@@ -1,0 +1,285 @@
+#!/bin/bash
+# DS01 Container Pause - Pauses running containers temporarily
+# Tier 2 Command - Freezes container processes while keeping GPU allocated
+
+set -e
+
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
+
+# Source interactive library (with fallback for development)
+if [ -f "/usr/local/lib/interactive-select.sh" ]; then
+    source /usr/local/lib/interactive-select.sh
+elif [ -f "$INFRA_ROOT/scripts/lib/interactive-select.sh" ]; then
+    source "$INFRA_ROOT/scripts/lib/interactive-select.sh"
+else
+    echo "Error: interactive-select.sh not found"
+    exit 1
+fi
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 Container Pause${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-pause [name] [options]"
+    echo "  container-pause                  # Interactive mode - prompts to select"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided        Show detailed explanations for beginners"
+    echo "  -a, --all       Pause all your running containers"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Temporarily pauses (freezes) a running container without stopping it."
+    echo "  All processes are suspended, but the container remains running."
+    echo ""
+    echo -e "${CYAN}What happens when paused:${NC}"
+    echo -e "  ${BOLD}Frozen:${NC}"
+    echo "    • All processes suspended (training jobs pause)"
+    echo "    • GPU remains allocated (no compute happening)"
+    echo "    • Network connections frozen"
+    echo ""
+    echo -e "  ${BOLD}Preserved:${NC}"
+    echo "    • Container state (memory, processes)"
+    echo "    • GPU allocation"
+    echo "    • All running processes (resume when unpaused)"
+    echo ""
+    echo -e "${CYAN}To unpause:${NC}"
+    echo -e "  ${GREEN}container-run <name>${NC}       # Unpause and attach"
+    echo -e "  ${GREEN}docker unpause <name>${NC}     # Unpause only"
+    echo ""
+    echo -e "${YELLOW}⚠ Use pause for:${NC}"
+    echo "  • Short breaks (lunch, meetings)"
+    echo "  • Debugging (freeze state for inspection)"
+    echo "  • Testing (pause before checkpoint)"
+    echo ""
+    echo -e "${YELLOW}⚠ Don't use pause for:${NC}"
+    echo "  • Long breaks (use container-stop instead)"
+    echo "  • Freeing GPU (pause still holds GPU)"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  container-pause my-project"
+    echo "  container-pause --all"
+    echo ""
+}
+
+# Get user's max pause time
+get_max_pause_time() {
+    local username="$1"
+    if [ ! -f "$RESOURCE_PARSER" ]; then
+        echo "None"
+        return
+    fi
+
+    # Try to get max_pause_time from resource limits
+    local max_pause=$(python3 "$RESOURCE_PARSER" "$username" --max-pause-time 2>/dev/null || echo "None")
+    echo "$max_pause"
+}
+
+pause_container() {
+    local container_name="$1"
+    local guided="$2"
+    local container_tag="${container_name}._.$USER_ID"
+
+    # Check if container exists
+    if ! docker ps -a --format "{{.Names}}" | grep -q "^${container_tag}$"; then
+        echo -e "${RED}✗${NC} Container '$container_name' not found"
+        return 1
+    fi
+
+    # Check if running
+    if ! docker ps --format "{{.Names}}" | grep -q "^${container_tag}$"; then
+        echo -e "${YELLOW}○${NC} Container '$container_name' is not running"
+        echo -e "   Start first: ${GREEN}container-run $container_name${NC}"
+        return 1
+    fi
+
+    # Check if already paused
+    local status=$(docker inspect -f '{{.State.Status}}' "$container_tag" 2>/dev/null)
+    if [ "$status" = "paused" ]; then
+        echo -e "${YELLOW}○${NC} Container '$container_name' is already paused"
+        echo -e "   Unpause with: ${GREEN}container-run $container_name${NC}"
+        return 0
+    fi
+
+    # Get max pause time
+    local max_pause_time=$(get_max_pause_time "$USERNAME")
+
+    # Show info
+    echo -e "${BOLD}Container:${NC} ${CYAN}$container_name${NC}"
+    echo ""
+
+    if [ "$guided" = "true" ]; then
+        echo -e "${CYAN}ℹ ${NC}${BOLD}What is pausing?${NC}"
+        echo ""
+        echo "  Pausing freezes all processes inside the container."
+        echo "  It's like pressing the pause button on a video:"
+        echo ""
+        echo "  • All programs stop executing (training pauses mid-batch)"
+        echo "  • State is preserved in memory"
+        echo "  • GPU remains allocated but idle"
+        echo "  • Resume instantly with: container-run $container_name"
+        echo ""
+        echo -e "${BOLD}When to use pause:${NC}"
+        echo "  • Short breaks (lunch, meetings)"
+        echo "  • Debugging (inspect frozen state)"
+        echo "  • Testing checkpoints"
+        echo ""
+        echo -e "${BOLD}When NOT to use pause:${NC}"
+        echo "  • Long breaks (use container-stop instead)"
+        echo "  • Freeing GPU (pause still holds GPU)"
+        echo ""
+
+        if [ "$max_pause_time" != "None" ] && [ "$max_pause_time" != "null" ]; then
+            echo -e "${YELLOW}⚠ Your max pause time: ${CYAN}$max_pause_time${NC}"
+            echo "  Container will auto-stop if paused longer than this"
+            echo ""
+        fi
+    fi
+
+    # Pause container
+    echo -e "${CYAN}Pausing container...${NC}"
+
+    if docker pause "$container_tag" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓${NC} Container paused"
+        echo ""
+
+        echo -e "${BOLD}Container is now frozen.${NC}"
+        echo ""
+        echo -e "${BOLD}To resume:${NC}"
+        echo -e "  ${GREEN}container-run $container_name${NC}     # Unpause and attach"
+        echo -e "  ${GREEN}docker unpause $container_tag${NC}  # Unpause only"
+        echo ""
+
+        if [ "$max_pause_time" != "None" ] && [ "$max_pause_time" != "null" ]; then
+            echo -e "${YELLOW}⚠ Auto-stop:${NC} Container will auto-stop after ${CYAN}$max_pause_time${NC} of pause"
+            echo ""
+        fi
+
+        echo -e "${YELLOW}💡 Remember:${NC} Pause holds your GPU. For long breaks, use:"
+        echo -e "   ${GREEN}container-stop $container_name${NC}    # Free GPU for others"
+        echo ""
+
+        return 0
+    else
+        echo -e "${RED}✗${NC} Failed to pause container"
+        return 1
+    fi
+}
+
+# Parse arguments
+CONTAINER_NAME=""
+GUIDED=false
+PAUSE_ALL=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        -a|--all)
+            PAUSE_ALL=true
+            shift
+            ;;
+        -h|--help|--info)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$CONTAINER_NAME" ]; then
+                CONTAINER_NAME="$1"
+            else
+                echo -e "${RED}✗ Too many arguments${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}${BOLD}    Pausing Container${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# Pause all containers
+if [ "$PAUSE_ALL" = true ]; then
+    CONTAINERS=$(docker ps --format "{{.Names}}" --filter "name=._.$USER_ID" | sed "s/\._\.$USER_ID//")
+
+    if [ -z "$CONTAINERS" ]; then
+        echo -e "${YELLOW}No running containers found${NC}\n"
+        exit 0
+    fi
+
+    echo -e "${BOLD}Pausing all your running containers:${NC}\n"
+
+    SUCCESS_COUNT=0
+    FAIL_COUNT=0
+
+    while IFS= read -r name; do
+        [ -z "$name" ] && continue
+        if pause_container "$name" "$GUIDED"; then
+            SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+        else
+            FAIL_COUNT=$((FAIL_COUNT + 1))
+        fi
+        echo ""
+    done <<< "$CONTAINERS"
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Summary:${NC}"
+    echo -e "  Paused: ${GREEN}$SUCCESS_COUNT${NC}"
+    if [ "$FAIL_COUNT" -gt 0 ]; then
+        echo -e "  Failed: ${RED}$FAIL_COUNT${NC}"
+    fi
+    echo ""
+    exit 0
+fi
+
+# If no container name, prompt for selection
+if [ -z "$CONTAINER_NAME" ]; then
+    echo -e "${CYAN}Select container to pause:${NC}"
+    echo ""
+    CONTAINER_NAME=$(select_container "running")
+
+    if [ -z "$CONTAINER_NAME" ]; then
+        echo ""
+        echo -e "${YELLOW}No running containers to pause.${NC}"
+        exit 0
+    fi
+    echo ""
+fi
+
+# Validate container name
+if [ -z "$CONTAINER_NAME" ] && [ "$PAUSE_ALL" = false ]; then
+    echo -e "${RED}✗ Container name is required${NC}\n"
+    usage
+    exit 1
+fi
+
+# Pause container
+pause_container "$CONTAINER_NAME" "$GUIDED"

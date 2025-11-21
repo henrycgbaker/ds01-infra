@@ -97,19 +97,6 @@ start_container() {
         return 0
     fi
 
-    # Check if paused and unpause if needed
-    local container_status=$(docker inspect -f '{{.State.Status}}' "$container_tag" 2>/dev/null || echo "")
-    if [ "$container_status" = "paused" ]; then
-        echo -e "${YELLOW}○${NC} Container is paused. Unpausing..."
-        if docker unpause "$container_tag" > /dev/null 2>&1; then
-            echo -e "${GREEN}✓${NC} Container unpaused and running"
-            return 0
-        else
-            echo -e "${RED}✗${NC} Failed to unpause container"
-            return 1
-        fi
-    fi
-
     # Get container info (DS01 display)
     local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${container_tag}$" 2>/dev/null)
     local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null)
