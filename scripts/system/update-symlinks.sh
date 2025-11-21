@@ -129,12 +129,14 @@ echo ""
 
 echo -e "${BOLD}Admin Commands${NC}"
 create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "alias-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "aliases" "(→ alias-list)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "commands" "(→ alias-list)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "help" "(→ alias-list)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/alias-create" "alias-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/ds01-dashboard" "ds01-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/ds01-logs" "ds01-logs" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/ds01-users" "ds01-users" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/ds01-mig-partition" "ds01-mig-partition" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/help" "help" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/version" "version" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
