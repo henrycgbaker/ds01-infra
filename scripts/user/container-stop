@@ -488,8 +488,12 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
         fi
     fi
 
+    # When called from retire orchestrator, auto-remove silently
+    if [ "$DS01_ORCHESTRATOR" = "retire" ]; then
+        # Silently remove container (orchestrator handles all messaging)
+        "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force >/dev/null 2>&1
     # Prompt to remove container (unless --keep-container is set)
-    if [ "$KEEP_CONTAINER" = false ]; then
+    elif [ "$KEEP_CONTAINER" = false ]; then
         # Ephemeral model: prompt to remove container
         echo -e "${BOLD}Be a good citizen:${NC} if you're done with this container, release the GPU now: ${GREEN}container-remove $CONTAINER_NAME${NC}"
 

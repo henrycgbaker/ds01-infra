@@ -375,6 +375,11 @@ fi
 # Post-exit handling
 echo ""
 
+# When called from Tier 3 orchestrator, exit quietly (orchestrator handles messaging)
+if [ -n "$DS01_ORCHESTRATOR" ]; then
+    exit $EXIT_CODE
+fi
+
 if [ "$GUIDED" = true ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${YELLOW}${BOLD}You've Exited the Container${NC}"
