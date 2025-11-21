@@ -1,8 +1,12 @@
 #!/bin/bash
-# DS01 Container Deploy - Orchestrates container creation and startup
-# Tier 3 Command - Combines container-create + container-start/run
+# DS01 Container Deploy - Tier 3 Orchestrator
+# Streamlined workflow: Create container → Start/Run container (single command)
+# Combines container-create + container-start/run with unified messaging
 
 set -e
+
+# Export orchestrator flag to suppress Tier 2 "Next steps" output
+export DS01_ORCHESTRATOR=deploy
 
 # Colors
 BLUE='\033[94m'
@@ -14,8 +18,12 @@ BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
 
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
 # Script paths
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 CONTAINER_CREATE="$SCRIPT_DIR/container-create"
 CONTAINER_START="$SCRIPT_DIR/container-start"
 CONTAINER_RUN="$SCRIPT_DIR/container-run"
@@ -75,6 +83,7 @@ usage() {
 CREATE_ARGS=()
 START_MODE=""  # "background", "open", or "" (prompt)
 CONTAINER_NAME=""
+GUIDED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -84,6 +93,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --open)
             START_MODE="open"
+            shift
+            ;;
+        --guided)
+            GUIDED=true
+            CREATE_ARGS+=("$1")
             shift
             ;;
         -h|--help|--info)
@@ -109,6 +123,22 @@ echo -e "${DIM}Ephemeral containers + Persistent workspaces${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}ℹ ${NC}${BOLD}What is 'deploy'?${NC}"
+    echo ""
+    echo "Deploy is a streamlined workflow that:"
+    echo "  1. Creates a new container from an image"
+    echo "  2. Starts the container (background or with terminal)"
+    echo ""
+    echo "This combines two Tier 2 commands:"
+    echo -e "  ${DIM}container-create + container-start/run${NC}"
+    echo ""
+    echo "But with unified output referencing only Tier 3 workflows."
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+fi
+
 # Step 1: Create container
 echo -e "${BOLD}Step 1/2: Creating Container${NC}"
 echo ""
@@ -119,17 +149,22 @@ if ! "$CONTAINER_CREATE" "${CREATE_ARGS[@]}"; then
     exit 1
 fi
 
-# Extract container name if we don't have it yet (interactive mode)
-# In interactive mode, container-create will have created a container
-# We need to figure out which one was just created
+# Extract container name if we don't have it yet
+# Strategy: Get most recently created container for this user
 if [ -z "$CONTAINER_NAME" ]; then
-    # In interactive mode, ask user for the name
-    echo ""
-    echo -e "${YELLOW}Note:${NC} Container created in interactive mode"
-    read -p "Enter the container name to start: " CONTAINER_NAME </dev/tty
+    # Get most recently created container (by creation time)
+    CONTAINER_TAG=$(docker ps -a --filter "name=._.$USER_ID" --format "{{.CreatedAt}}\t{{.Names}}" | sort -r | head -1 | cut -f2)
 
-    if [ -z "$CONTAINER_NAME" ]; then
-        echo -e "${RED}✗ Container name required${NC}"
+    if [ -n "$CONTAINER_TAG" ]; then
+        # Strip the ._.USER_ID suffix to get the container name
+        CONTAINER_NAME="${CONTAINER_TAG%._.${USER_ID}}"
+    else
+        echo ""
+        echo -e "${RED}✗ Could not determine container name${NC}"
+        echo ""
+        echo "Please run again with explicit name:"
+        echo -e "  ${GREEN}container-deploy <name>${NC}"
+        echo ""
         exit 1
     fi
 fi
@@ -142,6 +177,13 @@ echo ""
 
 # If start mode not specified, prompt
 if [ -z "$START_MODE" ]; then
+    if [ "$GUIDED" = true ]; then
+        echo -e "${CYAN}ℹ ${NC}${BOLD}How to start the container?${NC}"
+        echo ""
+        echo "You have two options:"
+        echo ""
+    fi
+
     echo -e "${BOLD}How would you like to start the container?${NC}"
     echo ""
     echo -e "  ${BOLD}1)${NC} ${GREEN}Start in background${NC}"
@@ -171,19 +213,49 @@ case $START_MODE in
     background)
         echo -e "${CYAN}Starting container in background...${NC}"
         echo ""
-        if "$CONTAINER_START" "$CONTAINER_NAME"; then
+
+        # Pass --guided if set
+        START_ARGS=()
+        if [ "$GUIDED" = true ]; then
+            START_ARGS+=("--guided")
+        fi
+
+        if "$CONTAINER_START" "$CONTAINER_NAME" "${START_ARGS[@]}"; then
             echo ""
             echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo -e "${GREEN}${BOLD}✓ Container Deployed Successfully!${NC}"
             echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo ""
-            echo -e "${BOLD}Next steps:${NC}"
-            echo -e "  • Access container: ${GREEN}container-run $CONTAINER_NAME${NC}"
-            echo -e "  • Check status:     ${GREEN}container-list${NC}"
-            echo -e "  • View stats:       ${GREEN}container-stats${NC}"
-            echo ""
-            echo -e "${YELLOW}💡 Remember:${NC} When done, free resources with: ${GREEN}container-retire $CONTAINER_NAME${NC}"
-            echo ""
+
+            if [ "$GUIDED" = true ]; then
+                echo -e "${BOLD}What Just Happened?${NC}"
+                echo ""
+                echo "  ✓ Container created with resources allocated"
+                echo "  ✓ Container started in background"
+                echo "  ✓ Ready for SSH/IDE access"
+                echo ""
+                echo -e "${BOLD}Next Steps:${NC}"
+                echo ""
+                echo -e "  ${BOLD}Enter the container:${NC}"
+                echo -e "     ${GREEN}container deploy $CONTAINER_NAME${NC}"
+                echo "     (Or use the 'open' option next time)"
+                echo ""
+                echo -e "  ${BOLD}Check status:${NC}"
+                echo -e "     ${GREEN}container-list${NC}"
+                echo ""
+                echo -e "  ${BOLD}When done:${NC}"
+                echo -e "     ${GREEN}container retire $CONTAINER_NAME${NC}"
+                echo "     (Stops and removes container, frees GPU)"
+                echo ""
+            else
+                echo -e "${BOLD}Next steps:${NC}"
+                echo -e "  • Access container: ${GREEN}container deploy $CONTAINER_NAME --open${NC}"
+                echo -e "  • Check status:     ${GREEN}container-list${NC}"
+                echo -e "  • View stats:       ${GREEN}container-stats${NC}"
+                echo ""
+                echo -e "${YELLOW}💡 When done:${NC} ${GREEN}container retire $CONTAINER_NAME${NC} ${DIM}(cleanup)${NC}"
+                echo ""
+            fi
         else
             echo ""
             echo -e "${RED}✗ Container start failed${NC}"
@@ -193,7 +265,63 @@ case $START_MODE in
     open)
         echo -e "${CYAN}Starting container and opening terminal...${NC}"
         echo ""
+
+        # Pass --guided if set
+        RUN_ARGS=()
+        if [ "$GUIDED" = true ]; then
+            RUN_ARGS+=("--guided")
+        fi
+
         # container-run will exec into the container (this script won't return until user exits)
-        exec "$CONTAINER_RUN" "$CONTAINER_NAME"
+        "$CONTAINER_RUN" "$CONTAINER_NAME" "${RUN_ARGS[@]}"
+        EXIT_CODE=$?
+
+        # Post-exit messaging (Tier 3 specific - only references deploy/retire)
+        echo ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}${BOLD}You've Exited the Container${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        if [ "$GUIDED" = true ]; then
+            echo -e "${BOLD}What Just Happened?${NC}"
+            echo ""
+            echo "  • Your bash session inside the container ended"
+            echo -e "  • The container is ${GREEN}still running${NC} in the background"
+            echo -e "  • All your files in /workspace are ${BOLD}safe${NC}"
+            echo "  • GPU is still allocated to this container"
+            echo ""
+            echo -e "${BOLD}What You Can Do Now:${NC}"
+            echo ""
+            echo -e "  ${BOLD}1) Re-enter the Container${NC}"
+            echo -e "     ${GREEN}container deploy $CONTAINER_NAME --open${NC}"
+            echo "     Continue working where you left off"
+            echo ""
+            echo -e "  ${BOLD}2) Retire the Container (Cleanup)${NC}"
+            echo -e "     ${GREEN}container retire $CONTAINER_NAME${NC}"
+            echo "     Stops container and frees GPU immediately"
+            echo -e "     ${BOLD}Do this when you're done!${NC} Be a good citizen."
+            echo ""
+            echo -e "  ${BOLD}3) Check Status${NC}"
+            echo -e "     ${GREEN}container-list${NC}      View all containers"
+            echo ""
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BOLD}Important Reminders:${NC}"
+            echo ""
+            echo -e "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
+            echo "  • Container keeps running until you retire it or it hits timeout"
+            echo -e "  • Use ${GREEN}container retire${NC} when done to free GPU for others"
+            echo ""
+        else
+            echo -e "${DIM}Container still running in background${NC}"
+            echo ""
+            echo -e "${BOLD}Quick actions:${NC}"
+            echo -e "  • Re-enter:  ${GREEN}container deploy $CONTAINER_NAME --open${NC}"
+            echo -e "  • Cleanup:   ${GREEN}container retire $CONTAINER_NAME${NC} ${DIM}(stop + remove, frees GPU)${NC}"
+            echo -e "  • Status:    ${GREEN}container-list${NC}"
+            echo ""
+        fi
+
+        exit $EXIT_CODE
         ;;
 esac
