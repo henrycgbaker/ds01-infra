@@ -59,54 +59,16 @@ alias gd='git diff'
 # Help Commands
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# Show available commands inside container
-alias aliases='cat << "ALIASHELP"
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Available Commands Inside Container
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-Exit & Navigation:
-  exit-help        Show exit options and behavior
-  how-to-stop      How to stop this container
-  ws / cdw         Go to /workspace
-  ll               List files (ls -lah)
-
-GPU & Development:
-  gpu              Check GPU status
-  gpu-watch        Watch GPU status (live)
-  jlab             Start Jupyter Lab
-  jnb              Start Jupyter Notebook
-  tb               Start TensorBoard
-
-Git Shortcuts:
-  gs               git status
-  ga               git add
-  gc               git commit
-  gp               git push
-  gl               git log (last 10)
-  gd               git diff
-
-Container Management:
-  Type 'exit' to leave (container keeps running)
-  Use 'container-stop <name>' on host to stop
-  Use 'container-run <name>' on host to reconnect
-
-Host Commands (run these on DS01 host, not in container):
-  container-list   See all your containers
-  container-stats  Check resource usage
-  image-list       See available images
-  alias-list       See host commands
-
-Your custom aliases: /workspace/.ds01_bashrc_custom
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ALIASHELP
-'
+# Context-aware help commands - calls the actual script which auto-detects container context
+alias alias-list='/opt/ds01-infra/scripts/admin/alias-list'
+alias aliases='/opt/ds01-infra/scripts/admin/alias-list'
+alias commands='/opt/ds01-infra/scripts/admin/alias-list'
+alias help='/opt/ds01-infra/scripts/admin/alias-list'
 
 # Helpful reminders for common mistakes (host-only commands)
 alias container-list='echo -e "\033[1;33m⚠ container-list is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host\n\nFor security, containers cannot manage other containers."'
 alias container-run='echo -e "\033[1;33m⚠ container-run is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host"'
 alias container-stop='echo -e "\033[1;33m⚠ container-stop is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host"'
-alias alias-list='echo -e "\033[1;33m⚠ alias-list is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host\n\nInside container, use: \033[1;32maliases\033[0m"'
 alias image-list='echo -e "\033[1;33m⚠ image-list is a HOST command\033[0m\nType '\''exit'\'' to leave container, then run on DS01 host"'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
