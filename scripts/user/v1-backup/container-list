@@ -1,0 +1,385 @@
+#!/bin/bash
+# DS01 Container List - Lists containers via mlc-list with DS01 UX
+# Tier 2 Command - Wraps AIME mlc-list with interactive GUI and formatting
+
+set -e
+
+# Script paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+MLC_LIST="$INFRA_ROOT/aime-ml-containers/mlc-list"
+QUERY_TOOL="$INFRA_ROOT/scripts/docker/ds01-resource-query.py"
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 Container List${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-list [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided        Show detailed explanations for beginners"
+    echo "  -a, --all       Show all containers (not just running)"
+    echo "  -d, --detailed  Show detailed information"
+    echo "  --format FORMAT Output format (table, simple, json)"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo "  container-list               # Show running containers"
+    echo "  container-list --all         # Show all containers (including stopped)"
+    echo "  container-list --detailed    # Show detailed info"
+    echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-list for container discovery"
+    echo ""
+}
+
+format_status() {
+    local status="$1"
+    case $status in
+        Up*)
+            echo -e "${GREEN}●${NC} Running"
+            ;;
+        Exited*)
+            echo -e "${DIM}○${NC} Stopped"
+            ;;
+        Created)
+            echo -e "${BLUE}○${NC} Created"
+            ;;
+        Paused)
+            echo -e "${YELLOW}●${NC} Paused"
+            ;;
+        *)
+            echo -e "${DIM}$status${NC}"
+            ;;
+    esac
+}
+
+format_uptime() {
+    local status="$1"
+    # Extract uptime from status string like "Up 2 hours" or "Exited (0) 5 minutes ago"
+    echo "$status" | sed 's/Up //' | sed 's/Exited.*/stopped/'
+}
+
+get_container_list_via_query() {
+    local show_all="$1"
+
+    # Use new query tool if available
+    if [ -f "$QUERY_TOOL" ]; then
+        local status_filter="all"
+        if [ "$show_all" != "true" ]; then
+            status_filter="running"
+        fi
+
+        # Get containers as JSON
+        python3 "$QUERY_TOOL" containers --user "$USERNAME" --status "$status_filter" --json 2>/dev/null || {
+            # Fallback to docker if query tool fails
+            get_container_list_docker "$show_all"
+        }
+    else
+        # Fallback to docker
+        get_container_list_docker "$show_all"
+    fi
+}
+
+get_container_list_docker() {
+    local show_all="$1"
+    local filter_args=""
+    if [ "$show_all" != "true" ]; then
+        filter_args="--filter status=running"
+    fi
+    docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null || true
+}
+
+show_simple() {
+    local show_all="$1"
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}    Your Containers${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+    if [ "$GUIDED" = true ]; then
+        echo -e "${CYAN}ℹ ${NC}${BOLD}Understanding Container Status:${NC}"
+        echo -e "  • ${GREEN}Running${NC} - Container is active and ready for work"
+        echo -e "  • ${DIM}Stopped${NC} - Container is paused but can be restarted"
+        echo -e "  • ${BLUE}Created${NC} - Container created but never started"
+        echo ""
+        echo -e "${CYAN}ℹ ${NC}${BOLD}What the columns show:${NC}"
+        echo -e "  • Status - Whether container is running or stopped"
+        echo -e "  • Image - The Docker image used (contains software and libraries)"
+        echo -e "  • Time - How long container has been running (or when it stopped)"
+        echo -e "  • GPU - Whether a GPU is allocated to this container"
+        echo ""
+        echo -e "${CYAN}ℹ ${NC}${BOLD}Behind the scenes:${NC}"
+        echo -e "  • Containers are filtered using AIME labels (${DIM}aime.mlc.USER${NC})"
+        echo ""
+    fi
+
+    # Get containers via query tool (or docker fallback)
+    local containers_json=$(get_container_list_via_query "$show_all")
+
+    # Check if we got JSON or plain text
+    if echo "$containers_json" | jq empty 2>/dev/null; then
+        # Parse JSON output from query tool
+        local total=$(echo "$containers_json" | jq 'length')
+
+        if [ "$total" -eq 0 ]; then
+            if [ "$show_all" = "true" ]; then
+                echo -e "${YELLOW}No containers found${NC}\n"
+            else
+                echo -e "${YELLOW}No running containers${NC}\n"
+                echo -e "${DIM}Show all containers: ${GREEN}container-list --all${NC}"
+                echo ""
+            fi
+            echo -e "${BOLD}Create a container:${NC}"
+            echo -e "  ${GREEN}container-create my-project${NC}"
+            echo ""
+            return
+        fi
+
+        local running=$(echo "$containers_json" | jq '[.[] | select(.running == true)] | length')
+
+        # Display each container from JSON
+        local count=0
+        echo "$containers_json" | jq -c '.[]' | while read -r container; do
+            count=$((count + 1))
+
+            local name=$(echo "$container" | jq -r '.name' | sed "s/\._\.$USER_ID//")
+            local status=$(echo "$container" | jq -r '.status')
+            local is_running=$(echo "$container" | jq -r '.running')
+            local gpu_allocated=$(echo "$container" | jq -r '.gpu_allocated // empty')
+
+            # Get image from docker (not in query JSON yet)
+            local full_name=$(echo "$container" | jq -r '.name')
+            local image=$(docker inspect --format "{{.Config.Image}}" "$full_name" 2>/dev/null | cut -d: -f1)
+            local uptime=$(format_uptime "$status")
+
+            # Status indicator
+            echo -e "${BOLD}$count. ${CYAN}$name${NC}"
+            echo -e "   Status: $(format_status "$status")"
+            echo -e "   Image:  ${DIM}$image${NC}"
+            echo -e "   Time:   ${DIM}$uptime${NC}"
+
+            # Show GPU allocation from Docker labels
+            if [ -n "$gpu_allocated" ] && [ "$gpu_allocated" != "null" ]; then
+                if [ "$is_running" = "true" ]; then
+                    echo -e "   GPU:    ${GREEN}GPU $gpu_allocated${NC}"
+                else
+                    echo -e "   GPU:    ${DIM}GPU $gpu_allocated (stopped)${NC}"
+                fi
+            fi
+
+            echo ""
+        done
+    else
+        # Fallback to old display method
+        echo -e "${YELLOW}Query tool unavailable, using basic view${NC}\n"
+        # Simple docker ps output
+        docker ps -a --filter "name=._.$USER_ID" --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" 2>/dev/null || true
+        return
+    fi
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Total:${NC} $total container(s)  •  ${GREEN}$running running${NC}"
+
+    if [ "$show_all" = "true" ]; then
+        local stopped=$((total - running))
+        if [ "$stopped" -gt 0 ]; then
+            echo -e "       ${DIM}$stopped stopped${NC}"
+        fi
+    fi
+
+    echo ""
+
+    # Tips
+    echo -e "${YELLOW}💡 For More Info:${NC}"
+    echo -e "   Also stopped:           ${GREEN}container list -all${NC}"
+    echo -e "   Detailed metadata:      ${GREEN}container list -detailed${NC}"
+    echo -e "   With walkthrough:       ${GREEN}container list -guided${NC}"
+    echo ""
+
+    if [ "$GUIDED" = true ]; then
+        echo ""
+
+        # Tips
+        echo -e "${YELLOW}💡 Further Quick Commands:${NC}"
+        echo -e "   Start:    ${GREEN}container-run <name>${NC}"
+        echo -e "   Stop:     ${GREEN}container-stop <name>${NC}"
+        echo -e "   Stats:    ${GREEN}container-stats${NC}"
+        echo -e "   Cleanup:  ${GREEN}container-remove${NC}"
+        echo ""
+    fi
+}
+
+show_detailed() {
+    local show_all="$1"
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}    Detailed Container Information${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+
+    # Get containers via mlc-list
+    local containers=$(get_container_list_via_mlc "$show_all")
+
+    if [ -z "$containers" ]; then
+        echo -e "${YELLOW}No containers found${NC}\n"
+        return
+    fi
+
+    # Filter for running only if needed
+    local filtered_containers=""
+    if [ "$show_all" = "true" ]; then
+        filtered_containers="$containers"
+    else
+        while IFS= read -r full_name; do
+            [ -z "$full_name" ] && continue
+            local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
+            if [[ "$status" == Up* ]]; then
+                filtered_containers="${filtered_containers}${full_name}\n"
+            fi
+        done <<< "$containers"
+        filtered_containers=$(echo -e "$filtered_containers" | grep -v "^$")
+    fi
+
+    local count=0
+    while IFS= read -r full_name; do
+        [ -z "$full_name" ] && continue
+        count=$((count + 1))
+
+        local name=$(echo "$full_name" | sed "s/\._\.$USER_ID//")
+
+        echo -e "${BOLD}━━━ Container #$count: ${CYAN}$name${NC} ${BOLD}━━━${NC}\n"
+
+        # Basic info (all via docker inspect - DS01 specific)
+        local status=$(docker ps -a --format "{{.Status}}" --filter "name=^${full_name}$" 2>/dev/null)
+        local image=$(docker inspect --format "{{.Config.Image}}" "$full_name" 2>/dev/null)
+        local created=$(docker inspect --format "{{.Created}}" "$full_name" 2>/dev/null | cut -d. -f1 | sed 's/T/ /')
+        local id=$(docker inspect --format "{{.Id}}" "$full_name" 2>/dev/null | cut -c1-12)
+
+        echo -e "${BOLD}General:${NC}"
+        echo -e "  Name:       $name"
+        echo -e "  Full Name:  ${DIM}$full_name${NC}"
+        echo -e "  ID:         ${DIM}$id${NC}"
+        echo -e "  Status:     $(format_status "$status")"
+        echo -e "  Created:    ${DIM}$created${NC}"
+        echo -e "  Image:      $image"
+
+        # Check for AIME labels (verify mlc-list integration)
+        local aime_framework=$(docker inspect --format "{{index .Config.Labels \"aime.mlc.FRAMEWORK\"}}" "$full_name" 2>/dev/null)
+        if [ -n "$aime_framework" ] && [ "$aime_framework" != "<no value>" ]; then
+            echo -e "  Framework:  ${GREEN}$aime_framework${NC} ${DIM}(via AIME)${NC}"
+        fi
+
+        # Resources
+        echo -e "\n${BOLD}Resources:${NC}"
+        local cpus=$(docker inspect --format "{{.HostConfig.NanoCpus}}" "$full_name" 2>/dev/null)
+        if [ "$cpus" != "0" ] && [ -n "$cpus" ]; then
+            cpus=$((cpus / 1000000000))
+            echo -e "  CPUs:       ${GREEN}$cpus cores${NC}"
+        fi
+
+        local memory=$(docker inspect --format "{{.HostConfig.Memory}}" "$full_name" 2>/dev/null)
+        if [ "$memory" != "0" ] && [ -n "$memory" ]; then
+            memory=$((memory / 1024 / 1024 / 1024))
+            echo -e "  Memory:     ${GREEN}${memory}GB${NC}"
+        fi
+
+        local gpu=$(docker inspect --format "{{.HostConfig.DeviceRequests}}" "$full_name" 2>/dev/null)
+        if [[ "$gpu" != "[]" ]] && [[ "$gpu" != "<no value>" ]]; then
+            echo -e "  GPU:        ${GREEN}Enabled${NC}"
+        else
+            echo -e "  GPU:        ${DIM}CPU-only${NC}"
+        fi
+
+        # Mounts
+        local workspace=$(docker inspect --format "{{range .Mounts}}{{if eq .Destination \"/workspace\"}}{{.Source}}{{end}}{{end}}" "$full_name" 2>/dev/null)
+        if [ -n "$workspace" ]; then
+            echo -e "\n${BOLD}Mounts:${NC}"
+            echo -e "  Workspace:  ${BLUE}$workspace${NC}"
+            local data=$(docker inspect --format "{{range .Mounts}}{{if eq .Destination \"/data\"}}{{.Source}}{{end}}{{end}}" "$full_name" 2>/dev/null)
+            if [ -n "$data" ]; then
+                echo -e "  Data:       ${BLUE}$data${NC}"
+            fi
+            local models=$(docker inspect --format "{{range .Mounts}}{{if eq .Destination \"/models\"}}{{.Source}}{{end}}{{end}}" "$full_name" 2>/dev/null)
+            if [ -n "$models" ]; then
+                echo -e "  Models:     ${BLUE}$models${NC} ${DIM}(AIME v2)${NC}"
+            fi
+        fi
+
+        # Ports
+        local ports=$(docker port "$full_name" 2>/dev/null)
+        if [ -n "$ports" ]; then
+            echo -e "\n${BOLD}Ports:${NC}"
+            echo "$ports" | while read -r port; do
+                echo -e "  ${GREEN}$port${NC}"
+            done
+        fi
+
+        # Metadata
+        local info_file="$HOME/ds01-config/containers/${name}.info"
+        if [ -f "$info_file" ]; then
+            local created_date=$(grep "^Created:" "$info_file" | cut -d: -f2- | xargs)
+            if [ -n "$created_date" ]; then
+                echo -e "\n${BOLD}Metadata:${NC}"
+                echo -e "  Created:    ${DIM}$created_date${NC}"
+            fi
+        fi
+
+        echo ""
+    done <<< "$filtered_containers"
+}
+
+# Parse arguments
+GUIDED=false
+SHOW_ALL=false
+DETAILED=false
+FORMAT="simple"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        -a|--all)
+            SHOW_ALL=true
+            shift
+            ;;
+        -d|--detailed)
+            DETAILED=true
+            shift
+            ;;
+        --format)
+            FORMAT="$2"
+            shift 2
+            ;;
+        -h|--help|--info)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Display
+if [ "$DETAILED" = true ]; then
+    show_detailed "$SHOW_ALL"
+else
+    show_simple "$SHOW_ALL"
+fi

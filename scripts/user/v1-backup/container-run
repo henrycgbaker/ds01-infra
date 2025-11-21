@@ -277,7 +277,7 @@ if [ "$GUIDED" = false ]; then
 fi
 
 # Check GPU availability before starting (2c: Resource allocation validation)
-GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
 if [ -f "$GPU_ALLOCATOR" ]; then
     # Get container's allocated GPU from metadata
     CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
@@ -321,19 +321,6 @@ if [ -f "$GPU_ALLOCATOR" ]; then
                 exit 1
             fi
         fi
-    fi
-fi
-
-# Check if container is paused and unpause if needed
-CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev/null || echo "")
-if [ "$CONTAINER_STATUS" = "paused" ]; then
-    echo -e "${YELLOW}○${NC} Container is paused. Unpausing..."
-    if docker unpause "$CONTAINER_TAG" > /dev/null 2>&1; then
-        echo -e "${GREEN}✓${NC} Container unpaused"
-        echo ""
-    else
-        echo -e "${RED}✗${NC} Failed to unpause container"
-        exit 1
     fi
 fi
 

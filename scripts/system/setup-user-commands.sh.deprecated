@@ -1,6 +1,20 @@
 #!/bin/bash
-# Setup user command symlinks in /usr/local/bin
-# Also creates records in config/usr-mirrors for tracking
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# DEPRECATED - This script has been replaced by update-symlinks.sh
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+#
+# This file is kept for historical reference only.
+#
+# Reason for deprecation:
+#   - Hard-coded command arrays required manual updates for new commands
+#   - Missing newer commands: container-deploy, container-retire, container-pause
+#   - Replaced by update-symlinks.sh which dynamically creates all symlinks
+#
+# Use instead:
+#   sudo bash /opt/ds01-infra/scripts/system/update-symlinks.sh
+#
+# Deprecated: 2025-11-19
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 set -e
 
