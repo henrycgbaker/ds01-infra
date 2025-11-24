@@ -345,9 +345,16 @@ if [ -f "$MLC_OPEN" ] && [ -x "$MLC_OPEN" ]; then
         echo ""
     fi
 
-    # Call mlc-open
-    bash "$MLC_OPEN" "$CONTAINER_NAME"
-    EXIT_CODE=$?
+    # Call mlc-open (suppress verbose MLC output when in orchestrator mode)
+    if [ -n "$DS01_ORCHESTRATOR" ]; then
+        # Orchestrator mode: redirect MLC stderr to suppress verbose messages
+        bash "$MLC_OPEN" "$CONTAINER_NAME" 2>/dev/null
+        EXIT_CODE=$?
+    else
+        # Direct Tier 2 use: show all MLC output
+        bash "$MLC_OPEN" "$CONTAINER_NAME"
+        EXIT_CODE=$?
+    fi
 
 else
     # Fallback to direct docker exec (if base system not available)
@@ -375,51 +382,46 @@ fi
 # Post-exit handling
 echo ""
 
-# Offer to retire container (ephemeral container model)
-# This should ALWAYS show, even when called from orchestrator
+# Auto-retire container (ephemeral container model)
+# When called from orchestrator, exit quietly; when standalone, auto-retire
 CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
+
+if [ -n "$DS01_ORCHESTRATOR" ]; then
+    # Called from orchestrator (e.g., container-deploy) - exit quietly
+    # Orchestrator will handle all post-exit messaging
+    exit $EXIT_CODE
+fi
+
+# Standalone mode: Auto-retire (no prompt) to enforce ephemeral model
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}Container Session Ended${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "You've exited container: ${CYAN}$CONTAINER_NAME${NC}"
-echo ""
-echo -e "${YELLOW}💡 Retire this container?${NC} (Stop + Remove + Free GPU)"
-echo -e "   ${DIM}Workspace files stay safe in ~/workspace/$CONTAINER_NAME/${NC}"
-echo -e "   ${DIM}You can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}${DIM}${NC}"
-echo ""
-read -p "Retire container now? [y/N]: " RETIRE_CONTAINER </dev/tty
 
-if [[ "$RETIRE_CONTAINER" =~ ^[Yy]$ ]]; then
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}ℹ${NC} ${BOLD}Ephemeral Container Model:${NC}"
+    echo "  Container will be automatically retired (stop + remove)"
+    echo "  Your workspace files stay safe in ~/workspace/$CONTAINER_NAME/"
+    echo "  You can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
     echo ""
-    # Call container-retire (it will handle save prompts and removal)
-    RETIRE_ARGS=()
-    if [ "$GUIDED" = true ]; then
-        RETIRE_ARGS+=("--guided")
-    fi
-
-    if [ -f "$CONTAINER_RETIRE" ]; then
-        bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" "${RETIRE_ARGS[@]}"
-        exit 0
-    else
-        echo -e "${RED}✗${NC} container-retire not found at $CONTAINER_RETIRE"
-        echo -e "   Skipping retirement."
-        echo ""
-    fi
 fi
 
-# When called from Tier 3 orchestrator, exit quietly after retirement handling
-# (orchestrator will handle remaining messaging)
-if [ -n "$DS01_ORCHESTRATOR" ]; then
-    exit $EXIT_CODE
+echo -e "${YELLOW}Auto-retiring container...${NC}"
+echo ""
+
+# Call container-retire with --force to skip confirmations (except image commit prompt)
+RETIRE_ARGS=("--force")
+if [ "$GUIDED" = true ]; then
+    RETIRE_ARGS+=("--guided")
 fi
 
-# Standalone mode: show next steps
-echo ""
-echo -e "${DIM}Container still running. You can:${NC}"
-echo -e "  ${GREEN}container-run $CONTAINER_NAME${NC}      ${DIM}# Reconnect${NC}"
-echo -e "  ${GREEN}container-retire $CONTAINER_NAME${NC}   ${DIM}# Retire later${NC}"
-echo ""
+if [ -f "$CONTAINER_RETIRE" ]; then
+    bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" "${RETIRE_ARGS[@]}"
+else
+    echo -e "${RED}✗${NC} container-retire not found at $CONTAINER_RETIRE"
+    echo "Manual cleanup: ${GREEN}container-retire $CONTAINER_NAME${NC}"
+    echo ""
+fi
 
 # Guided mode: show detailed explanations
 if [ "$GUIDED" = true ]; then
