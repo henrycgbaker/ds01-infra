@@ -492,41 +492,31 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
     if [ "$DS01_ORCHESTRATOR" = "retire" ]; then
         # Silently remove container (orchestrator handles all messaging)
         "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force >/dev/null 2>&1
-    # Prompt to remove container (unless --keep-container is set)
+    # Show next steps (no removal prompt - separation of concerns)
     elif [ "$KEEP_CONTAINER" = false ]; then
-        # Ephemeral model: prompt to remove container
-        echo -e "${BOLD}Be a good citizen:${NC} if you're done with this container, release the GPU now: ${GREEN}container-remove $CONTAINER_NAME${NC}"
-
-        if [ "$CONTAINER_HOLD" != "never" ] && [ "$CONTAINER_HOLD" != "None" ]; then
-            echo -e "${CYAN}ℹ${NC} ${DIM}If not removed, container will auto-remove after ${CONTAINER_HOLD}.${NC}"
-            echo ""
-        fi
-
-        read -p "Remove container now? [Y/n] (default: yes): " REMOVE_NOW
+        # Ephemeral model: inform about retirement option
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}${BOLD}    Next Steps${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${BOLD}Container stopped successfully.${NC}"
+        echo ""
+        echo -e "${BOLD}To resume:${NC}"
+        echo -e "  ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo ""
+        echo -e "${BOLD}To free GPU immediately:${NC}"
+        echo -e "  ${GREEN}container-retire $CONTAINER_NAME${NC}  ${DIM}(stops + removes container)${NC}"
         echo ""
 
-        if [[ "$REMOVE_NOW" =~ ^[Nn]$ ]]; then
-            echo -e "${GREEN}Container kept.${NC} Restart with: ${GREEN}container-run $CONTAINER_NAME${NC}"
-            if [ "$gpu_hold" != "indefinite" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "None" ]; then
-                echo -e "${DIM}Note: GPU held for $gpu_hold, then released${NC}"
-            fi
-            echo ""
-        else
-            echo -e "${CYAN}Removing container...${NC}"
-            echo ""
-            # Call container-remove with --force flag (skip confirmations since user already confirmed)
-            if "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force; then
-                echo ""
-                echo -e "${GREEN}✓${NC} Container removed. GPU freed immediately."
-                echo -e "${GREEN}✓${NC} Your workspace files are safe in: ${DIM}~/workspace/$CONTAINER_NAME/${NC}\n"
-                echo -e "To resume, you can recreate the container anytime from the image/dockerfile"
-                echo ""
-            else
-                echo -e "${YELLOW}⚠${NC} Container removal failed. You can remove it manually later:"
-                echo -e "  ${GREEN}container-remove $CONTAINER_NAME${NC}"
-                echo ""
-            fi
+        if [ "$gpu_hold" != "indefinite" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "None" ]; then
+            echo -e "${CYAN}ℹ${NC} ${DIM}GPU will be held for ${CYAN}$gpu_hold${NC}${DIM}, then auto-released${NC}"
         fi
+
+        if [ "$CONTAINER_HOLD" != "never" ] && [ "$CONTAINER_HOLD" != "None" ]; then
+            echo -e "${CYAN}ℹ${NC} ${DIM}Container will auto-remove after ${CYAN}$CONTAINER_HOLD${NC}${DIM} if not restarted${NC}"
+        fi
+        echo ""
     else
         # --keep-container flag: skip removal prompt
         echo ""
