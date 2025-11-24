@@ -123,11 +123,11 @@ fi
 if [ "$INTERACTIVE" = true ]; then
     echo ""
     echo "Select project type:"
-    echo -e "  ${BOLD}1)${NC} General ML ${GREEN}(default - just the basics)${NC}"
-    echo -e "  ${BOLD}2)${NC} Computer Vision ${GREEN}(timm, albumentations, opencv)${NC}"
-    echo -e "  ${BOLD}3)${NC} NLP ${GREEN}(transformers, datasets, tokenizers)${NC}"
-    echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${GREEN}(gymnasium, stable-baselines3)${NC}"
-    echo -e "  ${BOLD}5)${NC} Custom ${GREEN}(I'll specify packages manually)${NC}"
+    echo -e "  ${BOLD}1)${NC} General ML ${DIM}(just the basics) ${GREEN}(Default)${NC}"
+    echo -e "  ${BOLD}2)${NC} Computer Vision ${DIM}(timm, albumentations, opencv)${NC}"
+    echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, datasets, tokenizers)${NC}"
+    echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
+    echo -e "  ${BOLD}5)${NC} Custom ${DIM}(specify packages manually)${NC}"
     read -p "Choice [1-5, default: 1]: " TYPE_CHOICE
 
     case $TYPE_CHOICE in
@@ -159,9 +159,9 @@ if [ "$EXISTING_PROJECT" = false ]; then
         # Directory structure choice
         echo -e "${BOLD}Choose directory structure:${NC}"
         echo -e "  ${BOLD}1)${NC} Data Science structure ${GREEN}(recommended)${NC}"
-        echo "     Organized folders: data/, models/, notebooks/, scripts/, outputs/"
+        echo -e "     ${DIM}Organized folders: data/, models/, notebooks/, scripts/, outputs/${NC}"
         echo -e "  ${BOLD}2)${NC} Blank directory"
-        echo "     Empty project folder - set up your own structure"
+        echo -e "     ${BOLD}Empty project folder - set up your own structure${NC}"
         read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE
     else
         STRUCTURE_CHOICE="1"
@@ -350,48 +350,35 @@ if [ -f "$PROJECT_DIR/README.md" ]; then
     echo ""
 fi
 
-# Step 6: Container Creation and Running (AFTER showing summary)
+# Step 6: Container Deployment (AFTER showing summary)
 if [ -n "$IMAGE_NAME" ] && [ "$INTERACTIVE" = true ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    read -p "Would you like to create and enter a container now? [Y/n]: " CREATE_CONTAINER
-    CREATE_CONTAINER=${CREATE_CONTAINER:-Y}
+    read -p "Would you like to deploy a container now? [Y/n]: " DEPLOY_CONTAINER
+    DEPLOY_CONTAINER=${DEPLOY_CONTAINER:-Y}
 
-    if [[ "$CREATE_CONTAINER" =~ ^[Yy] ]]; then
-        echo ""
-        echo -e "${BLUE}Creating container...${NC}"
+    if [[ "$DEPLOY_CONTAINER" =~ ^[Yy] ]]; then
         echo ""
 
-        # Create container using container-create command
-        if command -v container-create &> /dev/null; then
-            container-create "$PROJECT_NAME" "$IMAGE_NAME"
+        # Deploy container using Tier 3 orchestrator (create + start/run)
+        GUIDED_FLAG=""
+        if [ "$GUIDED" = true ]; then
+            GUIDED_FLAG="--guided"
+        fi
 
-            if [ $? -eq 0 ]; then
-                echo ""
-                read -p "Enter container now? (type 'exit' to leave, container stays running) [Y/n]: " START_NOW
-                START_NOW=${START_NOW:-Y}
+        if command -v container-deploy &> /dev/null; then
+            # container-deploy handles: create container + prompt for background/terminal
+            container-deploy "$PROJECT_NAME" "$IMAGE_NAME" $GUIDED_FLAG || true
 
-                if [[ "$START_NOW" =~ ^[Yy] ]]; then
-                    echo ""
-                    echo -e "${GREEN}Entering container...${NC}"
-                    echo -e "${DIM}Remember: Type 'exit' to leave (container stays running)${NC}"
-                    echo ""
-                    sleep 2
-
-                    # Start container
-                    container-run "$PROJECT_NAME" || true
-
-                    # Show reminder after exiting
-                    echo ""
-                    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                    echo -e "${BOLD}Reminder: Your project is in ${CYAN}$PROJECT_DIR${NC}"
-                    echo -e "${BOLD}Re-enter container: ${GREEN}container-run $PROJECT_NAME${NC}"
-                    echo ""
-                fi
-            fi
+            # Show reminder after exiting (if user chose to enter terminal)
+            echo ""
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BOLD}Reminder: Your project is in ${CYAN}$PROJECT_DIR${NC}"
+            echo -e "${BOLD}Re-enter container: ${GREEN}container-run $PROJECT_NAME${NC}"
+            echo ""
         else
-            echo -e "${YELLOW}Container creation command not found${NC}"
-            echo "Create manually with: container-create $PROJECT_NAME $IMAGE_NAME"
+            echo -e "${YELLOW}Container deploy command not found${NC}"
+            echo "Deploy manually with: container-deploy $PROJECT_NAME $IMAGE_NAME"
         fi
     fi
 fi
