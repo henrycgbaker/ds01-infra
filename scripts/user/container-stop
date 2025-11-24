@@ -9,10 +9,17 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 MLC_STOP="$INFRA_ROOT/aime-ml-containers/mlc-stop"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
-GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
 
-# Source interactive library
-source /usr/local/lib/interactive-select.sh
+# Source interactive library (with fallback for development)
+if [ -f "/usr/local/lib/interactive-select.sh" ]; then
+    source /usr/local/lib/interactive-select.sh
+elif [ -f "$INFRA_ROOT/scripts/lib/interactive-select.sh" ]; then
+    source "$INFRA_ROOT/scripts/lib/interactive-select.sh"
+else
+    echo "Error: interactive-select.sh not found"
+    exit 1
+fi
 
 BLUE='\033[94m'
 GREEN='\033[0;32m'
@@ -50,12 +57,13 @@ usage() {
     echo "  container-stop                   # Prompts to select running container (if none specified)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
-    echo "  --guided        Show detailed explanations for beginners"
-    echo "  -f, --force     Force stop (kill immediately)"
-    echo "  -t, --timeout   Timeout in seconds (default: 10)"
-    echo "  -a, --all       Stop all your containers"
-    echo "  -v, --verbose   Show detailed shutdown process (SIGTERM/SIGKILL timing)"
-    echo "  -h, --help      Show this help message"
+    echo "  --guided           Show detailed explanations for beginners"
+    echo "  -f, --force        Force stop (kill immediately)"
+    echo "  -t, --timeout      Timeout in seconds (default: 10)"
+    echo "  -a, --all          Stop all your containers"
+    echo "  -v, --verbose      Show detailed shutdown process (SIGTERM/SIGKILL timing)"
+    echo "  --keep-container   Don't prompt to remove container (opt-out of ephemeral model)"
+    echo "  -h, --help         Show this help message"
     echo ""
     echo -e "${CYAN}Description:${NC}"
     echo "  Gracefully stops a running container, allowing processes"
@@ -264,6 +272,7 @@ FORCE=false
 TIMEOUT=10
 STOP_ALL=false
 VERBOSE=false
+KEEP_CONTAINER=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -285,6 +294,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -a|--all)
             STOP_ALL=true
+            shift
+            ;;
+        --keep-container)
+            KEEP_CONTAINER=true
             shift
             ;;
         -h|--help|--info)
@@ -475,12 +488,13 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
         fi
     fi
 
-    # When called from retire orchestrator, automatically proceed with removal
+    # When called from retire orchestrator, auto-remove silently
     if [ "$DS01_ORCHESTRATOR" = "retire" ]; then
-        # Skip prompt and proceed directly to removal (orchestrator handles messaging)
+        # Silently remove container (orchestrator handles all messaging)
         "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force >/dev/null 2>&1
-    else
-        # Normal interactive flow: prompt user
+    # Prompt to remove container (unless --keep-container is set)
+    elif [ "$KEEP_CONTAINER" = false ]; then
+        # Ephemeral model: prompt to remove container
         echo -e "${BOLD}Be a good citizen:${NC} if you're done with this container, release the GPU now: ${GREEN}container-remove $CONTAINER_NAME${NC}"
 
         if [ "$CONTAINER_HOLD" != "never" ] && [ "$CONTAINER_HOLD" != "None" ]; then
@@ -513,6 +527,30 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
                 echo ""
             fi
         fi
+    else
+        # --keep-container flag: skip removal prompt
+        echo ""
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${YELLOW}${BOLD}    Container Kept (--keep-container)${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${BOLD}Container stopped but not removed.${NC}"
+        echo ""
+        echo -e "${BOLD}To restart:${NC}"
+        echo -e "  ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo ""
+        if [ "$gpu_hold" != "indefinite" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "None" ]; then
+            echo -e "${YELLOW}⚠ GPU Note:${NC}"
+            echo -e "  GPU will be held for ${CYAN}$gpu_hold${NC}, then auto-released"
+            echo ""
+        fi
+        if [ "$CONTAINER_HOLD" != "never" ] && [ "$CONTAINER_HOLD" != "None" ]; then
+            echo -e "${YELLOW}⚠ Container Lifecycle:${NC}"
+            echo -e "  Container will auto-remove after ${CYAN}$CONTAINER_HOLD${NC} if not restarted"
+            echo ""
+        fi
+        echo -e "${DIM}Tip: For immediate GPU release, use: ${GREEN}container-retire $CONTAINER_NAME${NC}"
+        echo ""
     fi
 else
     echo ""
