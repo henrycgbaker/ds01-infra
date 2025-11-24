@@ -119,10 +119,6 @@ PROJECT_DIR="$WORKSPACE_DIR/$PROJECT_NAME"
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
     echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Createan Industry-Standard DS Project Directory${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
     echo -e "${BOLD}What is a Project Directory?${NC}"
     echo ""
     echo "  Your project directory is where all your work lives:"
@@ -178,9 +174,6 @@ fi
 
 # TODO: only show this header in GUI mode i.e. run without args (if run with args -> no GUI, no header etc, just confirmatory output)
 if [ "$GUIDED" = false ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Create an Industry-Standard DS Project Directory${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 fi
 
 # Check for existing directory
@@ -263,12 +256,7 @@ if [ "$GUIDED" = true ]; then
     echo -e "     ${GREEN}project-init $PROJECT_NAME${NC}"
     echo ""
 else
-    # Non-guided: brief output
-    echo -e "${BOLD}Next steps:${NC}"
-    echo -e "  ${DIM}Initialize Git:${NC}     ${GREEN}git-init $PROJECT_NAME${NC}"
-    echo -e "  ${DIM}Create README:${NC}      ${GREEN}readme-create $PROJECT_NAME${NC}"
-    echo -e "  ${DIM}Full setup:${NC}         ${GREEN}project-init $PROJECT_NAME${NC}"
-    echo ""
+
 fi
 
 exit 0

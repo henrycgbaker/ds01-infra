@@ -625,10 +625,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}${BOLD}    Container Remove${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-
 if [ "$GUIDED" = true ]; then
     IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
 

@@ -128,6 +128,7 @@ if [ "$INTERACTIVE" = true ]; then
     echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, datasets, tokenizers)${NC}"
     echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
     echo -e "  ${BOLD}5)${NC} Custom ${DIM}(specify packages manually)${NC}"
+    echo ""
     read -p "Choice [1-5, default: 1]: " TYPE_CHOICE
 
     case $TYPE_CHOICE in
@@ -213,6 +214,8 @@ else
     SKIP_GIT=true
 fi
 
+read -p "Press Enter to continue..." </dev/tty
+
 # Step 4: Create README and requirements.txt
 if [ "$EXISTING_PROJECT" = false ]; then
     echo ""
@@ -237,8 +240,14 @@ if [ "$EXISTING_PROJECT" = false ]; then
         $GUIDED_FLAG
 else
     echo ""
-    echo -e "${BOLD}Step 4: Skipping File Creation${NC}"
-    echo -e "${YELLOW}Using existing project files${NC}"
+    echo -e "${BOLD}Step 4: File Creation${NC}"
+    echo -e "${GREEN}Using existing project files${NC}"
+fi
+
+
+if [ -f "$PROJECT_DIR/README.md" ]; then
+    echo -e "${YELLOW}📖 Read your project README:${NC} ${CYAN}cat $PROJECT_DIR/README.md${NC}"
+    echo ""
 fi
 
 # Step 5: Docker Image Creation
@@ -267,21 +276,9 @@ if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
 fi
 
 # Show Summary BEFORE entering container
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Setup Complete!${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "${BOLD}Project:${NC} $PROJECT_NAME"
-echo -e "${BOLD}Type:${NC} $PROJECT_TYPE"
-echo -e "${BOLD}Location:${NC} $PROJECT_DIR"
-if [ -n "$IMAGE_NAME" ]; then
-    echo -e "${BOLD}Image:${NC} $IMAGE_NAME"
-fi
-echo ""
 
 if [ "$GUIDED" = true ]; then
-    echo -e "${YELLOW}${BOLD}━━━ Understanding Containers (for beginners) ━━━${NC}\n"
+    echo -e "${YELLOW}${BOLD}━━━ Next: Deploying a Container ━━━${NC}\n"
     echo -e "${BOLD}What is a Container?${NC}"
     echo "  Think of a container like a 'computing environment' that:"
     echo "  • Has all your tools pre-installed (Python, PyTorch, etc.)"
@@ -304,49 +301,6 @@ if [ "$GUIDED" = true ]; then
     echo "  1. Write/edit code in your workspace (via VS Code SSH or directly)"
     echo "  2. Run code inside container (which has GPUs and software)"
     echo "  3. Results save back to workspace (persistent storage)"
-    echo ""
-    echo -e "${BOLD}Key Concepts:${NC}"
-    echo "  • ${GREEN}Enter container${NC}:  Work with GPUs, run experiments"
-    echo "  • ${GREEN}Exit container${NC}:   Your files stay in workspace, container keeps running"
-    echo "  • ${GREEN}Stop container${NC}:   Turn off container (saves GPU resources)"
-    echo "  • ${GREEN}Restart container${NC}: Pick up where you left off"
-    echo ""
-fi
-
-echo -e "${YELLOW}${BOLD}━━━ Your Next Steps ━━━${NC}\n"
-
-if [ -z "$IMAGE_NAME" ]; then
-    echo -e "${BOLD}1. Create Docker image:${NC}"
-    echo -e "   ${GREEN}image-create $PROJECT_NAME${NC}"
-    echo ""
-    echo -e "${BOLD}2. Create and start container:${NC}"
-    echo -e "   ${GREEN}container-create $PROJECT_NAME <image-name>${NC}"
-    echo -e "   ${GREEN}container-run $PROJECT_NAME${NC}"
-    echo ""
-else
-    echo -e "${BOLD}1. Create a container${NC} (if you haven't already)"
-    echo -e "${BOLD}2. Enter the container${NC} to start working"
-    echo ""
-fi
-
-echo -e "${BOLD}Helpful Commands:${NC}"
-echo -e "  ${CYAN}container-list${NC}       See your containers"
-echo -e "  ${CYAN}container-run <name>${NC}  Enter a container"
-echo -e "  ${CYAN}container-stop <name>${NC} Stop a container"
-echo -e "  ${CYAN}container-stats${NC}      Check GPU/CPU usage"
-echo -e "  ${CYAN}alias-list${NC}           See all available commands"
-echo ""
-
-echo -e "${BOLD}Inside the Container:${NC}"
-echo "  • Your workspace: ${CYAN}/workspace${NC}"
-echo "  • Start Jupyter: ${CYAN}jlab${NC}"
-echo "  • Check GPU: ${CYAN}gpu${NC}"
-echo "  • Exit (container keeps running): Type ${CYAN}exit${NC}"
-echo "  • Stop container: ${CYAN}container-stop <name>${NC} (on host)"
-echo ""
-
-if [ -f "$PROJECT_DIR/README.md" ]; then
-    echo -e "${YELLOW}📖 Read your project README:${NC} ${CYAN}cat $PROJECT_DIR/README.md${NC}"
     echo ""
 fi
 

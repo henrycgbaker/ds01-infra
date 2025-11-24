@@ -19,7 +19,7 @@ USER_ID=$(id -u)
 
 usage() {
     echo ""
-    echo -e "${BOLD}DS01 VS Code Setup${NC}"
+    echo -e "${BOLD}Connecting Your IDE (VS Code) To DS01${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  vscode-setup [options]"
@@ -84,12 +84,12 @@ SERVER_IP=$(hostname -I | awk '{print $1}')
 if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Connecting VS Code to DS01${NC}"
+    echo -e "${BOLD}Connecting Your IDE (VS Code) To DS01${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${BOLD}What is VS Code Remote-SSH?${NC}"
+    echo -e "${BOLD}We'll be using the 'Remote SSH' & 'Dev Containers' exentsions, among others${NC}"
     echo ""
-    echo "  VS Code Remote-SSH lets you:"
+    echo "  These let you:"
     echo "  • Edit files on the DS01 server from your local computer"
     echo "  • Use all VS Code features (debugging, IntelliSense, extensions)"
     echo "  • Access the server's GPUs and computing power"
@@ -104,9 +104,9 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${BOLD}Requirements:${NC}"
     echo ""
-    echo "  • VS Code installed on your local computer"
-    echo "  • SSH keys set up (run ${GREEN}ssh-setup${NC} if not done)"
-    echo "  • Remote-SSH extension installed in VS Code"
+    echo -e "  • VS Code installed on your local computer"
+    echo -e "  • SSH keys set up (run ${GREEN}ssh-setup${NC} if not done)"
+    echo -e "  • SSH - Remote & Dev Containers extension installed in VS Code"
     echo ""
     read -p "Press Enter to see setup instructions..." </dev/tty
     echo ""
@@ -124,14 +124,15 @@ echo ""
 echo "  Open VS Code and install these extensions:"
 echo ""
 echo -e "  ${BOLD}Required:${NC}"
-echo "    • Remote - SSH (ms-vscode-remote.remote-ssh)"
-echo "    • Remote - SSH: Editing Configuration Files"
+echo -e "    • Remote - SSH ${DIM}(ms-vscode-remote.remote-ssh)${NC}"
+echo -e "    • Remote - SSH: ${DIM}Editing Configuration Files (ms-vscode-remote.remote-ssh-edit)${NC}"
+echo -e "    • Dev-Containers ${DIM}(ms-vscode-remote.remote-containers)${NC}"
 echo ""
 echo -e "  ${BOLD}Recommended:${NC}"
-echo "    • Python (ms-python.python)"
-echo "    • Jupyter (ms-toolsai.jupyter)"
-echo "    • Docker (ms-azuretools.vscode-docker)"
-echo "    • GitLens (eamodio.gitlens)"
+echo -e "    • Python ${DIM}(ms-python.python)${NC}"
+echo -e "    • Jupyter ${DIM}(ms-toolsai.jupyter)${NC}"
+echo -e "    • Docker ${DIM}(ms-azuretools.vscode-docker)${NC}"
+echo -e "    • GitLens ${DIM}(eamodio.gitlens)${NC}"
 echo ""
 
 if [ "$GUIDED" = true ]; then
@@ -195,7 +196,7 @@ echo ""
 
 if [ "$GUIDED" = true ]; then
     echo -e "  ${YELLOW}💡 Tip:${NC} Look at the bottom-left corner of VS Code."
-    echo "     It should show: ${GREEN}SSH: ds01${NC}"
+    echo -e "     It should show: ${GREEN}SSH: ds01${NC}"
     echo ""
 fi
 
@@ -203,7 +204,7 @@ read -p "Press Enter after connecting..." </dev/tty
 echo ""
 
 # Step 4: Open Project
-echo -e "${YELLOW}${BOLD}Step 4: Open Your Project${NC}"
+echo -e "${YELLOW}${BOLD}Step 4: Open Your Project in Terminal${NC}"
 echo ""
 
 if [ -n "$PROJECT_NAME" ]; then
@@ -211,7 +212,7 @@ if [ -n "$PROJECT_NAME" ]; then
     echo "  In the connected VS Code window:"
     echo -e "    ${CYAN}File → Open Folder${NC}"
     echo -e "    → Navigate to: ${GREEN}$PROJECT_DIR${NC}"
-    echo "    → Click ${CYAN}OK${NC}"
+    echo -e "    → Click ${CYAN}OK${NC}"
     echo ""
 
     if [ "$GUIDED" = true ]; then
@@ -225,51 +226,43 @@ if [ -n "$PROJECT_NAME" ]; then
 else
     echo "  In the connected VS Code window:"
     echo -e "    ${CYAN}File → Open Folder${NC}"
-    echo -e "    → Navigate to: ${GREEN}/home/$USERNAME/workspace${NC}"
+    echo -e "    → Navigate to: ${GREEN}$PROJECT_DIR${NC}"
     echo "    → Select your project folder"
     echo ""
 fi
 
 # Step 5: Working in Container
 echo ""
-echo -e "${YELLOW}${BOLD}Step 5: Work in Your Container${NC}"
+echo -e "${YELLOW}${BOLD}Step 5: Attach Your IDE to the Running Container ${NC}"
 echo ""
 
 if [ -n "$CONTAINER_NAME" ]; then
     echo "  ${BOLD}Option A: Using VS Code Terminal${NC}"
     echo "    1. Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
-    echo -e "    2. Enter container: ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo -e "    3. Navigate: ${GREEN}cd /workspace/$PROJECT_NAME${NC}"
+    echo -e "    2. Enter container: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
+    echo -e "    3. Navigate to: ${GREEN}$PROJECT_DIR${NC}"
     echo "    4. Start coding!"
     echo ""
     echo "  ${BOLD}Option B: Using Dev Containers Extension (Advanced)${NC}"
     echo "    1. Install 'Dev Containers' extension in VS Code"
     echo -e "    2. Command Palette → ${CYAN}\"Dev Containers: Attach to Running Container\"${NC}"
-    echo -e "    3. Select: ${GREEN}${CONTAINER_NAME}._.$USER_ID${NC}"
+    echo -e "    3. Select container: ${GREEN}${USERNAME}._.$USER_ID${NC}"
     echo "    4. Entire VS Code session runs inside the container"
     echo ""
 else
-    echo "  Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
+    echo -e "  ${BOLD}Option A: Using VS Code Terminal${NC}"
+    echo -e "    1. Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
+    echo -e "    2. Enter container: ${GREEN}container-deploy <container_name>${NC}"
+    echo -e "    3. Navigate: ${GREEN}cd /workspace/$PROJECT_NAME${NC}"
+    echo "    4. Start coding!"
     echo ""
-    echo -e "  Then enter your container:"
-    echo -e "    ${GREEN}container-list${NC}          # See available containers"
-    echo -e "    ${GREEN}container-run <name>${NC}   # Enter a container"
+    echo -e "  ${BOLD}Option B: Using Dev Containers Extension ${GREEN}(Recommended!)${NC}"
+    echo -e "  ${DIM}(If you have the 'Dev Containers' extension in VS Code${NC})"
+    echo -e "    1. Command Palette → ${CYAN}\"Dev Containers: Attach to Running Container\"${NC}"
+    echo -e "    2. Select: ${GREEN}${CONTAINER_NAME}._.$USER_ID${NC}"
+    echo "    3. Entire VS Code session runs inside the container"
     echo ""
-fi
-
-if [ "$GUIDED" = true ]; then
-    echo -e "  ${BOLD}Understanding the Setup:${NC}"
-    echo ""
-    echo "    • ${CYAN}VS Code (local)${NC} - Your editor running on your computer"
-    echo "    • ${CYAN}SSH Connection${NC} - Secure link to DS01 server"
-    echo "    • ${CYAN}Workspace${NC} - Your project files on the server"
-    echo "    • ${CYAN}Container${NC} - GPU-enabled computing environment"
-    echo ""
-    echo "    Your workflow:"
-    echo "      1. Edit in VS Code (connected via SSH)"
-    echo "      2. Run code in container terminal (with GPUs)"
-    echo "      3. Files save to workspace (persistent)"
-    echo ""
+    echo -e "  ${YELLOW}💡 Tip:${NC} Even easier, just use the 'Dev Containers' GUI directly (LHS)"
 fi
 
 # Summary
@@ -290,13 +283,6 @@ fi
 if [ -n "$CONTAINER_NAME" ]; then
     echo -e "  ${CYAN}Container:${NC}     container-run $CONTAINER_NAME"
 fi
-echo ""
-
-echo -e "${YELLOW}💡 Helpful Commands (in VS Code terminal):${NC}"
-echo -e "   ${CYAN}container-list${NC}       # See your containers"
-echo -e "   ${CYAN}container-run <name>${NC} # Enter a container"
-echo -e "   ${CYAN}gpu${NC}                  # Check GPU status (inside container)"
-echo -e "   ${CYAN}jlab${NC}                 # Start Jupyter Lab (inside container)"
 echo ""
 
 # Create setup summary file
@@ -322,6 +308,8 @@ Host ds01
 VS Code Extensions:
 ------------------
 - Remote - SSH (required)
+- Remote - SSH: Editing Configuration Files (required)
+- Dev-Containers (required)
 - Python (recommended)
 - Jupyter (recommended)
 - Docker (recommended)
@@ -329,9 +317,15 @@ VS Code Extensions:
 
 Connection Steps:
 ----------------
-1. Command Palette (Ctrl+Shift+P)
-2. "Remote-SSH: Connect to Host"
+1. Open VS Code
+2. Command Palette → "Remote-SSH: Connect to Host"
 3. Select "ds01"
+4. (Optional) Open your project folder:
+   File → Open Folder → /home/$USERNAME/workspace/$PROJECT_NAME
+5. Enter your container:
+    a) Open terminal → container-deploy $CONTAINER_NAME    
+    b) (Recommended) Use Dev Containers extension to attach to container
+    Command Palette → "Dev Containers: Attach to Running Container"
 
 $([ -n "$PROJECT_NAME" ] && echo "Project Information:
 -------------------
@@ -341,18 +335,27 @@ Location: /home/$USERNAME/workspace/$PROJECT_NAME")
 $([ -n "$CONTAINER_NAME" ] && echo "Container Information:
 ---------------------
 Name: $CONTAINER_NAME
-Enter: container-run $CONTAINER_NAME")
+Enter: container-deploy $CONTAINER_NAME")
 
 Quick Commands:
 --------------
-container-list       # See your containers
-container-run <name> # Enter a container
-container-stats      # Check resource usage
-image-list           # See available images
-alias-list           # See all commands
+TODO THIS NEEDS UPDATING
+
+SSH:
+  ssh ds01                     # Connect via SSH
+VS Code:
+  Remote-SSH: Connect to Host   # Connect to DS01
+  Remote-SSH: Close Remote Connection  # Disconnect
+Container:
+  container-deploy $CONTAINER_NAME   # Enter your container
+  container-list                 # List your containers
+
+
 
 Inside Container:
 ----------------
+TODO THIS NEEDS UPDATING
+
 cd /workspace/$PROJECT_NAME  # Navigate to project
 gpu                          # Check GPU status
 jlab                         # Start Jupyter Lab
@@ -360,5 +363,5 @@ nvidia-smi                   # Detailed GPU info
 
 SUMMARYEOF
 
-echo -e "Summary saved to: ${BLUE}$SUMMARY_FILE${NC}"
+echo -e "A summary of all of this was saved to: ${BLUE}$SUMMARY_FILE${NC} for easy reference"
 echo ""

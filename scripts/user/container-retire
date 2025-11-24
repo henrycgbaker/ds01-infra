@@ -147,7 +147,6 @@ done
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}DS01 Container Retire${NC}"
-echo -e "${DIM}Ephemeral containers - Retire when done${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -222,7 +221,7 @@ fi
 
 # Confirm retirement (unless --force)
 if [ "$FORCE" != "true" ]; then
-    echo -e "${YELLOW}⚠ This will stop & remove container: ${BOLD}$CONTAINER_NAME${NC}"
+    echo -e "${YELLOW}⚠ This will stop & remove container: ${BOLD}$CONTAINER_NAME${NC}\n"
     if [ "$GUIDED" = "true" ]; then
         echo -e "${BOLD}What will happen:${NC}"
         if [ "$CONTAINER_STATUS" = "running" ]; then
@@ -244,7 +243,7 @@ if [ "$FORCE" != "true" ]; then
         echo ""
     fi
     
-    read -p "Continue with retirement? [y/N]: " CONFIRM </dev/tty
+    read -p "Continue? [y/N]: " CONFIRM </dev/tty
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
         echo "Cancelled."
         exit 0

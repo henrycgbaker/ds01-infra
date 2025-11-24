@@ -134,16 +134,10 @@ if [ "$NEEDS_SSH" = false ] && [ "$NEEDS_PROJECT" = false ] && [ "$HAS_DOCKER_AC
     echo -e "  • See VS Code setup: ${GREEN}vscode-setup${NC}"
     echo ""
     read -p "Run full wizard anyway? [y/N]: " RUN_ANYWAY
-    if [[ ! "$RUN_ANYWAY" =~ ^[Yy]$ ]]; then
-        exit 0
+    if [[ ! "$RUN_ANYWAY" =~ ^[Yy]$ && -n "$RUN_ANYWAY" ]]; then
+    exit 0
     fi
     echo ""
-fi
-
-read -p "Continue with setup? [Y/n]: " CONTINUE
-CONTINUE=${CONTINUE:-Y}
-if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
-    exit 0
 fi
 
 # Step 2: SSH Key Setup
@@ -241,6 +235,10 @@ echo ""
 echo -e "  ${GREEN}✓${NC} SSH keys for remote access"
 if [ -n "$PROJECT_NAME" ]; then
     echo -e "  ${GREEN}✓${NC} Project: $PROJECT_NAME"
+    echo -e "  ${GREEN}✓${NC} Dockerfile written"
+    echo -e "  ${GREEN}✓${NC} Docker image built"
+    echo -e "  ${GREEN}✓${NC} Container created & deployed"
+else
 fi
 echo -e "  ${GREEN}✓${NC} VS Code connection configured"
 echo ""
@@ -268,7 +266,8 @@ fi
 
 echo -e "${CYAN}💡 Helpful Commands:${NC}"
 echo -e "   ${CYAN}alias-list${NC}           # See all available commands"
-echo -e "   ${CYAN}container-list${NC}       # See your containers"
+echo -e "   ${CYAN}vscode-setup${NC}          # Re-run VS Code setup instructions"
+echo -e "   ${CYAN}ssh-setup${NC}            # Re-run SSH key setup"
 echo -e "   ${CYAN}project-init${NC}         # Create another project"
 echo -e "   ${CYAN}user-setup${NC}           # Run this wizard again"
 echo ""

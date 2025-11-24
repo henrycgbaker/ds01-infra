@@ -130,13 +130,13 @@ fi
 
 # Check if already initialized
 if [ -d "$PROJECT_DIR/.git" ]; then
-    echo -e "${YELLOW}✓ Git already initialized in $PROJECT_NAME${NC}"
+    echo -e "${GREEN}✓ Git already initialized in '$PROJECT_NAME' project ${NC}"
     echo ""
     echo "Repository info:"
     cd "$PROJECT_DIR"
     git status --short 2>/dev/null || true
     echo ""
-    exit 0
+    exit 0y
 fi
 
 # Show guided introduction
@@ -150,12 +150,12 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "  1. ${CYAN}.gitignore${NC}"
     echo ""
-    echo -e"  2. ${CYAN}Git LFS${NC} - Tracks large files efficiently"
+    echo -e "  2. ${CYAN}Git LFS${NC} - Tracks large files efficiently"
     echo "     (model checkpoints, weights - .pth, .h5, .ckpt)"
     echo ""
-    echo -e"  3. ${CYAN}User config${NC} - Your name/email for commits"
+    echo -e "  3. ${CYAN}User config${NC} - Your name/email for commits"
     echo ""
-    echo -e"  4. ${CYAN}Remote repository${NC} (optional) - Link to GitHub/GitLab"
+    echo -e "  4. ${CYAN}Remote repository${NC} (optional) - Link to GitHub/GitLab"
     echo ""
     echo -e "${YELLOW}💡 Pro Tip:${NC} Commit code and configs, NOT raw data or large models!"
     echo "   Use Git LFS for model weights, store datasets separately."

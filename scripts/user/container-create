@@ -635,7 +635,6 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"
     echo ""
     read -p "Choice [1-4]: " -n 1 -r CHOICE </dev/tty
     echo ""
-    echo ""
 
     case $CHOICE in
         1)
@@ -786,10 +785,6 @@ if [ ! -d "$WORKSPACE_DIR" ]; then
 fi
 
 # Show creation summary
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Container Creation Summary${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo -e "${BOLD}Name:${NC}       $CONTAINER_NAME"
 echo -e "${BOLD}Framework:${NC}  $FRAMEWORK"

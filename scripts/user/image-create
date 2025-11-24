@@ -1081,7 +1081,7 @@ if [ "$GUIDED" = true ]; then
     echo "  • Include domain-specific libraries (CV, NLP, RL)"
     echo "  • Save time - install once, use many times"
     echo ""
-    echo -e "${BOLD}Image vs Container:${NC}"
+    echo -e "${YELLOW}💡 Pro Tip: ${BOLD}Image vs Container:${NC}"
     echo ""
     echo -e "  • ${CYAN}Image${NC} = Blueprint (like a recipe)"
     echo -e "  • ${CYAN}Container${NC} = Running instance (like the cooked dish)"
@@ -1095,9 +1095,6 @@ if [ "$GUIDED" = true ]; then
     echo "  3. Add extra packages if needed"
     echo "  4. Build image (takes 3-5 minutes, depending on existing cache)"
     echo "  5. Create containers from this image"
-    echo ""
-    echo -e "${YELLOW}💡 Pro Tip:${NC} Start with a simple setup first."
-    echo "   You can always create more specialised images later!"
     echo ""
     read -p "Press Enter to start creating your image..." </dev/tty
     echo ""
@@ -1295,8 +1292,5 @@ if [ "$IMAGE_BUILT" = true ]; then
     else
         echo -e "${BOLD}Next Step:${NC}"
         echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
-        echo ""
     fi
 fi
-
-echo ""

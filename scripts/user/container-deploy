@@ -119,7 +119,6 @@ done
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}DS01 Container Deploy${NC}"
-echo -e "${DIM}Ephemeral containers w/ persistent workspaces${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -129,11 +128,6 @@ if [ "$GUIDED" = true ]; then
     echo "Deploy is a streamlined workflow that:"
     echo "  1. Creates a new container from an image"
     echo "  2. Starts the container (background or with terminal)"
-    echo ""
-    echo "This combines two Tier 2 commands:"
-    echo -e "  ${DIM}container-create + container-start/run${NC}"
-    echo ""
-    echo "But with unified output referencing only Tier 3 workflows."
     echo ""
     read -p "Press Enter to continue..." </dev/tty
     echo ""
