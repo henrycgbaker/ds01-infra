@@ -119,7 +119,7 @@ done
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}DS01 Container Deploy${NC}"
-echo -e "${DIM}Ephemeral containers + Persistent workspaces${NC}"
+echo -e "${DIM}Ephemeral containers w/ persistent workspaces${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -143,10 +143,22 @@ fi
 echo -e "${BOLD}Step 1/2: Creating Container${NC}"
 echo ""
 
+# Use a temp file to communicate container name from container-create (for "use existing" case)
+CONTAINER_NAME_FILE="/tmp/ds01-deploy-container-$$"
+export DS01_CONTAINER_NAME_FILE="$CONTAINER_NAME_FILE"
+
+# Run container-create normally (NOT capturing output - breaks interactive prompts)
 if ! "$CONTAINER_CREATE" "${CREATE_ARGS[@]}"; then
+    rm -f "$CONTAINER_NAME_FILE"
     echo ""
     echo -e "${RED}✗ Container creation failed${NC}"
     exit 1
+fi
+
+# Check if container-create wrote the container name to the temp file
+if [ -f "$CONTAINER_NAME_FILE" ]; then
+    CONTAINER_NAME=$(cat "$CONTAINER_NAME_FILE")
+    rm -f "$CONTAINER_NAME_FILE"
 fi
 
 # Extract container name if we don't have it yet
@@ -237,23 +249,23 @@ case $START_MODE in
                 echo -e "${BOLD}Next Steps:${NC}"
                 echo ""
                 echo -e "  ${BOLD}Enter the container:${NC}"
-                echo -e "     ${GREEN}container deploy $CONTAINER_NAME${NC}"
+                echo -e "     ${GREEN}container-deploy $CONTAINER_NAME${NC}"
                 echo "     (Or use the 'open' option next time)"
                 echo ""
                 echo -e "  ${BOLD}Check status:${NC}"
                 echo -e "     ${GREEN}container-list${NC}"
                 echo ""
                 echo -e "  ${BOLD}When done:${NC}"
-                echo -e "     ${GREEN}container retire $CONTAINER_NAME${NC}"
+                echo -e "     ${GREEN}container-retire $CONTAINER_NAME${NC}"
                 echo "     (Stops and removes container, frees GPU)"
                 echo ""
             else
                 echo -e "${BOLD}Next steps:${NC}"
-                echo -e "  • Access container: ${GREEN}container deploy $CONTAINER_NAME --open${NC}"
+                echo -e "  • Access container: ${GREEN}container-deploy $CONTAINER_NAME --open${NC}"
                 echo -e "  • Check status:     ${GREEN}container-list${NC}"
                 echo -e "  • View stats:       ${GREEN}container-stats${NC}"
                 echo ""
-                echo -e "${YELLOW}💡 When done:${NC} ${GREEN}container retire $CONTAINER_NAME${NC} ${DIM}(cleanup)${NC}"
+                echo -e "${YELLOW}💡 When done:${NC} ${GREEN}container-retire $CONTAINER_NAME${NC} ${DIM}(cleanup)${NC}"
                 echo ""
             fi
         else
@@ -294,11 +306,11 @@ case $START_MODE in
             echo -e "${BOLD}What You Can Do Now:${NC}"
             echo ""
             echo -e "  ${BOLD}1) Re-enter the Container${NC}"
-            echo -e "     ${GREEN}container deploy $CONTAINER_NAME --open${NC}"
+            echo -e "     ${GREEN}container-deploy $CONTAINER_NAME --open${NC}"
             echo "     Continue working where you left off"
             echo ""
             echo -e "  ${BOLD}2) Retire the Container (Cleanup)${NC}"
-            echo -e "     ${GREEN}container retire $CONTAINER_NAME${NC}"
+            echo -e "     ${GREEN}container-retire $CONTAINER_NAME${NC}"
             echo "     Stops container and frees GPU immediately"
             echo -e "     ${BOLD}Do this when you're done!${NC} Be a good citizen."
             echo ""
@@ -310,14 +322,14 @@ case $START_MODE in
             echo ""
             echo -e "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
             echo "  • Container keeps running until you retire it or it hits timeout"
-            echo -e "  • Use ${GREEN}container retire${NC} when done to free GPU for others"
+            echo -e "  • Use ${GREEN}container-retire${NC} when done to free GPU for others"
             echo ""
         else
             echo -e "${DIM}Container still running in background${NC}"
             echo ""
             echo -e "${BOLD}Quick actions:${NC}"
-            echo -e "  • Re-enter:  ${GREEN}container deploy $CONTAINER_NAME --open${NC}"
-            echo -e "  • Cleanup:   ${GREEN}container retire $CONTAINER_NAME${NC} ${DIM}(stop + remove, frees GPU)${NC}"
+            echo -e "  • Re-enter:  ${GREEN}container-deploy $CONTAINER_NAME --open${NC}"
+            echo -e "  • Cleanup:   ${GREEN}container-retire $CONTAINER_NAME${NC} ${DIM}(stop + remove, frees GPU)${NC}"
             echo -e "  • Status:    ${GREEN}container-list${NC}"
             echo ""
         fi

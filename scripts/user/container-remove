@@ -60,13 +60,14 @@ usage() {
     echo "  name              Specific container to remove (optional - will prompt if not provided)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
-    echo "  --guided          Show detailed explanations for beginners"
-    echo "  -a, --all         Remove ALL your stopped containers"
-    echo "  -i, --images      Also remove associated Docker images"
-    echo "  -v, --volumes     Also remove anonymous volumes"
-    echo "  -f, --force       Skip confirmation prompts"
-    echo "  --dry-run         Show what would be removed"
-    echo "  -h, --help        Show this help message"
+    echo "  --guided                Show detailed explanations for beginners"
+    echo "  -a, --all               Remove ALL your stopped containers"
+    echo "  -i, --images            Also remove associated Docker images"
+    echo "  -v, --volumes           Also remove anonymous volumes"
+    echo "  -f, --force             Skip ALL prompts (save + confirmation)"
+    echo "  --skip-removal-confirm  Skip removal confirmation only (still asks to save)"
+    echo "  --dry-run               Show what would be removed"
+    echo "  -h, --help              Show this help message"
     echo ""
     echo -e "${CYAN}What gets removed:${NC}"
     echo "  • ${BOLD}Container${NC} - Always removed (the running instance)"
@@ -221,6 +222,7 @@ cleanup_container() {
     local guided="$4"
     local remove_images_arg="$5"
     local remove_volumes_arg="$6"
+    local skip_removal_confirm="$7"
     local container_tag="${container_name}._.$USER_ID"
 
     # Check if container exists
@@ -248,8 +250,8 @@ cleanup_container() {
         IFS='|' read -r remove_image remove_volume <<< "$(prompt_image_volume_removal "$guided")"
     fi
 
-    # Confirm container removal
-    if [ "$force" != "true" ]; then
+    # Confirm container removal (skip if --force or --skip-removal-confirm)
+    if [ "$force" != "true" ] && [ "$skip_removal_confirm" != "true" ]; then
         echo -e "${YELLOW}⚠ This will permanently remove:${NC}"
         echo -e "  • ${BOLD}Container${NC}: $container_name"
 
@@ -271,8 +273,9 @@ cleanup_container() {
         fi
     fi
 
-    # Prompt to save changes to image (interactive mode only)
-    if [ "$interactive" = "true" ] && [ "$force" != "true" ]; then
+    # Prompt to save changes to image
+    # Show when: not in force mode AND (interactive OR called from retire workflow)
+    if [ "$force" != "true" ] && ([ "$interactive" = "true" ] || [ "$skip_removal_confirm" = "true" ]); then
         echo ""
         echo -e "${CYAN}━━━ Save Changes to Image ━━━${NC}"
         echo ""
@@ -301,7 +304,11 @@ cleanup_container() {
             echo -e "${YELLOW}💡${NC} Save container changes to image: ${CYAN}$image${NC}?"
             echo -e "   ${DIM}(This updates the image with any packages/configs you installed)${NC}"
             echo ""
-            read -p "Save changes to image? [y/N]: " SAVE_IMAGE </dev/tty
+            echo -e "${YELLOW}⚠ IMPORTANT:${NC} This uses 'docker commit' (quick but not reproducible)"
+            echo -e "   ${BOLD}Recommended:${NC} Update Dockerfile instead: ${GREEN}image-update $container_name --add \"package1 package2\"${NC}"
+            echo -e "   ${DIM}Why? Dockerfile changes are reproducible, version-controlled, and team-shareable${NC}"
+            echo ""
+            read -p "Save changes to image anyway? [y/N]: " SAVE_IMAGE </dev/tty
 
             if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
                 echo ""
@@ -316,8 +323,12 @@ cleanup_container() {
                     echo "  • Configuration file changes"
                     echo "  • System modifications"
                     echo ""
+                    echo -e "${YELLOW}⚠ Remember:${NC} These changes are NOT in your Dockerfile"
+                    echo -e "   Next ${GREEN}image-update${NC} rebuild will overwrite these committed changes"
+                    echo -e "   For permanent changes: ${GREEN}image-update $container_name --add \"your-packages\"${NC}"
+                    echo ""
                     echo -e "${DIM}Next time you run: ${GREEN}container-deploy $container_name${NC}"
-                    echo -e "${DIM}The container will include these changes${NC}"
+                    echo -e "${DIM}The container will include these changes (until next Dockerfile rebuild)${NC}"
                     echo ""
                 else
                     echo -e "${YELLOW}⚠${NC} Failed to commit changes to image"
@@ -326,7 +337,7 @@ cleanup_container() {
             else
                 echo ""
                 echo -e "${YELLOW}Skipped.${NC} Changes will be lost when container is removed."
-                echo -e "${DIM}Tip: You can rebuild from Dockerfile at any time${NC}"
+                echo -e "${DIM}Tip: Update Dockerfile with ${GREEN}image-update${NC}, then rebuild image${NC}"
                 echo ""
             fi
         fi
@@ -559,6 +570,7 @@ CLEANUP_ALL=false
 CLEANUP_IMAGES=false
 CLEANUP_VOLUMES=false
 FORCE=false
+SKIP_REMOVAL_CONFIRM=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -581,6 +593,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -f|--force)
             FORCE=true
+            shift
+            ;;
+        --skip-removal-confirm)
+            SKIP_REMOVAL_CONFIRM=true
             shift
             ;;
         --dry-run)
@@ -720,7 +736,7 @@ fi
 if [ -n "$CONTAINER_NAME" ]; then
     # Interactive mode: prompt for image/volume removal (overrides flags for single container)
     # Non-interactive mode: use flags
-    cleanup_container "$CONTAINER_NAME" "$FORCE" "$INTERACTIVE_MODE" "$GUIDED" "$CLEANUP_IMAGES" "$CLEANUP_VOLUMES"
+    cleanup_container "$CONTAINER_NAME" "$FORCE" "$INTERACTIVE_MODE" "$GUIDED" "$CLEANUP_IMAGES" "$CLEANUP_VOLUMES" "$SKIP_REMOVAL_CONFIRM"
     exit $?
 fi
 

@@ -51,13 +51,13 @@ usage() {
     echo ""
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
-    echo "  -f, --force       Skip all confirmation prompts (except save image)"
+    echo "  -f, --force       Skip confirmation and save prompts (non-interactive)"
     echo "  --dry-run         Show what would be done"
     echo "  -h, --help        Show this help message"
     echo ""
     echo -e "${CYAN}What this does:${NC}"
     echo "  1. Stops the container (if running)"
-    echo "  2. Prompts to save changes to image (optional)"
+    echo "  2. Prompts to save changes to image (optional, via docker commit)"
     echo "  3. Removes the container"
     echo "  4. Releases GPU immediately"
     echo ""
@@ -84,6 +84,16 @@ usage() {
     echo "  If you prefer step-by-step control:"
     echo -e "  1. ${GREEN}container-stop <name>${NC}    # Stop container"
     echo -e "  2. ${GREEN}container-remove <name>${NC}  # Remove container"
+    echo ""
+    echo -e "${YELLOW}💡 Saving changes - Best practices:${NC}"
+    echo -e "  ${BOLD}Recommended:${NC} Update Dockerfile first"
+    echo -e "    ${GREEN}image-update <name> --add \"package1 package2\"${NC}"
+    echo -e "    Then rebuild image and redeploy container"
+    echo -e "    ${DIM}(Reproducible, version-controlled, team-shareable)${NC}"
+    echo ""
+    echo -e "  ${BOLD}Quick option:${NC} Save via docker commit (during retirement)"
+    echo -e "    Prompts during container-retire to commit changes to image"
+    echo -e "    ${DIM}(Fast but not in Dockerfile - gets overwritten on next rebuild)${NC}"
     echo ""
     echo -e "${YELLOW}💡 Use this when:${NC}"
     echo "  • Completely done with a container"
@@ -212,26 +222,28 @@ fi
 
 # Confirm retirement (unless --force)
 if [ "$FORCE" != "true" ]; then
-    echo -e "${YELLOW}⚠ This will permanently retire container: ${BOLD}$CONTAINER_NAME${NC}"
-    echo ""
-    echo -e "${BOLD}What will happen:${NC}"
-    if [ "$CONTAINER_STATUS" = "running" ]; then
-        echo "  1. Container will be stopped"
-        echo "  2. All running processes will be terminated"
-        echo "  3. You'll be prompted to save changes to image (optional)"
-        echo "  4. Container will be removed"
-        echo "  5. GPU will be released immediately"
-    else
-        echo "  1. You'll be prompted to save changes to image (optional)"
-        echo "  2. Container will be removed"
-        echo "  3. GPU will be released immediately"
+    echo -e "${YELLOW}⚠ This will stop & remove container: ${BOLD}$CONTAINER_NAME${NC}"
+    if [ "$GUIDED" = "true" ]; then
+        echo -e "${BOLD}What will happen:${NC}"
+        if [ "$CONTAINER_STATUS" = "running" ]; then
+            echo "  1. Container will be stopped"
+            echo "  2. All running processes will be terminated"
+            echo "  3. You'll be prompted to save changes to image (optional)"
+            echo "  4. Container will be removed"
+            echo "  5. GPU will be released immediately"
+        else
+            echo "  1. You'll be prompted to save changes to image (optional)"
+            echo "  2. Container will be removed"
+            echo "  3. GPU will be released immediately"
+        fi
+        echo ""
+        echo -e "${BOLD}What stays safe:${NC}"
+        echo -e "  • ${GREEN}Workspace files${NC} in ~/workspace/$CONTAINER_NAME/"
+        echo -e "  • ${GREEN}Dockerfiles${NC} in ~/dockerfiles/"
+        echo -e "  • ${GREEN}Docker images${NC}"
+        echo ""
     fi
-    echo ""
-    echo -e "${BOLD}What stays safe:${NC}"
-    echo -e "  • ${GREEN}Workspace files${NC} in ~/workspace/$CONTAINER_NAME/"
-    echo -e "  • ${GREEN}Dockerfiles${NC} in ~/dockerfiles/"
-    echo -e "  • ${GREEN}Docker images${NC}"
-    echo ""
+    
     read -p "Continue with retirement? [y/N]: " CONFIRM </dev/tty
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
         echo "Cancelled."
@@ -274,9 +286,9 @@ fi
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Call container-remove with --force to skip its confirmation (we already confirmed above)
-# But container-remove will still show the save image prompt (which we want to keep)
-REMOVE_ARGS=("--force")
+# Call container-remove with --skip-removal-confirm to skip its removal confirmation
+# (we already confirmed above), but container-remove will still show the save image prompt
+REMOVE_ARGS=("--skip-removal-confirm")
 if [ "$GUIDED" = true ]; then
     REMOVE_ARGS+=("--guided")
 fi

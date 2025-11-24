@@ -34,7 +34,9 @@ usage() {
 show_detailed() {
     local filter="$1"
 
-    echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}\n"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}Your Docker Images${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     local images
     if [ "$filter" = "all" ]; then
@@ -120,7 +122,9 @@ show_simple() {
             docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}"
         fi
     else
-        echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}\n"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${CYAN}${BOLD}Your Docker Images${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
         # Filter by DS01 naming pattern: ds01-{user-id}/*
         local user_id=$(id -u)
@@ -145,7 +149,7 @@ show_simple() {
             
             if [ "$GUIDED" = true ]; then
                 echo -e "${YELLOW}💡 Tips:${NC}"
-                echo -e "  • Create container: ${GREEN}container-create <image-name>${NC}"
+                echo -e "  • Deploy container: ${GREEN}container-deploy <image-name>${NC}"
                 echo -e "  • Update image: ${GREEN}image-update <image-name>${NC}"
                 echo -e "  • Delete image: ${GREEN}image-delete <image-name>${NC}"
                 echo -e "  • Detailed view: ${GREEN}image-list --detailed${NC}"
