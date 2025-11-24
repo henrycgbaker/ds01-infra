@@ -65,14 +65,15 @@ create_symlink "$INFRA_ROOT/scripts/monitoring/mlc-stats-wrapper.sh" "mlc-stats"
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 2: Modular Unit Commands${NC}"
+echo -e "${BOLD}TIER 2: Atomic Unit Commands${NC}"
 echo ""
 
-echo -e "${BOLD}Container Management (8 commands):${NC}"
+echo -e "${BOLD}Container Management (9 commands):${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/container-create" "container-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-run" "container-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-pause" "container-pause" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-list" "container-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stats" "container-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-remove" "container-remove" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
@@ -95,11 +96,12 @@ create_symlink "$INFRA_ROOT/scripts/user/vscode-setup" "vscode-setup" && ((SUCCE
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 3: Workflow Orchestrators & Dispatchers${NC}"
+echo -e "${BOLD}TIER 3: Container Orchestrators${NC}"
 echo ""
 
-echo -e "${BOLD}Orchestrators:${NC}"
-create_symlink "$INFRA_ROOT/scripts/user/project-init" "project-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo -e "${BOLD}Container Orchestrators (ephemeral model):${NC}"
+create_symlink "$INFRA_ROOT/scripts/user/container-deploy" "container-deploy" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-retire" "container-retire" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
 echo -e "${BOLD}Dispatchers:${NC}"
@@ -110,9 +112,10 @@ create_symlink "$INFRA_ROOT/scripts/user/user-dispatcher.sh" "user" && ((SUCCESS
 echo ""
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 4: Workflow Wizards${NC}"
+echo -e "${BOLD}TIER 4: Workflow Orchestrators${NC}"
 echo ""
 
+create_symlink "$INFRA_ROOT/scripts/user/project-init" "project-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/user-setup" "user-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 

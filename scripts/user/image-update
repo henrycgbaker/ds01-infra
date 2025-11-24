@@ -81,16 +81,28 @@ select_image_interactive() {
         echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}" >&2
         echo "" >&2
 
-        # Show images with same format as image-list (filtered by user)
-        docker images --filter "label=maintainer=$USERNAME" \
-            --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" >&2
-
-        echo "" >&2
-
         # Get list of user's images - filter by DS01 naming pattern
         local images=()
         local user_id=$(id -u)
         mapfile -t images < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$user_id/" | grep -v "REPOSITORY")
+
+        # Show only DS01 images in table format
+        if [ ${#images[@]} -gt 0 ]; then
+            # Build filter expression for docker images command
+            local filter_expr=""
+            for img in "${images[@]}"; do
+                if [ -n "$filter_expr" ]; then
+                    filter_expr="$filter_expr|"
+                fi
+                filter_expr="$filter_expr$img"
+            done
+            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
+                head -1 >&2  # Show header
+            docker images --format "{{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
+                grep -E "^($filter_expr)" >&2
+        fi
+
+        echo "" >&2
 
         # Remove empty entries
         local filtered_images=()
@@ -187,10 +199,9 @@ usage() {
     echo "  image-update my-project --guided"
     echo ""
     echo -e "${YELLOW}💡 After updating:${NC}"
-    echo "   Recreate containers to use the new image:"
-    echo -e "   ${GREEN}container-stop my-project${NC}"
-    echo -e "   ${GREEN}container-remove${NC}"
-    echo -e "   ${GREEN}container-create my-project${NC}"
+    echo "   Redeploy containers to use the new image:"
+    echo -e "   ${GREEN}container-retire my-project${NC}  ${DIM}# Stop + remove${NC}"
+    echo -e "   ${GREEN}container-deploy my-project${NC}  ${DIM}# Create + start${NC}"
     echo ""
 }
 
@@ -362,6 +373,7 @@ add_python_packages() {
         # Check if package already exists by parsing the dockerfile properly
         if parse_python_packages "$dockerfile" | grep -qxi "$pkg_base"; then
             echo -e "${YELLOW}  ⚠ $pkg_base already in Dockerfile, skipping${NC}"
+            echo ""
             continue
         fi
 
@@ -406,18 +418,17 @@ add_python_packages() {
         fi
 
         echo -e "${GREEN}  ✓${NC} Added: $pkg"
-        echo -e ""
-        echo -e "Updated Dockerfile: ${BLUE}$DOCKERFILE${NC}"
-        echo -e ""
-        echo -e "${YELLOW}💡 After updating the Dockerfile, remember to rebuild your image and recreate containers to apply changes.${NC}"
-        echo -e "To apply changes, run:"
-        echo -e "   - ${GREEN}image-create $IMAGE_NAME${NC}"
-        echo -e "   - ${GREEN}container-create $IMAGE_NAME${NC}"
-        echo ""
-        echo -e "${DIM} You may need to stop and remove existing containers using the old image before recreating them.${NC}"
-        echo ""
-        ((PACKAGES_ADDED_COUNT++))
+        PACKAGES_ADDED_COUNT=$((PACKAGES_ADDED_COUNT + 1))
     done
+
+    # Show summary after adding all packages
+    if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
+        echo ""
+        echo -e "${GREEN}✓${NC} Added $PACKAGES_ADDED_COUNT package(s) to Dockerfile"
+        echo ""
+        echo -e "Updated Dockerfile: ${BLUE}$dockerfile${NC}"
+        echo ""
+    fi
 
     return 0
 }
@@ -464,9 +475,42 @@ remove_packages() {
     cp "$dockerfile" "${dockerfile}.bak"
 
     for pkg in "${packages[@]}"; do
-        # Remove the line containing the package
-        if sed -i "/$pkg/d" "$dockerfile"; then
+        # Extract base package name (remove version specifiers)
+        local pkg_base=$(echo "$pkg" | sed 's/[=><!~].*//')
+
+        # Only remove lines that are part of pip install blocks and match the package as a whole word
+        # This prevents accidentally removing lines like "torchvision" when trying to remove "torch"
+        local removed=false
+
+        # Find all pip install blocks and remove matching package lines
+        awk -v pkg="$pkg_base" '
+        BEGIN { in_pip=0 }
+        /^RUN pip install/ { in_pip=1; print; next }
+        in_pip {
+            # Check if end of pip block
+            if (/^$/ || /^RUN/ || /^#/ || /^ENV/ || /^WORKDIR/ || /^CMD/ || /^LABEL/) {
+                in_pip=0
+                print
+                next
+            }
+            # Extract package name from line (remove leading spaces and trailing backslash)
+            line_pkg = $0
+            gsub(/^[[:space:]]+/, "", line_pkg)
+            gsub(/[[:space:]]*\\[[:space:]]*$/, "", line_pkg)
+            gsub(/[=><!~].*/, "", line_pkg)  # Remove version specifiers
+
+            # Only skip this line if it matches the package exactly
+            if (line_pkg == pkg) {
+                next  # Skip this line (effectively removing it)
+            }
+            print
+        }
+        !in_pip { print }
+        ' "$dockerfile" > "${dockerfile}.tmp" && mv "${dockerfile}.tmp" "$dockerfile"
+
+        if ! diff -q "${dockerfile}.bak" "$dockerfile" > /dev/null 2>&1; then
             echo -e "${GREEN}  ✓${NC} Removed: $pkg"
+            removed=true
         else
             echo -e "${YELLOW}  ⚠${NC} Package not found: $pkg"
         fi
@@ -474,55 +518,73 @@ remove_packages() {
 
     # Clean up empty RUN pip install blocks that have no packages
     # This prevents Docker build errors from empty pip install commands
-    local in_pip_block=false
-    local pip_block_start=0
-    local pip_has_packages=false
-    local blocks_to_remove=()
+    awk '
+    BEGIN {
+        in_pip=0
+        pip_start_line=0
+        pip_has_packages=0
+        buffer=""
+        buffer_count=0
+    }
+    /^RUN pip install/ {
+        # Flush previous pip block if needed
+        if (in_pip && pip_has_packages) {
+            print buffer
+        }
+        # Start new pip block
+        in_pip=1
+        pip_start_line=NR
+        pip_has_packages=0
+        buffer=$0 "\n"
+        buffer_count=1
+        next
+    }
+    in_pip {
+        # Check if end of pip block
+        if (/^$/ || /^RUN/ || /^#/ || /^ENV/ || /^WORKDIR/ || /^CMD/ || /^LABEL/ || /^FROM/) {
+            # End of pip block - print buffer only if it has packages
+            if (pip_has_packages) {
+                print buffer $0
+            } else {
+                print "# [Removed empty pip install block]"
+                print $0
+            }
+            in_pip=0
+            buffer=""
+            buffer_count=0
+            next
+        }
 
-    while IFS= read -r line_num; do
-        local line_content=$(sed -n "${line_num}p" "$dockerfile")
+        # Inside pip block - check if line has a package
+        line_stripped = $0
+        gsub(/^[[:space:]]+/, "", line_stripped)
+        gsub(/[[:space:]]*\\[[:space:]]*$/, "", line_stripped)
 
-        if [[ "$line_content" =~ ^RUN\ pip\ install ]]; then
-            # Start of a pip block
-            in_pip_block=true
-            pip_block_start=$line_num
-            pip_has_packages=false
-        elif [ "$in_pip_block" = true ]; then
-            # Check if this line has a package (not empty, not just backslash/whitespace)
-            local stripped=$(echo "$line_content" | sed 's/^[[:space:]]*//;s/[[:space:]]*\\[[:space:]]*$//')
-            if [ -n "$stripped" ] && [[ ! "$stripped" =~ ^# ]] && [[ ! "$stripped" =~ ^RUN ]]; then
-                pip_has_packages=true
-            fi
+        if (line_stripped != "" && line_stripped !~ /^--/) {
+            pip_has_packages=1
+        }
 
-            # Check if we've reached the end of the pip block
-            if [[ "$line_content" =~ ^$ ]] || [[ "$line_content" =~ ^# ]] || [[ "$line_content" =~ ^RUN ]] || [[ "$line_content" =~ ^ENV ]] || [[ "$line_content" =~ ^WORKDIR ]]; then
-                in_pip_block=false
-                # If block has no packages, mark it for removal
-                if [ "$pip_has_packages" = false ] && [ "$pip_block_start" -gt 0 ]; then
-                    blocks_to_remove+=("$pip_block_start")
-                fi
-            fi
-        fi
-    done < <(seq 1 $(wc -l < "$dockerfile"))
+        buffer = buffer $0 "\n"
+        buffer_count++
+        next
+    }
+    !in_pip {
+        print
+    }
+    END {
+        # Handle last pip block if file ends in one
+        if (in_pip && pip_has_packages) {
+            printf "%s", buffer
+        }
+    }
+    ' "$dockerfile" > "${dockerfile}.tmp" && mv "${dockerfile}.tmp" "$dockerfile"
 
-    # Remove empty RUN pip install blocks (in reverse order to preserve line numbers)
-    for ((i=${#blocks_to_remove[@]}-1; i>=0; i--)); do
-        local block_start=${blocks_to_remove[$i]}
-        # Find the end of this empty block (next non-continuation line)
-        local block_end=$block_start
-        while true; do
-            local next_line=$((block_end + 1))
-            local next_content=$(sed -n "${next_line}p" "$dockerfile")
-            if [[ -z "$next_content" ]] || [[ ! "$next_content" =~ \\[[:space:]]*$ ]]; then
-                break
-            fi
-            block_end=$next_line
-        done
-
-        # Delete the entire empty block
-        sed -i "${block_start},${block_end}d" "$dockerfile"
+    # Check if any empty blocks were removed
+    if grep -q "# \[Removed empty pip install block\]" "$dockerfile"; then
         echo -e "${YELLOW}  ℹ${NC} Removed empty pip install block (prevents build errors)"
-    done
+        # Clean up the marker comments
+        sed -i '/# \[Removed empty pip install block\]/d' "$dockerfile"
+    fi
 
     return 0
 }
@@ -532,35 +594,30 @@ interactive_mode() {
     local dockerfile="$1"
 
     while true; do
-        echo ""
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}Package Management${NC}"
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
 
         # Show current packages categorized
-        echo -e "${BOLD}Current Configuration${NC}"
+        echo ""
+        echo -e "${BOLD}Current Configuration:${NC}"
         echo ""
 
         # AIME base image (from FROM line)
         local base_image=$(grep "^FROM " "$dockerfile" | head -1 | sed 's/FROM //')
         if [ -n "$base_image" ]; then
-            echo -e "  ${BOLD}AIME Base Image:${NC} ${GREEN}$base_image${NC}"
+            echo -e "  ${BOLD}• AIME Base Image:${NC} ${GREEN}$base_image${NC}"
 
             # Show key packages from AIME base (if it's an AIME image)
             if [[ "$base_image" =~ aimehub/ ]]; then
-                echo -e "    ${DIM}Pre-installed: torch, numpy, pillow, tqdm, conda, ipython, psutil${NC}"
-                echo -e "    ${DIM}(Use 'docker run --rm $base_image pip list' to see all)${NC}"
+                echo -e "    • ${DIM}Pre-installed: torch, numpy, pillow, tqdm, conda, ipython, psutil${NC}"
+                echo -e "    • ${DIM}(Use 'docker run --rm $base_image pip list' to see all)${NC}"
             fi
-            echo ""
         fi
 
         # System packages
         local sys_pkgs=$(parse_system_packages "$dockerfile" | tr '\n' ' ')
         if [ -n "$sys_pkgs" ]; then
-            echo -e "  ${BOLD}System:${NC} $sys_pkgs"
+            echo -e "  • ${BOLD}System:${NC} $sys_pkgs"
         else
-            echo -e "  ${BOLD}System:${NC} ${DIM}(none)${NC}"
+            echo -e "  • ${BOLD}System:${NC} ${DIM}(none)${NC}"
         fi
 
         # Parse categorized Python packages (matching image-create structure)
@@ -582,30 +639,30 @@ interactive_mode() {
 
         # Display Python packages by category (new structure from image-create)
         if [ -n "$jupyter_pkgs" ]; then
-            echo -e "  ${BOLD}Jupyter & Interactive:${NC}$jupyter_pkgs"
+            echo -e "  • ${BOLD}Jupyter & Interactive:${NC}$jupyter_pkgs"
         elif [ -n "$core_pkgs" ]; then
             # Legacy: old Dockerfiles had everything as "core"
-            echo -e "  ${BOLD}Core Python:${NC}$core_pkgs ${DIM}(legacy format)${NC}"
+            echo -e "  • ${BOLD}Core Python:${NC}$core_pkgs ${DIM}(legacy format)${NC}"
         else
-            echo -e "  ${BOLD}Jupyter & Interactive:${NC} ${DIM}(none)${NC}"
+            echo -e "  • ${BOLD}Jupyter & Interactive:${NC} ${DIM}(none)${NC}"
         fi
 
         if [ -n "$datascience_pkgs" ]; then
-            echo -e "  ${BOLD}Data Science:${NC}$datascience_pkgs"
+            echo -e "  • ${BOLD}Data Science:${NC}$datascience_pkgs"
         else
-            echo -e "  ${BOLD}Data Science:${NC} ${DIM}(none)${NC}"
+            echo -e "  • ${BOLD}Data Science:${NC} ${DIM}(none)${NC}"
         fi
 
         if [ -n "$usecase_pkgs" ]; then
-            echo -e "  ${BOLD}Use Case Specific:${NC}$usecase_pkgs"
+            echo -e "  • ${BOLD}Use Case Specific:${NC}$usecase_pkgs"
         else
-            echo -e "  ${BOLD}Use Case Specific:${NC} ${DIM}(none)${NC}"
+            echo -e "  • ${BOLD}Use Case Specific:${NC} ${DIM}(none)${NC}"
         fi
 
         if [ -n "$custom_pkgs" ]; then
-            echo -e "  ${BOLD}Custom-installed:${NC}$custom_pkgs"
+            echo -e "  • ${BOLD}Custom-installed:${NC}$custom_pkgs"
         else
-            echo -e "  ${BOLD}Custom-installed:${NC} ${DIM}(none)${NC}"
+            echo -e "  • ${BOLD}Custom-installed:${NC} ${DIM}(none)${NC}"
         fi
 
         echo ""
@@ -616,7 +673,7 @@ interactive_mode() {
         echo -e "  ${BOLD}2)${NC} Add system packages (apt)"
         echo -e "  ${BOLD}3)${NC} Remove packages"
         echo -e "  ${BOLD}4)${NC} Edit Dockerfile directly ${DIM}(advanced)${NC}"
-        echo -e "  ${BOLD}5)${NC} Continue to rebuild"
+        echo -e "  ${BOLD}5)${NC} Continue to rebuild ${BOLD}${YELLOW}(necessary to apply changes!)${NC}"
         echo -e "  ${BOLD}6)${NC} Cancel"
         echo ""
         read -p "Choice [1-6]: " CHOICE </dev/tty
@@ -673,8 +730,14 @@ interactive_mode() {
                         echo ""
                         add_python_packages "$dockerfile" $NEW_PACKAGES
                         if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
+                            echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
                             echo ""
-                            echo -e "${GREEN}✓${NC} Packages added to Dockerfile"
+                            read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
+                            REBUILD_NOW=${REBUILD_NOW:-Y}
+                            if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
+                                echo ""
+                                return 0  # Exit interactive mode to proceed to rebuild
+                            fi
                         fi
                         break
                     fi
@@ -697,6 +760,15 @@ interactive_mode() {
                     add_system_packages "$dockerfile" $NEW_SYS_PACKAGES
                     echo ""
                     echo -e "${GREEN}✓${NC} System packages added to Dockerfile"
+                    echo ""
+                    echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
+                    echo ""
+                    read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
+                    REBUILD_NOW=${REBUILD_NOW:-Y}
+                    if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
+                        echo ""
+                        return 0  # Exit interactive mode to proceed to rebuild
+                    fi
                 else
                     echo -e "${YELLOW}No packages entered${NC}"
                 fi
@@ -717,8 +789,18 @@ interactive_mode() {
                     remove_packages "$dockerfile" $REMOVE_PACKAGES
                     echo ""
                     echo -e "${GREEN}✓${NC} Packages removed from Dockerfile"
+                    echo ""
+                    echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
+                    echo ""
+                    read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
+                    REBUILD_NOW=${REBUILD_NOW:-Y}
+                    if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
+                        echo ""
+                        return 0  # Exit interactive mode to proceed to rebuild
+                    fi
                 else
                     echo -e "${YELLOW}No packages entered${NC}"
+                    echo ""
                 fi
                 ;;
 
@@ -800,7 +882,7 @@ guided_mode() {
     echo -e "  1. ${CYAN}Test${NC} new packages: pip install in container"
     echo -e "  2. ${CYAN}Confirm${NC} they work: run your code"
     echo -e "  3. ${CYAN}Make permanent${NC}: image-update (this command)"
-    echo -e "  4. ${CYAN}Recreate${NC} container with updated image"
+    echo -e "  4. ${CYAN}Recreate/deploy${NC} container with updated image"
     echo ""
     echo -e "${BOLD}What This Command Does:${NC}"
     echo ""
@@ -1092,13 +1174,13 @@ if eval "$BUILD_CMD"; then
     echo ""
 
     # AIME base image (from FROM line)
-    local base_image=$(grep "^FROM " "$DOCKERFILE" | head -1 | sed 's/FROM //')
+    base_image=$(grep "^FROM " "$DOCKERFILE" | head -1 | sed 's/FROM //')
     if [ -n "$base_image" ]; then
         echo -e "  ${BOLD}AIME base image:${NC} ${GREEN}$base_image${NC}"
     fi
 
     # System packages
-    local sys_pkgs=$(parse_system_packages "$DOCKERFILE" | tr '\n' ' ')
+    sys_pkgs=$(parse_system_packages "$DOCKERFILE" | tr '\n' ' ')
     if [ -n "$sys_pkgs" ]; then
         echo -e "  ${BOLD}System:${NC} $sys_pkgs"
     else
@@ -1106,9 +1188,9 @@ if eval "$BUILD_CMD"; then
     fi
 
     # Parse categorized Python packages
-    local core_pkgs=""
-    local usecase_pkgs=""
-    local custom_pkgs=""
+    core_pkgs=""
+    usecase_pkgs=""
+    custom_pkgs=""
 
     while IFS=: read -r category pkg; do
         case "$category" in
@@ -1158,7 +1240,7 @@ if eval "$BUILD_CMD"; then
         echo ""
         echo "Your image has been updated, but your container is still"
         echo "using the old image. To use the new packages, you need to"
-        echo "recreate the container."
+        echo "recreate and deploy the container based on the updated image."
         echo ""
         echo -e "${YELLOW}⚠${NC} This will:"
         echo "  • Stop the current container"
@@ -1184,45 +1266,43 @@ if eval "$BUILD_CMD"; then
             echo -e "  ${DIM}Removing old container...${NC}"
             docker rm "$FULL_CONTAINER_NAME" >/dev/null 2>&1
 
-            # Create new container
-            echo -e "  ${DIM}Creating new container...${NC}"
-            if command -v container-create &>/dev/null; then
-                container-create "$CONTAINER_BASE_NAME"
+            # Deploy new container
+            echo -e "  ${DIM}Deploying new container...${NC}"
+            echo ""
+            if command -v container-deploy &>/dev/null; then
+                container-deploy "$CONTAINER_BASE_NAME" --background
                 echo ""
                 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo -e "${GREEN}${BOLD}✓ Phase 3/3: Container Recreated${NC}"
+                echo -e "${GREEN}${BOLD}✓ Phase 3/3: Container Deployed${NC}"
                 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
                 echo ""
-                echo -e "${BOLD}All Done! 🎉${NC}"
+                echo -e "${BOLD}All Done!${NC}"
                 echo ""
-                echo -e "Start your container with: ${GREEN}container-run $CONTAINER_BASE_NAME${NC}"
+                echo -e "Your container is running with the updated image."
             else
-                echo -e "${RED}✗ container-create command not found${NC}"
-                echo "Please create the container manually."
+                echo -e "${RED}✗ container-deploy command not found${NC}"
+                echo "Please deploy the container manually."
             fi
         else
             echo ""
             echo "Skipped container recreation."
             echo ""
-            echo "To recreate manually later:"
+            echo "To redeploy manually later:"
             echo ""
-            echo -e "  ${BOLD}1.${NC} Stop the container:"
-            echo -e "     ${GREEN}container-stop $CONTAINER_BASE_NAME${NC}"
+            echo -e "  ${BOLD}1.${NC} Retire the old container:"
+            echo -e "     ${GREEN}container-retire $CONTAINER_BASE_NAME${NC}"
             echo ""
-            echo -e "  ${BOLD}2.${NC} Remove the old container:"
-            echo -e "     ${GREEN}docker rm $FULL_CONTAINER_NAME${NC}"
-            echo ""
-            echo -e "  ${BOLD}3.${NC} Create new container from updated image:"
-            echo -e "     ${GREEN}container-create $CONTAINER_BASE_NAME${NC}"
+            echo -e "  ${BOLD}2.${NC} Deploy new container from updated image:"
+            echo -e "     ${GREEN}container-deploy $CONTAINER_BASE_NAME${NC}"
         fi
     else
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}Next Steps: Create Container${NC}"
+        echo -e "${BOLD}Next Steps: Deploy Container${NC}"
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
-        echo "Your image is ready! Create a container to use it:"
+        echo "Your image is ready! Deploy a container to use it:"
         echo ""
-        echo -e "  ${GREEN}container-create $CONTAINER_BASE_NAME${NC}"
+        echo -e "  ${GREEN}container-deploy $CONTAINER_BASE_NAME${NC}"
     fi
     echo ""
 
@@ -1231,10 +1311,10 @@ else
     echo -e "${RED}✗ Build failed${NC}"
     echo ""
     echo "Troubleshooting:"
-    echo "  1. Check Dockerfile syntax: ${BLUE}cat $DOCKERFILE${NC}"
-    echo "  2. View backup: ${BLUE}cat ${DOCKERFILE}.bak${NC}"
-    echo "  3. Restore backup: ${GREEN}mv ${DOCKERFILE}.bak $DOCKERFILE${NC}"
-    echo "  4. Try again: ${GREEN}image-update $IMAGE_NAME${NC}"
+    echo -e "  1. Check Dockerfile syntax: ${BLUE}cat $DOCKERFILE${NC}"
+    echo -e "  2. View backup: ${BLUE}cat ${DOCKERFILE}.bak${NC}"
+    echo -e "  3. Restore backup: ${GREEN}mv ${DOCKERFILE}.bak $DOCKERFILE${NC}"
+    echo -e "  4. Try again: ${GREEN}image-update $IMAGE_NAME${NC}"
     echo ""
     exit 1
 fi

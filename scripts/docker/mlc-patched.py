@@ -1412,11 +1412,37 @@ def build_docker_run_command(
     bash_lines = [
         f'echo "export PATH=\\"{dir_to_be_added}:\\$PATH\\"" >> /etc/skel/.bashrc;'
         f"echo \"export PS1='[{validated_container_name}] \\$(whoami)@\\$(hostname):\\${{PWD#*}}$ '\" >> /etc/skel/.bashrc;",
-        "apt-get update -y > /dev/null;",
-        "apt-get install sudo git -q -y > /dev/null;",
-        f"addgroup --gid {group_id} {user_name} > /dev/null;",
-        f"adduser --uid {user_id} --gid {group_id} {user_name} --disabled-password --gecos aime > /dev/null;",
-        f"passwd -d {user_name};",
+        "apt-get update -y > /dev/null 2>&1;",
+        "apt-get install sudo git -q -y > /dev/null 2>&1;",
+        # DS01 FIX: Robust user/group creation with conflict resolution
+        # Step 1: Remove any existing group with same GID (prevents conflicts)
+        f"if getent group {group_id} > /dev/null 2>&1; then "
+        f"EXISTING_GROUP=$(getent group {group_id} | cut -d: -f1); "
+        f"if [ \"$EXISTING_GROUP\" != \"{user_name}\" ]; then "
+        f"groupdel $EXISTING_GROUP 2>/dev/null || true; "
+        f"fi; fi;",
+        # Step 2: Create group with specific GID
+        f"if ! getent group {group_id} > /dev/null 2>&1; then "
+        f"addgroup --gid {group_id} {user_name} 2>/dev/null || groupadd -g {group_id} {user_name} 2>/dev/null || true; "
+        f"fi;",
+        # Step 3: Remove any existing user with same UID (prevents conflicts)
+        f"if getent passwd {user_id} > /dev/null 2>&1; then "
+        f"EXISTING_USER=$(getent passwd {user_id} | cut -d: -f1); "
+        f"if [ \"$EXISTING_USER\" != \"{user_name}\" ]; then "
+        f"userdel -r $EXISTING_USER 2>/dev/null || true; "
+        f"fi; fi;",
+        # Step 4: Create user with specific UID and GID
+        f"if ! getent passwd {user_id} > /dev/null 2>&1; then "
+        f"adduser --uid {user_id} --gid {group_id} {user_name} --disabled-password --gecos aime 2>/dev/null || "
+        f"useradd -u {user_id} -g {group_id} -d /home/{user_name} -m -s /bin/bash {user_name} 2>/dev/null || true; "
+        f"fi;",
+        # Step 5: Verify and report
+        f"if getent passwd {user_id} > /dev/null 2>&1 && getent group {group_id} > /dev/null 2>&1; then "
+        f"echo 'User setup: OK'; "
+        f"else echo 'User setup: FAILED'; fi;",
+        # Step 6: Configure user
+        f"passwd -d {user_name} 2>/dev/null || true;",
+        f"usermod -aG sudo {user_name} 2>/dev/null || true;",
         f"echo \"{user_name} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/{user_name}_no_password;",
     ]
 

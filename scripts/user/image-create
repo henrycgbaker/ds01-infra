@@ -67,22 +67,26 @@ show_base_image_packages() {
 
     echo -e "${CYAN}━━━ AIME Base Image Packages ━━━${NC}"
     echo ""
-    echo -e "${BOLD}Pre-installed in ${CYAN}$base_image:${NC}{NC}:"
+    echo -e "${BOLD}Pre-installed in ${CYAN}$base_image:${NC}:"
     # Key packages that are consistent across AIME images
     echo -e "  ${BOLD}Nvidia GPU libs:${NC} CUDA 12.6.3, cuDNN, NCCL, nvidia-* packages (10+ CUDA dependencies)"
     echo -e "  ${BOLD}DL Frameworks:${NC} torch, torchvision, torchaudio (PyTorch ecosystem)"
     echo -e "  ${BOLD}Core Scientific Computing:${NC} numpy & pillow"
     echo -e "  ${BOLD}Utilities:${NC}: conda, ipython, psutil, tqdm"
     echo ""
-    echo -e "${YELLOW}💡 Note:${NC} AIME base images are framework-focused (133 packages total)."
-    echo "    They include the ML framework + CUDA, but NOT data science packages."
-    echo ""
-    echo -e "${CYAN}Currently missing (we can add next):${NC}"
-    echo "    • Jupyter Lab (for notebooks)"
-    echo "    • pandas, scipy, scikit-learn (data science)"
-    echo "    • matplotlib, seaborn (visualisation)"
-    echo "    • Domain-specific: opencv, transformers, etc."
-    echo ""
+    if [ "$GUIDED" = true ]; then
+        echo -e "${YELLOW}💡 Note:${NC} AIME base images are optimized for ML/DL workloads."
+        echo "    They include essential DL frameworks and GPU libraries (133 packages total),"
+        echo "    but omit heavier data science packages to keep image size manageable." 
+        echo "    You can add additional packages as needed in the next steps."
+        echo ""
+        echo -e "${CYAN}Currently missing:${NC}"
+        echo "    • Jupyter Lab (for notebooks)"
+        echo "    • pandas, scipy, scikit-learn (data science)"
+        echo "    • matplotlib, seaborn (visualisation)"
+        echo "    • Domain-specific: opencv, transformers, etc."
+        echo ""
+    fi
 
     if [ "$GUIDED" = true ]; then
         echo -e "${DIM}To see full package list: docker run --rm $base_image pip list${NC}"
@@ -247,10 +251,9 @@ check_user_limits() {
                 echo "until you stop/remove an existing container."
                 echo ""
                 echo -e "View containers: ${GREEN}container-list${NC}"
-                echo -e "Stop container:  ${GREEN}container-stop <name>${NC}"
-                echo -e "Remove container: ${GREEN}container-remove <name>${NC}"
+                echo -e "Retire container:  ${GREEN}container-retire <name>${NC}"
                 echo ""
-                read -p "Continue creating image anyway? [y/N]: " CONTINUE
+                read -p "Continue creating image anyway? [y/N]: " CONTINUE </dev/tty
                 if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
                     echo "Cancelled."
                     exit 0
@@ -303,11 +306,12 @@ interactive_mode() {
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${BOLD}Create a Custom Docker Image${NC}"
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
     fi
 
     # Image name
     if [ -z "$IMAGE_NAME" ]; then
-        read -p "Image name (e.g., my-project, thesis-cv): " IMAGE_NAME
+        read -p "Image name (e.g., my-project, thesis-cv): " IMAGE_NAME </dev/tty
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     fi
     echo ""
@@ -318,7 +322,7 @@ interactive_mode() {
     if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${FULL_IMAGE_NAME}:latest$"; then
         echo -e "${YELLOW}⚠ Image '$FULL_IMAGE_NAME:latest' already exists${NC}"
         echo ""
-        read -p "Overwrite? [y/N]: " OVERWRITE
+        read -p "Overwrite? [y/N]: " OVERWRITE </dev/tty
         echo ""
         if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
             echo "Cancelled."
@@ -326,9 +330,12 @@ interactive_mode() {
         fi
     fi
 
-    echo -e "${BOLD}Image repo will be named: ${CYAN}${IMAGE_NAME}${NC}\n"
-    echo -e "${DIM}The full image reference is given by "{namespace}/{repo_name}:{tag}": ${CYAN}${FULL_IMAGE_NAME}:latest${NC}"
-    echo -e "${DIM}Here, the {namespace} is given by 'ds01-{user-id}', and we apply a default tag 'latest'.${NC}\n"
+    echo -e "${BOLD}Image repo will be named: ${CYAN}${IMAGE_NAME}${NC}"
+    echo -e "${BOLD}Image namespace will be: ${CYAN}ds01-${USER_ID}${NC}\n"
+    if [ "$GUIDED" = true ]; then
+        echo -e "${DIM}Full image reference will be "{namespace}/{repo_name}:{tag}": ${CYAN}${FULL_IMAGE_NAME}:latest${NC}"
+        echo -e "${DIM}Here, the {namespace} is given by 'ds01-{user-id}', and we apply a default tag 'latest'.${NC}\n"
+    fi
 
     # Framework
     if [ -z "$FRAMEWORK" ]; then
@@ -362,7 +369,7 @@ interactive_mode() {
         echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
         echo -e "  ${BOLD}5)${NC} Custom (specify base image)"
         echo -e ""
-        read -p "Choice [1-5, default: 1]: " FW_CHOICE
+        read -p "Choice [1-5, default: 1]: " FW_CHOICE </dev/tty
 
         case $FW_CHOICE in
             2) FRAMEWORK="tensorflow" ;;
@@ -373,7 +380,7 @@ interactive_mode() {
                 echo ""
                 echo -e "${BOLD}Custom Base Image${NC}"
                 echo "Enter Docker image (e.g., ubuntu:22.04, python:3.11-slim, nvidia/cuda:12.0-runtime)"
-                read -p "> " CUSTOM_BASE_IMAGE
+                read -p "> " CUSTOM_BASE_IMAGE </dev/tty
                 if [ -z "$CUSTOM_BASE_IMAGE" ]; then
                     echo -e "${RED}Error: Base image cannot be empty${NC}"
                     exit 1
@@ -426,11 +433,11 @@ interactive_mode() {
         fi
 
         echo -e "${BOLD}Install Jupyter Lab & interactive tools?${NC}"
-        echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended for data science${NC})"
+        echo -e "  ${BOLD}1)${NC} Yes - Install defaults (${GREEN}recommended${NC})"
         echo -e "  ${BOLD}2)${NC} No - Skip (use terminal/IDE only)"
         echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
         echo ""
-        read -p "Choice [1-3, default: 1]: " JUPYTER_PKG_CHOICE
+        read -p "Choice [1-3, default: 1]: " JUPYTER_PKG_CHOICE </dev/tty
 
         case $JUPYTER_PKG_CHOICE in
             2)
@@ -444,7 +451,7 @@ interactive_mode() {
                     echo ""
                     echo -e "${BOLD}Specify Jupyter packages:${NC} (space-separated)"
                     echo -e "${DIM}Examples: jupyterlab ipywidgets ipykernel==6.25.0${NC}"
-                    read -p "> " CUSTOM_JUPYTER_PACKAGES
+                    read -p "> " CUSTOM_JUPYTER_PACKAGES </dev/tty
 
                     if [ -z "$CUSTOM_JUPYTER_PACKAGES" ]; then
                         echo -e "${YELLOW}No packages entered${NC}"
@@ -487,7 +494,7 @@ interactive_mode() {
             echo "  • scikit-learn - Traditional ML algorithms"
             echo "  • matplotlib, seaborn - Visualisation"
             echo ""
-            echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)"
+            echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)\n"
             echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults (needed for most DS work)"
             echo ""
         fi
@@ -496,7 +503,7 @@ interactive_mode() {
         echo -e "  ${BOLD}2)${NC} No - Skip (framework-only setup)"
         echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
         echo ""
-        read -p "Choice [1-3, default: 1]: " DS_PKG_CHOICE
+        read -p "Choice [1-3, default: 1]: " DS_PKG_CHOICE </dev/tty
 
         case $DS_PKG_CHOICE in
             2)
@@ -509,7 +516,7 @@ interactive_mode() {
                 while true; do
                     echo ""
                     echo -e "${BOLD}Specify data science packages:${NC} (space-separated)"
-                    read -p "> " CUSTOM_DS_PACKAGES
+                    read -p "> " CUSTOM_DS_PACKAGES </dev/tty
 
                     if [ -z "$CUSTOM_DS_PACKAGES" ]; then
                         echo -e "${YELLOW}No packages entered${NC}"
@@ -580,7 +587,7 @@ interactive_mode() {
         echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
         echo -e "  ${BOLD}5)${NC} Custom (${DIM}specify packages manually${NC}"
         echo ""
-        read -p "Choice [1-5, default: 1]: " UC_CHOICE
+        read -p "Choice [1-5, default: 1]: " UC_CHOICE </dev/tty
 
         case $UC_CHOICE in
             2) USECASE="cv" ;;
@@ -591,7 +598,7 @@ interactive_mode() {
                 echo ""
                 echo -e "${BOLD}Custom Use Case Packages${NC}"
                 echo "Specify packages (space-separated), or press Enter to skip:"
-                read -p "> " CUSTOM_USECASE_PACKAGES
+                read -p "> " CUSTOM_USECASE_PACKAGES </dev/tty
                 ;;
             1|"") USECASE="ml" ;;
             *)
@@ -658,7 +665,7 @@ interactive_mode() {
             echo ""
             echo -e "${BOLD}Space-separated${NC} (or press Enter to skip)"
             echo -e "${DIM}Examples: wandb pytorch-lightning==1.5.3${NC}"
-            read -p "> " ADDITIONAL_PACKAGES
+            read -p "> " ADDITIONAL_PACKAGES </dev/tty
 
             if [ -z "$ADDITIONAL_PACKAGES" ]; then
                 break
@@ -706,7 +713,7 @@ interactive_mode() {
     if [ -z "$SYSTEM_PACKAGES" ]; then
         echo -e "\n${BOLD}System packages (apt)?${NC} (or press Enter to skip)"
         echo -e "${DIM}Examples: htop tmux vim git-lfs${NC}"
-        read -p "> " SYSTEM_PACKAGES
+        read -p "> " SYSTEM_PACKAGES </dev/tty
         echo ""
     fi
 }
@@ -772,16 +779,26 @@ DOCKERFILEEOF
 
     # Only add system packages and Python packages if not using fully custom base
     if [ "$skip_base" != true ]; then
-        cat >> "$dockerfile" << DOCKERFILEEOF
+        cat >> "$dockerfile" << 'DOCKERFILEEOF'
 # System packages
-RUN apt-get update && apt-get install -y --no-install-recommends \\
-    git \\
-    curl \\
-    wget \\
-    vim \\
-    htop \\
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    curl \
+    wget \
+    vim \
+    htop \
+DOCKERFILEEOF
+
+        # Add user's system packages if provided
+        if [ -n "$system_pkgs" ]; then
+            # Split packages and add each on its own line
+            for pkg in $system_pkgs; do
+                echo "    $pkg \\" >> "$dockerfile"
+            done
+        fi
+
+        cat >> "$dockerfile" << 'DOCKERFILEEOF'
     && rm -rf /var/lib/apt/lists/*
-    $([ -n "$system_pkgs" ] && echo "$system_pkgs \\")
 
 DOCKERFILEEOF
 
@@ -1118,10 +1135,10 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo "A Dockerfile is a recipe for building your image:"
     echo ""
-    echo "  • ${CYAN}FROM${NC} - Start with a base image (PyTorch, TensorFlow, etc.)"
-    echo "  • ${CYAN}RUN${NC} - Execute commands (install packages, configure)"
-    echo "  • ${CYAN}ENV${NC} - Set environment variables"
-    echo "  • ${CYAN}WORKDIR${NC} - Set working directory"
+    echo -e "  • ${CYAN}FROM${NC} - Start with a base image (PyTorch, TensorFlow, etc.)"
+    echo -e "  • ${CYAN}RUN${NC} - Execute commands (install packages, configure)"
+    echo -e "  • ${CYAN}ENV${NC} - Set environment variables"
+    echo -e "  • ${CYAN}WORKDIR${NC} - Set working directory"
     echo ""
     echo "Your Dockerfile is saved at:"
     echo -e "  ${BLUE}$DOCKERFILE${NC}"
@@ -1147,15 +1164,17 @@ if [ "$NO_BUILD" = true ]; then
     echo ""
 else
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Phase 2/2: Build Docker Image?${NC}"
+    echo -e "${BOLD}Phase 2/2: Build Docker Image${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo "This will:"
-    echo "  • Download base image"
-    echo "  • Install all packages"
-    echo "  • Configure Jupyter and Python"
-    echo "  • Save final image (~18 GB)"
-    echo ""
+    if [ "$GUIDED" = true ]; then
+        echo ""
+        echo "This will:"
+        echo "  • Download base image"
+        echo "  • Install all packages"
+        echo "  • Configure Jupyter and Python"
+        echo "  • Save final image (~18 GB)"
+        echo ""
+    fi
     echo -e "${DIM}This can take a few minutes${NC}"
     echo ""
     read -p "Build image now? [Y/n]: " BUILD_CONFIRM </dev/tty
@@ -1205,11 +1224,11 @@ INFOEOF
         echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo ""
         echo -e "${BOLD}Image reference:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}\n"
-        echo -e "${DIM}Metadata saved to:${NC} ${BLUE}$HOME/ds01-config/images/${METADATA_FILE}.info${NC}"
-        echo -e "${DIM}Dockerfile location:${NC} ${BLUE}$DOCKERFILE${NC}"
-        echo ""
+        echo -e "${DIM}Metadata saved to:${NC} ${DIM}$HOME/ds01-config/images/${METADATA_FILE}.info${NC}"
+        echo -e "${DIM}Dockerfile location:${NC} ${DIM}$DOCKERFILE${NC}"
 
         if [ "$GUIDED" = true ]; then
+            echo ""
             echo -e "${BOLD}What Just Happened?${NC}"
             echo ""
             echo "  ✓ Downloaded base image with $FRAMEWORK"
@@ -1217,6 +1236,8 @@ INFOEOF
             echo "  ✓ Configured Jupyter Lab"
             echo "  ✓ Set up Python environment"
             echo ""
+            echo " Next steps: create & deploy a container based on your image:"
+            echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
         fi
     else
         echo ""
@@ -1254,10 +1275,10 @@ if [ "$IMAGE_BUILT" = true ]; then
         echo -e "${BOLD}Next Step: Create a Container${NC}"
         echo ""
         echo "An image is just a blueprint. To actually use it, you need to"
-        echo "create a container - a running instance where you'll do your work."
+        echo "create & deploy a container - a running instance where you'll do your work."
         echo ""
-        echo "Create container:"
-        echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo "Deploy container:"
+        echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
         echo ""
         echo "This will:"
         echo "  • Create a container from your image"
@@ -1269,11 +1290,11 @@ if [ "$IMAGE_BUILT" = true ]; then
         echo -e "  ${GREEN}image-list${NC}          List all your images"
         echo -e "  ${GREEN}image-update${NC}        Update Dockerfile & rebuild this image"
         echo -e "  ${GREEN}container-list${NC}      List all containers"
-        echo -e "  ${GREEN}container-run${NC}       Enter a container"
+        echo -e "  ${GREEN}container-deploy${NC}       Deploy a container"
         echo ""
     else
         echo -e "${BOLD}Next Step:${NC}"
-        echo -e "  ${GREEN}container-create $IMAGE_NAME${NC}"
+        echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
         echo ""
     fi
 fi

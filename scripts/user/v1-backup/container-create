@@ -131,13 +131,11 @@ done
 
 # Interactive mode if no container name provided
 if [ -z "$CONTAINER_NAME" ]; then
-    if [ -z "$DS01_ORCHESTRATOR" ]; then
-        echo ""
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}DS01 Container Creation Wizard${NC}"
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-    fi
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Container Creation Wizard${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
 
     if [ "$GUIDED" = true ]; then
         echo -e "${BOLD}What is container-create?${NC}"
@@ -237,9 +235,6 @@ if [ -z "$CONTAINER_NAME" ]; then
 
                     read -p "Select image [1-$IMAGE_COUNT]: " IMG_SELECTION </dev/tty
 
-                    # Default to 1 if empty (common case: only one image available)
-                    IMG_SELECTION=${IMG_SELECTION:-1}
-
                     if [[ "$IMG_SELECTION" =~ ^[0-9]+$ ]] && [ "$IMG_SELECTION" -ge 1 ] && [ "$IMG_SELECTION" -le "$IMAGE_COUNT" ]; then
                         IMAGE_OR_FRAMEWORK="${IMAGE_ARRAY[$((IMG_SELECTION-1))]}"
 
@@ -286,16 +281,9 @@ if [ -z "$CONTAINER_NAME" ]; then
                             case $CHOICE in
                                 1)
                                     echo "Using existing container '$CONTAINER_NAME'"
-
-                                    # If called from orchestrator, don't exit - let orchestrator handle starting
-                                    if [ -n "$DS01_ORCHESTRATOR" ]; then
-                                        export SKIP_CREATE=true
-                                        # Continue to skip creation but allow orchestrator to start container
-                                    else
-                                        echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
-                                        echo ""
-                                        exit 0
-                                    fi
+                                    echo -e "${GREEN}Start it with: container-run $CONTAINER_NAME${NC}"
+                                    echo ""
+                                    exit 0
                                     ;;
                                 2)
                                     echo -e "${CYAN}Recreating container '$CONTAINER_NAME'...${NC}"
@@ -310,7 +298,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                                     fi
 
                                     # Release GPU allocation if exists
-                                    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+                                    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
                                     if [ -f "$GPU_ALLOCATOR" ]; then
                                         echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
                                         if python3 "$GPU_ALLOCATOR" release "$TEMP_TAG" 2>&1; then
@@ -372,33 +360,17 @@ if [ -z "$CONTAINER_NAME" ]; then
                         exit 1
                     fi
                 else
-                    echo -e "${YELLOW}No custom images found.${NC}"
+                    echo "No custom images found."
                     echo ""
-
-                    if [ "$GUIDED" = true ]; then
-                        echo "You need to create a Docker image first before creating a container."
-                        echo ""
-                        echo -e "${BOLD}Why?${NC}"
-                        echo "• An image is the blueprint (contains your frameworks & packages)"
-                        echo "• A container is a running instance created from that blueprint"
-                        echo ""
-                        echo -e "${BOLD}Next step:${NC}"
-                        echo -e "  ${GREEN}image create${NC}"
-                        echo ""
-                        echo "This will guide you through creating a custom image with your"
-                        echo "preferred framework (PyTorch, TensorFlow, etc.) and packages."
-                        echo ""
-                        echo "After that, come back and run:"
-                        echo -e "  ${GREEN}container create${NC}"
-                        echo ""
-                    else
-                        echo "Create an image first:"
-                        echo -e "  ${GREEN}image create${NC}"
-                        echo ""
+                    echo "Would you like to create a new image instead?"
+                    read -p "Create new image? [Y/n]: " CREATE_NEW </dev/tty
+                    if [[ ! "$CREATE_NEW" =~ ^[Yy]$ ]] && [[ ! -z "$CREATE_NEW" ]]; then
+                        echo "Cancelled."
+                        exit 0
                     fi
-                    # Exit with code 1 to signal error (no images available)
-                    # This prevents container-deploy from continuing to "Step 2/2"
-                    exit 1
+                    # Fall through to create custom image
+                    IMAGE_CHOICE=2
+                    echo ""
                 fi
             else
                 echo -e "${RED}✗ Docker not available${NC}"
@@ -483,7 +455,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                         fi
 
                         # Release GPU allocation if exists
-                        GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+                        GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
                         if [ -f "$GPU_ALLOCATOR" ]; then
                             echo -e "${YELLOW}⚠${NC} Releasing GPU allocation..."
                             if python3 "$GPU_ALLOCATOR" release "$TEMP_TAG" 2>&1; then
@@ -611,7 +583,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"
     echo ""
 
     # Check GPU allocation status
-    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+    GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator.py"
     GPU_STATUS=""
     if [ -f "$GPU_ALLOCATOR" ]; then
         GPU_INFO=$(python3 "$GPU_ALLOCATOR" status 2>/dev/null | grep -A1 "$CONTAINER_TAG" || echo "")
@@ -866,71 +838,58 @@ if [ "$GUIDED" = true ]; then
     echo ""
 fi
 
-# Skip creation if using existing container (orchestrator mode)
-if [ "$SKIP_CREATE" = "true" ]; then
-    echo ""
-    # Write container name to temp file for orchestrator to read
-    if [ -n "$DS01_CONTAINER_NAME_FILE" ]; then
-        echo "$CONTAINER_NAME" > "$DS01_CONTAINER_NAME_FILE"
-    fi
-    # Exit successfully - orchestrator will handle starting the container
-    exit 0
-fi
-
 # Call mlc-create-wrapper
 echo -e "${CYAN}Creating container via mlc-create-wrapper...${NC}"
+echo ""
 
 if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${GREEN}${BOLD}✓ Container Created Successfully!${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
 
-    # Only show Tier 2 "Next steps" when NOT called from Tier 3 orchestrator
-    if [ -z "$DS01_ORCHESTRATOR" ]; then
-        if [ "$GUIDED" = true ]; then
-            echo ""
-            echo -e "${BOLD}What Just Happened?${NC}"
-            echo ""
-            echo "Your container has been created but is not started yet."
-            echo ""
-            echo -e "${BOLD}Container State:${NC}"
-            echo -e "  • ${YELLOW}Created${NC} - Container exists but isn't running"
-            echo "  • No resources are being used yet"
-            echo "  • Your workspace is ready to be mounted"
-            echo ""
-            echo -e "${BOLD}Next Steps:${NC}"
-            echo ""
-            echo -e "  1. ${BOLD}Start the container${NC}"
-            echo -e "     ${GREEN}container-run $CONTAINER_NAME${NC}"
-            echo "     This starts the container and opens a shell inside"
-            echo ""
-            echo -e "  2. ${BOLD}Inside the container${NC}"
-            echo "     • Your workspace is at: /workspace"
-            echo "     • Run Python scripts: python train.py"
-            echo "     • Start Jupyter: jlab"
-            echo "     • Attach IDE to container session"
-            echo ""
-            echo -e "  3. ${BOLD}Exit the container${NC}"
-            echo "     • Type 'exit' or press Ctrl+D"
-            echo "     • Container keeps running in background (until auto-stopped at max-time - TODO HB pass max_runtime here)"
-            echo -e "     • Re-enter: container-run $CONTAINER_NAME"
-            echo ""
-            echo -e "  4. ${BOLD}Stop & Remove the container${NC}"
-            echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
-            echo -e "     ${GREEN}container-remove $CONTAINER_NAME${NC}"
-            echo "     Frees up GPU and resources for others"
-            echo ""
-            echo -e "${YELLOW}💡 Remember:${NC} Treat containers as ephemeral compute environments; your files in /workspace are safe and persist!"
-            echo ""
-        else
-            echo -e "${BOLD}Next steps:${NC}"
-            echo -e "  • Start container: ${GREEN}container-start $CONTAINER_NAME${NC}"
-            echo -e "  • Run container (enter): ${GREEN}container-run $CONTAINER_NAME${NC}"
-            echo -e "  • View containers: ${GREEN}container-list${NC}"
-            echo -e "  • Check resources: ${GREEN}container-stats${NC}"
-            echo ""
-        fi
+    if [ "$GUIDED" = true ]; then
+        echo -e "${BOLD}What Just Happened?${NC}"
+        echo ""
+        echo "Your container has been created but is not started yet."
+        echo ""
+        echo -e "${BOLD}Container State:${NC}"
+        echo -e "  • ${YELLOW}Created${NC} - Container exists but isn't running"
+        echo "  • No resources are being used yet"
+        echo "  • Your workspace is ready to be mounted"
+        echo ""
+        echo -e "${BOLD}Next Steps:${NC}"
+        echo ""
+        echo -e "  1. ${BOLD}Start the container${NC}"
+        echo -e "     ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo "     This starts the container and opens a shell inside"
+        echo ""
+        echo -e "  2. ${BOLD}Inside the container${NC}"
+        echo "     • Your workspace is at: /workspace"
+        echo "     • Run Python scripts: python train.py"
+        echo "     • Start Jupyter: jlab"
+        echo "     • Attach IDE to container session"
+        echo ""
+        echo -e "  3. ${BOLD}Exit the container${NC}"
+        echo "     • Type 'exit' or press Ctrl+D"
+        echo "     • Container keeps running in background (until auto-stopped at max-time - TODO HB pass max_runtime here)"
+        echo -e "     • Re-enter: container-run $CONTAINER_NAME"
+        echo ""
+        echo -e "  4. ${BOLD}Stop & Remove the container${NC}"
+        echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
+        echo -e "     ${GREEN}container-remove $CONTAINER_NAME${NC}"
+        echo "     Frees up GPU and resources for others"
+        echo ""
+        echo -e "${YELLOW}💡 Remember:${NC} Treat containers as ephemeral compute environments; your files in /workspace are safe and persist!"
+        echo ""
+    else
+        echo -e "${BOLD}Next steps:${NC}"
+        echo -e "  • Start container: ${GREEN}container-start $CONTAINER_NAME${NC}"
+        echo -e "  • Run container (enter): ${GREEN}container-run $CONTAINER_NAME${NC}"
+        echo -e "  • View containers: ${GREEN}container-list${NC}"
+        echo -e "  • Check resources: ${GREEN}container-stats${NC}"
+        echo ""
     fi
 else
     EXIT_CODE=$?

@@ -22,9 +22,10 @@ usage() {
     echo "  image-delete [image-name...] [options]"
     echo "  image-delete                           # Prompts to select image (if none specified)"
     echo "  image-delete img1 img2 img3            # Bulk delete multiple images"
-    echo "  (also: `remove` as alias for delete)"
+    echo "  (also: 'remove' as alias for delete)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
+    echo "  --all               Delete all user images (requires confirmation)"
     echo "  --guided            Show detailed explanations for beginners"
     echo "  -f, --force         Force removal (stop/remove containers first)"
     echo "  --keep-dockerfile   Don't delete the Dockerfile"
@@ -38,6 +39,7 @@ usage() {
     echo "  image-delete my-old-project              # Remove image (with confirmation)"
     echo "  image-delete my-project --force          # Force remove (stop containers first)"
     echo "  image-delete test-image --keep-dockerfile  # Keep Dockerfile for later"
+    echo "  image-delete --all                       # Remove all user images (with confirmation)"
     echo ""
     echo -e "${CYAN}Safety:${NC}"
     echo "  • Warns before deletion"
@@ -54,9 +56,14 @@ IMAGE_NAMES=()
 GUIDED=false
 FORCE=false
 KEEP_DOCKERFILE=false
+ALL_IMAGES=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --all)
+            ALL_IMAGES=true
+            shift
+            ;;
         --guided)
             GUIDED=true
             shift
@@ -84,6 +91,43 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Handle --all flag
+if [ "$ALL_IMAGES" = true ]; then
+    USER_ID=$(id -u)
+    echo ""
+    echo -e "${CYAN}Finding all user images...${NC}"
+    echo ""
+
+    # Get all user images
+    mapfile -t ALL_USER_IMAGES < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$USER_ID/" | grep -v "^<none>$" | sort -u)
+
+    if [ ${#ALL_USER_IMAGES[@]} -eq 0 ]; then
+        echo -e "${YELLOW}No images found to delete${NC}"
+        exit 0
+    fi
+
+    # Show list and confirm
+    echo -e "${BOLD}Found ${#ALL_USER_IMAGES[@]} image(s):${NC}"
+    echo ""
+    for img in "${ALL_USER_IMAGES[@]}"; do
+        echo "  • $img"
+    done
+    echo ""
+
+    if [ "$FORCE" != true ]; then
+        echo -e "${YELLOW}⚠ This will delete ALL your images!${NC}"
+        echo ""
+        read -p "Are you sure? Type 'yes' to confirm: " CONFIRM </dev/tty
+        if [ "$CONFIRM" != "yes" ]; then
+            echo "Cancelled."
+            exit 0
+        fi
+        echo ""
+    fi
+
+    IMAGE_NAMES=("${ALL_USER_IMAGES[@]}")
+fi
 
 # Custom select_image function that filters by user's images
 select_user_image() {
@@ -289,7 +333,6 @@ if docker rmi "$IMAGE_NAME"; then
     echo ""
 
     # Suggest cleanup
-    echo -e "${YELLOW}💡 Tip:${NC} Clean up dangling images with: ${GREEN}docker image prune${NC}"
 else
     echo -e "\n${RED}✗ Failed to remove image${NC}"
     echo ""
@@ -324,7 +367,7 @@ for IMAGE_NAME in "${IMAGE_NAMES[@]}"; do
         DELETED_COUNT=$((DELETED_COUNT + 1))
     else
         # Check if it was skipped (not found) or failed (error during deletion)
-        local USER_ID=$(id -u)
+        USER_ID=$(id -u)
         if ! docker images --format "{{.Repository}}" | grep -q "^ds01-${USER_ID}/${IMAGE_NAME}$" && \
            ! docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
