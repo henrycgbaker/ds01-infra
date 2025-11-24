@@ -72,7 +72,7 @@ while IFS= read -r container_tag; do
         user_id="${BASH_REMATCH[2]}"
     else
         log "WARN: Skipping container with invalid name format: $container_tag"
-        ((SKIPPED_COUNT++))
+        ((SKIPPED_COUNT += 1))
         continue
     fi
 
@@ -81,7 +81,7 @@ while IFS= read -r container_tag; do
 
     if [ "$username" = "unknown" ]; then
         log "WARN: Cannot find username for UID $user_id (container: $container_tag)"
-        ((SKIPPED_COUNT++))
+        ((SKIPPED_COUNT += 1))
         continue
     fi
 
@@ -129,10 +129,10 @@ while IFS= read -r container_tag; do
         # Remove container with force flag (no prompts)
         if "$CONTAINER_REMOVE" "$container_name" --force &>/dev/null; then
             log "✓ Removed: $container_name"
-            ((REMOVED_COUNT++))
+            ((REMOVED_COUNT += 1))
         else
             log "ERROR: Failed to remove $container_name"
-            ((ERROR_COUNT++))
+            ((ERROR_COUNT += 1))
         fi
     fi
 

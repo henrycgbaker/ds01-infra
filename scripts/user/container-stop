@@ -415,20 +415,22 @@ if [ -z "$CONTAINER_NAME" ] && [ "$STOP_ALL" = false ]; then
     exit 1
 fi
 
-# Warning message (DS01 safety check)
-echo -e "${RED}⚠ This will STOP the container${NC}\n"
-echo -e "${BOLD}All processes will be terminated, including:${NC}"
-echo -e "  • Training jobs"
-echo -e "  • Jupyter sessions"
-echo -e "  • SSH connections"
-echo ""
+# Warning message (DS01 safety check) - skip if --force
+if [ "$FORCE" != "true" ]; then
+    echo -e "${RED}⚠ This will STOP the container${NC}\n"
+    echo -e "${BOLD}All processes will be terminated, including:${NC}"
+    echo -e "  • Training jobs"
+    echo -e "  • Jupyter sessions"
+    echo -e "  • SSH connections"
+    echo ""
 
-read -p "Continue? [y/N]: " CONFIRM
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-    echo "Cancelled."
-    exit 0
+    read -p "Continue? [y/N]: " CONFIRM
+    if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Cancelled."
+        exit 0
+    fi
+    echo ""
 fi
-echo ""
 
 # Stop container
 if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then

@@ -84,10 +84,11 @@ timeout_to_seconds() {
     local value="${timeout%[a-z]*}"
     local unit="${timeout#${value}}"
     
+    # Use bc for decimal support (e.g., 0.02h)
     case "$unit" in
-        h) echo $((value * 3600)) ;;
-        d) echo $((value * 86400)) ;;
-        w) echo $((value * 604800)) ;;
+        h) echo "scale=0; $value * 3600 / 1" | bc ;;
+        d) echo "scale=0; $value * 86400 / 1" | bc ;;
+        w) echo "scale=0; $value * 604800 / 1" | bc ;;
         *) echo "172800" ;;  # Default 48h
     esac
 }
@@ -202,8 +203,8 @@ To keep your container running:
 To disable this warning (if actively training):
   touch /workspace/.keep-alive
 
-To stop now and free resources:
-  container-stop $(echo $container | cut -d'.' -f1)
+To stop and retire now (frees GPU immediately):
+  container-retire $(echo $container | cut -d'.' -f1)
 
 Questions? Email: 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -259,43 +260,50 @@ NOTIFEOF
 
     chown "$username:$username" "$notification_file" 2>/dev/null || true
 
-    # Stop the container using DS01 workflow
-    # First try mlc-stop, fallback to docker stop
-    local stopped=false
-    local mlc_stop="$INFRA_ROOT/aime-ml-containers/mlc-stop"
+    # Retire the container (stop + remove) to avoid stopped state
+    # This enforces the "running or removed" design principle
     local container_name=$(echo "$container" | cut -d'.' -f1)
+    local container_retire="$INFRA_ROOT/scripts/user/container-retire"
 
-    if [ -f "$mlc_stop" ]; then
-        if bash "$mlc_stop" "$container_name" -f -s &>/dev/null; then
-            stopped=true
-            log_color "Stopped via mlc-stop: $container" "$GREEN"
+    if [ -f "$container_retire" ]; then
+        # Use container-retire to stop and remove (enforces "running or removed" principle)
+        # --force flag skips confirmations (automated context)
+        if sudo -u "$username" bash "$container_retire" "$container_name" --force &>/dev/null; then
+            log_color "Retired idle container: $container (stop + remove, GPU freed)" "$GREEN"
+        else
+            # Fallback: stop via docker if retire fails
+            log_color "Warning: container-retire failed, falling back to docker stop" "$YELLOW"
+            if docker stop -t 10 "$container" &>/dev/null; then
+                log_color "Stopped via docker stop: $container (retire failed)" "$YELLOW"
+                # Clean up GPU allocation manually
+                local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+                if [ -f "$gpu_allocator" ]; then
+                    python3 "$gpu_allocator" release "$container" &>/dev/null || true
+                    log_color "GPU released manually for: $container" "$GREEN"
+                fi
+            else
+                log_color "Failed to stop/retire container: $container" "$RED"
+                return 1
+            fi
         fi
-    fi
-
-    if [ "$stopped" = false ]; then
+    else
+        # Fallback if container-retire not found
+        log "Warning: container-retire not found at $container_retire, using docker stop"
         if docker stop -t 10 "$container" &>/dev/null; then
-            stopped=true
-            log_color "Stopped via docker stop: $container" "$GREEN"
+            log_color "Stopped via docker stop: $container" "$YELLOW"
+            # Clean up GPU allocation manually
+            local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+            if [ -f "$gpu_allocator" ]; then
+                python3 "$gpu_allocator" release "$container" &>/dev/null || true
+            fi
         else
             log_color "Failed to stop container: $container" "$RED"
             return 1
         fi
     fi
 
-    # Mark container as stopped in GPU allocator (starts GPU hold timer)
-    local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
-    if [ -f "$gpu_allocator" ]; then
-        if python3 "$gpu_allocator" mark-stopped "$container" &>/dev/null; then
-            log_color "GPU marked as stopped for: $container" "$GREEN"
-        else
-            log "Warning: Failed to mark GPU as stopped for: $container"
-        fi
-    fi
-
     # Clean up idle monitoring state file
     rm -f "$STATE_DIR/${container}.state"
-
-    log_color "Container $container stopped successfully (GPU hold timer started)" "$GREEN"
 }
 
 # Main monitoring loop
@@ -333,7 +341,7 @@ monitor_containers() {
             continue
         fi
 
-        ((monitored_count++))
+        ((monitored_count += 1))
 
         # Wrap in error handling to prevent one container from breaking the whole loop
         if ! process_container "$container" "$username"; then

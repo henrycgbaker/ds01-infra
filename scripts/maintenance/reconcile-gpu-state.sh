@@ -50,12 +50,12 @@ RELEASED_COUNT=0
 for container in $ALLOCATED_CONTAINERS; do
     if ! echo "$ACTUAL_CONTAINERS" | grep -q "^${container}$"; then
         log_color "Stale allocation detected: $container (container doesn't exist)" "$YELLOW"
-        ((STALE_COUNT++))
+        ((STALE_COUNT += 1))
 
         # Release the GPU
         if python3 "$GPU_ALLOCATOR" release "$container" >> "$LOG_FILE" 2>&1; then
             log_color "  ✓ Released GPU for: $container" "$GREEN"
-            ((RELEASED_COUNT++))
+            ((RELEASED_COUNT += 1))
 
             # Remove metadata file if it exists
             METADATA_FILE="$METADATA_DIR/${container}.json"

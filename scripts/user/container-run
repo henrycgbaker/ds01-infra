@@ -69,7 +69,7 @@ usage() {
     echo -e "  • Your workspace: ${CYAN}/workspace${NC}"
     echo -e "  • Start Jupyter: ${GREEN}jlab${NC}"
     echo -e "  • Check GPU: ${GREEN}gpu${NC}"
-    echo -e "  • Exit session: ${GREEN}exit${NC} (prompts to retire container & free GPU)"
+    echo -e "  • Exit session: ${GREEN}exit${NC} (you'll choose: keep running or retire)"
     echo ""
 }
 
@@ -183,26 +183,24 @@ if [ "$GUIDED" = true ]; then
     echo -e "${BOLD}    ➜] How to Exit: ➜]${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "  ${YELLOW}Important: There are different ways to exit!${NC}"
+    echo -e "  ${YELLOW}Important: When you exit, you'll choose what happens!${NC}"
     echo ""
-    echo -e "  ${BOLD}Option 1: Exit Session (Container Keeps Running)${NC}"
+    echo -e "  ${BOLD}Exiting the Container:${NC}"
     echo -e "    • Type ${GREEN}exit${NC} or press ${GREEN}Ctrl+D${NC}"
     echo "    • Your bash session ends"
-    echo -e "    • ${CYAN}Container keeps running in background${NC}"
-    echo "    • You can re-enter anytime"
-    echo -e "    • ${BOLD}Use this during ongoing model training / inference.${NC}"
+    echo -e "    • You'll be prompted with 2 options:"
     echo ""
-    echo -e "  ${BOLD}Option 2: Stop Container (Halts All Processes)${NC}"
-    echo "    • Exit first (type 'exit')"
-    echo -e "    • Then run on host: ${GREEN}container-stop <name>${NC}"
-    echo "    • Halts container, GPU held temporarily"
-    echo -e "    • ${BOLD}Use this as a 'pause'.${NC}"
+    echo -e "  ${BOLD}Option 1: Keep Running${NC}"
+    echo -e "    • ${CYAN}Container stays running in background${NC}"
+    echo "    • GPU remains allocated to you"
+    echo "    • You can reconnect anytime"
+    echo -e "    • ${BOLD}Use this for: ongoing training, keeping environment ready${NC}"
     echo ""
-    echo -e "  ${BOLD}Option 3: Cleanup Container (Remove & Free GPU)${NC}"
-    echo "    • Exit first (type 'exit')"
-    echo -e "    • Run on host: ${GREEN}container-remove <name>${NC}"
-    echo "    • Removes container, frees GPU immediately"
-    echo -e "    • ${BOLD}Be a good citizen - use this when current tasks is done, free up space for others!${NC}"
+    echo -e "  ${BOLD}Option 2: Retire Container${NC}"
+    echo "    • Stop and remove container"
+    echo "    • GPU freed immediately for others"
+    echo "    • Workspace files remain safe"
+    echo -e "    • ${BOLD}Use this when: done with task, being a good citizen!${NC}"
     echo ""
 
     # Show user's specific lifecycle limits
@@ -217,17 +215,12 @@ if [ "$GUIDED" = true ]; then
     fi
 
     if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
-        echo -e "  • ${CYAN}Max runtime:${NC} $max_runtime (absolute max container lifetime)"
+        echo -e "  • ${CYAN}Max runtime:${NC} $max_runtime (container auto-retires at this limit)"
     fi
 
-    if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
-        echo -e "  • ${CYAN}GPU hold after stop:${NC} $gpu_hold (restart window)"
-    elif [ "$gpu_hold" = "indefinite" ]; then
-        echo -e "  • ${CYAN}GPU hold after stop:${NC} Indefinite (GPU held until cleanup)"
-    fi
     echo ""
     echo -e "${YELLOW}💡 Remember:${NC} Your files in /workspace are ${BOLD}always safe${NC}"
-    echo "   Stopping/cleanup doesn't delete your files!"
+    echo "   Retiring doesn't delete your files - only the container instance!"
     echo ""
     read -p "Press Enter to continue..." </dev/tty
     echo ""
@@ -337,6 +330,27 @@ if [ "$CONTAINER_STATUS" = "paused" ]; then
     fi
 fi
 
+# Start background keep-alive process to prevent AIME auto-stop
+# This keeps container "active" so user can choose fate after exit
+# Note: Existing cron jobs (enforce-max-runtime.sh) will auto-retire when max_runtime exceeded
+
+# First, ensure container is running (start it if needed)
+if ! docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_TAG}$"; then
+    # Container not running, start it
+    docker start "$CONTAINER_TAG" >/dev/null 2>&1 || true
+    sleep 1  # Give it a moment to start
+fi
+
+# Now start keep-alive process
+KEEP_ALIVE_STARTED=false
+if docker ps --format "{{.Names}}" | grep -q "^${CONTAINER_TAG}$"; then
+    # Start a named sleep process that keeps container active
+    # Using sleep infinity - cron jobs enforce max_runtime and auto-retire
+    if docker exec -d "$CONTAINER_TAG" bash -c 'exec -a "[ds01-keep-alive]" sleep infinity' 2>/dev/null; then
+        KEEP_ALIVE_STARTED=true
+    fi
+fi
+
 # Check if mlc-open exists (base system)
 if [ -f "$MLC_OPEN" ] && [ -x "$MLC_OPEN" ]; then
     # Use base system mlc-open
@@ -382,118 +396,140 @@ fi
 # Post-exit handling
 echo ""
 
-# Auto-retire container (ephemeral container model)
-# When called from orchestrator, exit quietly; when standalone, auto-retire
-CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
+# Check container state
+CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev/null || echo "missing")
 
+# If called from orchestrator, exit quietly (orchestrator handles messaging)
 if [ -n "$DS01_ORCHESTRATOR" ]; then
-    # Called from orchestrator (e.g., container-deploy) - exit quietly
-    # Orchestrator will handle all post-exit messaging
+    # Clean up keep-alive process before exiting
+    if [ "$KEEP_ALIVE_STARTED" = true ]; then
+        docker exec "$CONTAINER_TAG" pkill -f "\[ds01-keep-alive\]" 2>/dev/null || true
+    fi
     exit $EXIT_CODE
 fi
 
-# Standalone mode: Auto-retire (no prompt) to enforce ephemeral model
+# Standalone mode: Interactive prompt
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}Container Session Ended${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-if [ "$GUIDED" = true ]; then
-    echo -e "${CYAN}ℹ${NC} ${BOLD}Ephemeral Container Model:${NC}"
-    echo "  Container will be automatically retired (stop + remove)"
-    echo "  Your workspace files stay safe in ~/workspace/$CONTAINER_NAME/"
-    echo "  You can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
+if [ "$CONTAINER_STATUS" = "running" ]; then
+    echo -e "${GREEN}✓${NC} Container is still running with resources allocated"
     echo ""
-fi
 
-echo -e "${YELLOW}Auto-retiring container...${NC}"
-echo ""
+    # Get user's lifecycle limits for context
+    IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"
 
-# Call container-retire with --force to skip confirmations (except image commit prompt)
-RETIRE_ARGS=("--force")
-if [ "$GUIDED" = true ]; then
-    RETIRE_ARGS+=("--guided")
-fi
+    echo -e "${BOLD}What would you like to do?${NC}"
+    echo ""
+    echo -e "${CYAN}1)${NC} ${BOLD}Keep running${NC} (exit session, container stays active)"
+    echo "   • You can reconnect anytime"
+    echo "   • GPU remains allocated to this container"
+    if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+        echo "   • Will auto-stop after ${CYAN}$idle_timeout${NC} of GPU inactivity"
+    fi
+    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+        echo "   • Max runtime: ${CYAN}$max_runtime${NC}"
+    fi
+    echo ""
+    echo -e "${CYAN}2)${NC} ${BOLD}Retire container${NC} (stop + remove, free GPU immediately)"
+    echo "   • Removes container instance"
+    echo "   • GPU freed immediately for others"
+    echo "   • Workspace files remain safe"
+    echo "   • Can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
+    echo ""
 
-if [ -f "$CONTAINER_RETIRE" ]; then
-    bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" "${RETIRE_ARGS[@]}"
+    # Show guided explanation before prompt (if guided mode)
+    if [ "$GUIDED" = true ]; then
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Understanding Your Options${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "${BOLD}Option 1: Keep Running${NC}"
+        echo "  • Container stays active in the background"
+        echo "  • All processes, environments, and data preserved"
+        echo "  • GPU remains allocated to you (other users cannot use it)"
+        echo "  • You can reconnect anytime with same state"
+        echo "  • Container will auto-retire at max runtime limit"
+        echo ""
+        echo -e "${BOLD}Option 2: Retire Container${NC}"
+        echo "  • Stops all processes and removes container instance"
+        echo "  • GPU freed immediately for other users"
+        echo "  • Workspace files remain 100% safe"
+        echo "  • Can recreate container from image anytime"
+        echo "  • Be a good citizen - frees resources quickly!"
+        echo ""
+        echo -e "${YELLOW}💡 Think of it like:${NC}"
+        echo "  Keep running = leave laptop on but close the lid"
+        echo "  Retire = shut down laptop (files still on disk)"
+        echo ""
+        read -p "Press Enter to choose..." </dev/tty
+        echo ""
+    fi
+
+    # Prompt with default to Keep running (safest - prevents accidental removal)
+    read -p "Choose [1=keep, 2=retire] (default: 1): " CHOICE </dev/tty
+    echo ""
+
+    # Default to keep running if empty input
+    CHOICE=${CHOICE:-1}
+
+    case "$CHOICE" in
+        1)
+            echo -e "${GREEN}✓${NC} Container kept running"
+            echo ""
+            echo -e "${BOLD}Next steps:${NC}"
+            echo -e "  Reconnect: ${GREEN}container-run $CONTAINER_NAME${NC}"
+            echo -e "  Status:    ${GREEN}container-list${NC}"
+            echo ""
+            if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
+                echo -e "${CYAN}ℹ${NC} ${DIM}Container will auto-retire at max runtime (${max_runtime})${NC}"
+                echo ""
+            fi
+            echo -e "${YELLOW}💡 Tip:${NC} When completely done, ${GREEN}container-retire $CONTAINER_NAME${NC}"
+            echo "   (frees GPU for others)"
+            echo ""
+            ;;
+        2)
+            echo -e "${YELLOW}Retiring container...${NC}"
+            echo ""
+
+            # Clean up keep-alive before retiring
+            docker exec "$CONTAINER_TAG" pkill -f "\[ds01-keep-alive\]" 2>/dev/null || true
+
+            # Call container-retire
+            CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
+            if [ -f "$CONTAINER_RETIRE" ]; then
+                bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --force
+            else
+                echo -e "${RED}✗${NC} container-retire not found"
+                echo "Manual cleanup: ${GREEN}container-retire $CONTAINER_NAME${NC}"
+            fi
+            ;;
+        *)
+            echo -e "${YELLOW}Invalid choice. Keeping container running (default).${NC}"
+            echo ""
+            echo -e "To retire later: ${GREEN}container-retire $CONTAINER_NAME${NC}"
+            echo ""
+            ;;
+    esac
 else
-    echo -e "${RED}✗${NC} container-retire not found at $CONTAINER_RETIRE"
-    echo "Manual cleanup: ${GREEN}container-retire $CONTAINER_NAME${NC}"
+    # Container stopped (shouldn't happen with keep-alive, but handle it)
+    echo -e "${YELLOW}⚠${NC} Container was stopped"
     echo ""
-fi
-
-# Guided mode: show detailed explanations
-if [ "$GUIDED" = true ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${YELLOW}${BOLD}You've Exited the Container${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    echo -e "${BOLD}What Just Happened?${NC}"
-    echo ""
-    echo "  • Your bash session inside the container ended"
-    echo  -e "  • The container is ${GREEN}still running${NC} in the background"
-    echo  -e "  • All your files in /workspace are ${BOLD}safe${NC}"
-    echo "  • GPU is still allocated to this container"
-    echo ""
-    echo -e "${BOLD}What You Can Do Now:${NC}"
-    echo ""
-    echo -e "  ${BOLD}1) Re-enter the Container${NC}"
-    echo -e "     ${GREEN}container-run $CONTAINER_NAME${NC}"
-    echo "     Continue working where you left off"
-    echo "     Your Python environment, processes, everything is still there"
-    echo "     Like you never left!"
-    echo ""
-    echo -e "  ${BOLD}2) Stop the Container (Pause for a Bit)${NC}"
-    echo -e "     ${GREEN}container-stop $CONTAINER_NAME${NC}"
-    echo -e "     Halts processes, but GPU is held temporarily ($gpu_hold)"
-    echo -e "     ${DIM}Use this if you plan to restart soon (within 1h).${NC}"
-    echo ""
-    echo -e "  ${BOLD}3) Cleanup the Container (Free Resources)${NC}"
-    echo -e "     ${GREEN}container-remove $CONTAINER_NAME${NC}"
-    echo -e "     ${RED}Frees up GPU and resources immediately.${NC} Removes container."
-    echo -e "     ${BOLD}Do this when you're done with the work task for the moment.${NC}"
-    echo -e "     ${DIM}Do this often: it is quick and easy to recreate your containers from images and this frees resources for others!${NC}"
-    echo ""
-    echo -e "  ${BOLD}4) Check Container Status${NC}"
-    echo -e "     ${GREEN}container list -all${NC}"
-    echo "     See all your containers and their status"
-    echo ""
-    echo -e "  ${BOLD}5) Check Resource Usage${NC}"
-    echo -e "     ${GREEN}container-stats${NC}"
-    echo "     See GPU and CPU usage"
-    echo ""
-    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Important Reminders:${NC}"
-    echo ""
-    echo  -e "  • ${CYAN}Running containers${NC} = GPU is allocated (runtime: $max_runtime, idle timeout: $idle_timeout)"
-    echo  -e "  • ${CYAN}Stopped container${NC} = GPU is temporarily held (timeout: $gpu_hold)"
-    echo  -e "  • ${CYAN}Cleanup container${NC} = Frees GPU for others immediately" 
-    echo  -e "  • ${GREEN}Your files are ALWAYS safe${NC} in ~/workspace/$CONTAINER_NAME"
-    echo  -e "  • ${GREEN}You can restart${NC} anytime without losing work"
-    echo ""
-    echo -e "${DIM}Be a good citizen: cleanup containers when not actively using them!${NC}"
+    echo -e "${BOLD}Retiring container to avoid ambiguous stopped state...${NC}"
     echo ""
 
-else
-    # Non-guided: brief status
-    # Check if container is still running
-    if docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
-        echo -e "${DIM}Be a good citizen: cleanup (stop & remove) containers when not actively using them!${NC}"
-        echo ""
-        echo -e "${GREEN}✓${NC} Container still running"
-        echo ""
-        echo -e "${BOLD}Reconnect:${NC}         ${GREEN}container-run $CONTAINER_NAME${NC}"
-        echo -e "${BOLD}Stop:${NC}              ${GREEN}container-stop $CONTAINER_NAME${NC}"
-        echo -e "${BOLD}Cleanup (remove):${NC}  ${GREEN}container-remove $CONTAINER_NAME${NC}"
-        echo -e "${BOLD}View status:${NC}       ${GREEN}container-list${NC}"
-        echo ""
-    else
-        echo -e "${DIM}Container stopped${NC}"
-        echo ""
-        echo -e "${BOLD}Restart:${NC}       ${GREEN}container-run $CONTAINER_NAME${NC}"
-        echo -e "${BOLD}Cleanup (remove):${NC}  ${GREEN}container-remove $CONTAINER_NAME${NC}"
-        echo ""
+    # Clean up keep-alive if still somehow running
+    if [ "$KEEP_ALIVE_STARTED" = true ]; then
+        docker exec "$CONTAINER_TAG" pkill -f "\[ds01-keep-alive\]" 2>/dev/null || true
+    fi
+
+    # Auto-retire to follow "running or removed" principle
+    CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
+    if [ -f "$CONTAINER_RETIRE" ]; then
+        bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --force
     fi
 fi
 

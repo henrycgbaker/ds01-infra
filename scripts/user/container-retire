@@ -265,6 +265,9 @@ if [ "$CONTAINER_STATUS" = "running" ]; then
         echo ""
     fi
 
+    # Clean up any keep-alive processes (defensive - usually already cleaned up)
+    docker exec "$CONTAINER_TAG" pkill -f "\[ds01-keep-alive\]" 2>/dev/null || true
+
     echo -e "${CYAN}Stopping container...${NC}"
     if docker stop -t 10 "$CONTAINER_TAG" > /dev/null 2>&1; then
         echo -e "${GREEN}✓${NC} Container stopped"
@@ -286,10 +289,13 @@ echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Call container-remove with --skip-removal-confirm to skip its removal confirmation
-# (we already confirmed above), but container-remove will still show the save image prompt
+# (we already confirmed above), and pass --force to skip save image prompt in automated contexts
 REMOVE_ARGS=("--skip-removal-confirm")
 if [ "$GUIDED" = true ]; then
     REMOVE_ARGS+=("--guided")
+fi
+if [ "$FORCE" = true ]; then
+    REMOVE_ARGS+=("--force")
 fi
 
 if "$CONTAINER_REMOVE" "$CONTAINER_NAME" "${REMOVE_ARGS[@]}"; then
