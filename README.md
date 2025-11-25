@@ -24,8 +24,8 @@ user-setup          # Complete onboarding: SSH + project + VS Code setup
 # Add user to docker group (required)
 sudo scripts/system/add-user-to-docker.sh <username>
 
-# Update command symlinks
-sudo scripts/system/update-symlinks.sh
+# Deploy commands to PATH
+sudo scripts/system/deploy-commands.sh
 
 # View system status
 ds01-dashboard
@@ -124,7 +124,7 @@ ds01-infra/
 │   │   ├── README.md            # Admin operations guide
 │   │   ├── setup-resource-slices.sh
 │   │   ├── add-user-to-docker.sh
-│   │   └── update-symlinks.sh
+│   │   └── deploy-commands.sh
 │   │
 │   ├── monitoring/              # Monitoring & metrics
 │   │   ├── README.md            # Monitoring guide
@@ -181,7 +181,7 @@ sudo systemctl daemon-reload
 
 5. **Create command symlinks:**
 ```bash
-sudo scripts/system/update-symlinks.sh
+sudo scripts/system/deploy-commands.sh
 ```
 
 6. **Add users to docker group:**
@@ -333,7 +333,7 @@ ls /var/lib/ds01/container-metadata/
 | `ds01-dashboard` | System resource usage dashboard |
 | `alias-list` | List all available commands |
 | `scripts/system/add-user-to-docker.sh` | Add user to docker group |
-| `scripts/system/update-symlinks.sh` | Update command symlinks |
+| `scripts/system/deploy-commands.sh` | Deploy commands to PATH |
 | `scripts/system/setup-resource-slices.sh` | Configure systemd slices |
 
 **See admin guide:** [scripts/system/README.md](scripts/system/README.md)
@@ -382,8 +382,8 @@ echo $PATH | grep /usr/local/bin
 
 **If commands still not found after PATH is correct:**
 ```bash
-# Update symlinks (admin only)
-sudo scripts/system/update-symlinks.sh
+# Deploy commands (admin only)
+sudo scripts/system/deploy-commands.sh
 ```
 
 ### Container Won't Start
@@ -416,7 +416,7 @@ When making changes:
 2. Update CLAUDE.md if changing architecture
 3. Update module README if changing implementation
 4. Test with multiple user types
-5. Update symlinks if adding commands: `sudo scripts/system/update-symlinks.sh`
+5. Deploy commands if adding commands: `sudo scripts/system/deploy-commands.sh`
 
 ## License
 

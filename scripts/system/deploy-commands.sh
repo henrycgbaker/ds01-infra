@@ -1,7 +1,7 @@
 #!/bin/bash
 # DS01 Infrastructure - Command Deployment
 # Copies all DS01 commands to /usr/local/bin (not symlinks)
-# Run with: sudo bash /opt/ds01-infra/scripts/system/update-symlinks.sh
+# Run with: sudo /opt/ds01-infra/scripts/system/deploy-commands.sh
 #
 # Security: Copies files instead of symlinking to keep /opt/ds01-infra secure
 # This allows /opt/ds01-infra to have restrictive permissions (700) while
@@ -77,9 +77,10 @@ echo ""
 echo -e "${BOLD}TIER 2: Atomic Unit Commands${NC}"
 echo ""
 
-echo -e "${BOLD}Container Management (9 commands):${NC}"
+echo -e "${BOLD}Container Management (10 commands):${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/container-create" "container-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-run" "container-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-open" "container-open" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-pause" "container-pause" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))

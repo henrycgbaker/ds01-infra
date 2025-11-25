@@ -1,0 +1,183 @@
+#!/bin/bash
+# DS01 Container Open - Attach to an already running container
+# Tier 2 Command - Simple attachment without start/stop logic
+#
+# Unlike container-run which starts stopped containers and has post-exit menus,
+# container-open simply attaches to a running container and exits cleanly.
+
+set -e
+
+# Script paths
+SCRIPT_DIR="/opt/ds01-infra/scripts/user"
+INFRA_ROOT="/opt/ds01-infra"
+MLC_OPEN="$INFRA_ROOT/aime-ml-containers/mlc-open"
+
+# Source interactive library
+if [ -f /usr/local/lib/interactive-select.sh ]; then
+    source /usr/local/lib/interactive-select.sh
+elif [ -f "$INFRA_ROOT/scripts/lib/interactive-select.sh" ]; then
+    source "$INFRA_ROOT/scripts/lib/interactive-select.sh"
+fi
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+USER_ID=$(id -u)
+
+usage() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Attach to Running Container${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  container-open [name] [options]"
+    echo "  container-open                   # Select from running containers"
+    echo ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo "  name              Container name (optional - will prompt if not provided)"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided          Show detailed explanations for beginners"
+    echo "  -h, --help        Show this help message"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Attach to running container${NC}"
+    echo "  container-open my-project"
+    echo ""
+    echo -e "  ${DIM}# Select from running containers${NC}"
+    echo "  container-open"
+    echo ""
+    echo -e "${YELLOW}Note:${NC} This command only works with running containers."
+    echo "      Use ${GREEN}container-run${NC} to start and attach to stopped containers."
+    echo ""
+}
+
+# Parse arguments
+CONTAINER_NAME=""
+GUIDED=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        -h|--help|--info)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}Error: Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+        *)
+            if [ -z "$CONTAINER_NAME" ]; then
+                CONTAINER_NAME="$1"
+            else
+                echo -e "${RED}Error: Too many arguments${NC}\n"
+                usage
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
+
+# Show guided introduction
+if [ "$GUIDED" = true ] && [ -z "$CONTAINER_NAME" ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Opening a Container${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  You're about to attach to an already running container."
+    echo "  This opens a new bash session inside the container."
+    echo ""
+    echo -e "${BOLD}Inside the Container:${NC}"
+    echo -e "  Your workspace is at: ${CYAN}/workspace${NC}"
+    echo -e "  Check GPU: ${GREEN}gpu${NC}"
+    echo -e "  Start Jupyter: ${GREEN}jlab${NC}"
+    echo ""
+    echo -e "${BOLD}When you exit:${NC}"
+    echo "  The container keeps running (just this session ends)."
+    echo "  You can reattach anytime with container-open."
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+fi
+
+# If no container name provided, select from running containers
+if [ -z "$CONTAINER_NAME" ]; then
+    if type select_container &>/dev/null; then
+        CONTAINER_NAME=$(select_container "running")
+        if [ -z "$CONTAINER_NAME" ]; then
+            echo "No selection made. Exiting."
+            exit 0
+        fi
+        echo ""
+    else
+        echo -e "${RED}Error: No container name provided${NC}"
+        echo ""
+        echo "Running containers:"
+        docker ps --filter "name=\._\.${USER_ID}$" --format "  {{.Names}}" | sed "s/\._\.${USER_ID}$//"
+        echo ""
+        exit 1
+    fi
+fi
+
+# Container tag (how docker sees it)
+CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
+
+# Check if container exists
+if ! docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+    echo -e "${RED}Error: Container '$CONTAINER_NAME' does not exist${NC}"
+    echo ""
+    echo -e "${YELLOW}Create it first:${NC}"
+    echo -e "  ${GREEN}container-deploy $CONTAINER_NAME${NC}"
+    echo ""
+    exit 1
+fi
+
+# Check if container is RUNNING (not just exists)
+if ! docker ps --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"; then
+    # Container exists but not running
+    CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev/null || echo "unknown")
+    echo -e "${YELLOW}Container '$CONTAINER_NAME' is not running${NC} (status: $CONTAINER_STATUS)"
+    echo ""
+    echo -e "${BOLD}To start and attach:${NC}"
+    echo -e "  ${GREEN}container-run $CONTAINER_NAME${NC}"
+    echo ""
+    echo -e "${BOLD}To start in background:${NC}"
+    echo -e "  ${GREEN}container-start $CONTAINER_NAME${NC}"
+    echo ""
+    exit 1
+fi
+
+# Container is running - attach to it
+if [ "$GUIDED" = false ]; then
+    echo -e "${CYAN}Attaching to container '${CONTAINER_NAME}'...${NC}"
+    echo ""
+fi
+
+# Use mlc-open if available, otherwise fallback to docker exec
+if [ -f "$MLC_OPEN" ] && [ -x "$MLC_OPEN" ]; then
+    bash "$MLC_OPEN" "$CONTAINER_NAME"
+else
+    # Fallback to direct docker exec
+    docker exec -it "$CONTAINER_TAG" /bin/bash
+fi
+
+# Clean exit - container stays running
+echo ""
+echo -e "${GREEN}Session ended.${NC} Container is still running."
+echo -e "Reconnect: ${GREEN}container-open $CONTAINER_NAME${NC}"
+echo ""

@@ -31,6 +31,7 @@ show_usage() {
     echo -e "  ${GREEN}create${NC}      Create a new container"
     echo -e "  ${GREEN}start${NC}       Start container in background"
     echo -e "  ${GREEN}run${NC}         Start and attach to a container"
+    echo -e "  ${GREEN}open${NC}        Attach to running container"
     echo -e "  ${GREEN}stop${NC}        Stop a running container"
     echo -e "  ${GREEN}pause${NC}       Pause container (freeze processes, keep GPU)"
     echo -e "  ${GREEN}remove${NC}      Remove stopped containers"
@@ -71,7 +72,7 @@ if [ ! -f "$SUBCOMMAND_SCRIPT" ]; then
     echo ""
     echo "Available subcommands:"
     echo "  Tier 3: deploy, retire"
-    echo "  Tier 2: create, start, run, stop, pause, remove, list, stats, exit"
+    echo "  Tier 2: create, start, run, open, stop, pause, remove, list, stats, exit"
     echo ""
     echo "Run 'container help' for more information"
     exit 1

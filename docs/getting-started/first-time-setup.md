@@ -457,7 +457,7 @@ Ready to level up?
 
 Or ask admin to run:
 ```bash
-sudo /opt/ds01-infra/scripts/system/update-symlinks.sh
+sudo /opt/ds01-infra/scripts/system/deploy-commands.sh
 ```
 
 ### "Permission denied" for Docker

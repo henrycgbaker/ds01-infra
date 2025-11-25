@@ -22,8 +22,8 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 
 # Script paths
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+SCRIPT_DIR="/opt/ds01-infra/scripts/user"
+INFRA_ROOT="/opt/ds01-infra"
 CONTAINER_STOP="$SCRIPT_DIR/container-stop"
 CONTAINER_REMOVE="$SCRIPT_DIR/container-remove"
 

@@ -305,7 +305,7 @@ scripts/
 │   └── v1-backup/       # Backup of container workflow scripts before refactor
 ├── system/              # System administration
 │   ├── setup-resource-slices.sh, create-user-slice.sh
-│   ├── add-user-to-docker.sh, update-symlinks.sh
+│   ├── add-user-to-docker.sh, deploy-commands.sh
 ├── monitoring/          # Metrics and auditing
 │   ├── gpu-status-dashboard.py, check-idle-containers.sh
 │   ├── collect-*-metrics.sh, audit-*.sh

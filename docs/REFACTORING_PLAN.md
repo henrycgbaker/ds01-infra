@@ -563,7 +563,7 @@ DS01 uses `docker exec` (not `docker attach`) to enter containers. With docker e
 ### ✅ PHASE 7: COMPLETE - Documentation & Cleanup
 
 **Completed Tasks:**
-1. ✅ Updated `update-symlinks.sh` with comprehensive command coverage
+1. ✅ Updated `deploy-commands.sh` with comprehensive command coverage
    - Organized all 30+ commands by tier (Tier 1-4)
    - Added descriptions for each symlink
    - Includes success/fail counting

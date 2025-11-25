@@ -5,8 +5,8 @@
 set -e
 
 # Script paths
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+SCRIPT_DIR="/opt/ds01-infra/scripts/user"
+INFRA_ROOT="/opt/ds01-infra"
 MLC_REMOVE="$INFRA_ROOT/aime-ml-containers/mlc-remove"
 GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"

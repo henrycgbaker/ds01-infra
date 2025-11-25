@@ -6,7 +6,7 @@ set -e
 
 # Script paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
+INFRA_ROOT="/opt/ds01-infra"
 MLC_LIST="$INFRA_ROOT/aime-ml-containers/mlc-list"
 
 # Colors

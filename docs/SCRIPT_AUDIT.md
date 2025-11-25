@@ -346,7 +346,7 @@ alias stop-this='echo -e "💡 To stop this container:
 
 **All commands available in `/usr/local/bin/` via symlinks:**
 
-### Current Symlinks (from update-symlinks.sh)
+### Current Symlinks (from deploy-commands.sh)
 
 ```bash
 # Project commands

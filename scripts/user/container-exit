@@ -3,8 +3,8 @@
 # DS01 uses docker exec, not docker attach, so Ctrl+P, Ctrl+Q does NOT work
 
 # Script paths
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
-INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
+SCRIPT_DIR="/opt/ds01-infra/scripts/user"
+INFRA_ROOT="/opt/ds01-infra"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
 BLUE='\033[94m'

@@ -24,7 +24,7 @@ if [ -L "$SCRIPT_PATH" ]; then
     SCRIPT_PATH="$(readlink -f "$SCRIPT_PATH")"
 fi
 SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
-INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"  # Go up two levels: user -> scripts -> infra
+INFRA_ROOT="/opt/ds01-infra"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 MLC_WRAPPER="$INFRA_ROOT/scripts/docker/mlc-create-wrapper.sh"
 

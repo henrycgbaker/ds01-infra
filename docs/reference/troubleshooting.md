@@ -547,7 +547,7 @@ bash: container-deploy: Permission denied
 
 3. **Ask admin to update symlinks:**
    ```bash
-   sudo /opt/ds01-infra/scripts/system/update-symlinks.sh
+   sudo /opt/ds01-infra/scripts/system/deploy-commands.sh
    ```
 
 ---
