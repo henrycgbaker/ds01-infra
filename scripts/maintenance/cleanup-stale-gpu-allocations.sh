@@ -13,7 +13,7 @@ set -e
 SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
 SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
 INFRA_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
-GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
+GPU_ALLOCATOR="$INFRA_ROOT/scripts/docker/gpu_allocator_v2.py"
 LOG_DIR="/var/log/ds01"
 LOG_FILE="$LOG_DIR/gpu-stale-cleanup.log"
 

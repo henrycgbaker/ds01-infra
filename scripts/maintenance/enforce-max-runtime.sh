@@ -197,45 +197,21 @@ NOTIFEOF
 
     chown "$username:$username" "$notification_file" 2>/dev/null || true
 
-    # Retire the container (stop + remove) to avoid stopped state
-    # This enforces the "running or removed" design principle
-    local container_retire="$INFRA_ROOT/scripts/user/container-retire"
+    # Stop container directly (designed for automation efficiency)
+    # Note: Container is stopped but NOT removed - will be removed by cleanup-stale-containers
+    # after container_hold_after_stop timeout. GPU will be freed after gpu_hold_after_stop timeout.
 
-    if [ -f "$container_retire" ]; then
-        # Use container-retire to stop and remove (enforces "running or removed" principle)
-        # --force flag skips confirmations (automated context)
-        if sudo -u "$username" bash "$container_retire" "$container_name" --force &>/dev/null; then
-            log_color "Retired container: $container (stop + remove, GPU freed)" "$GREEN"
-        else
-            # Fallback: stop via docker if retire fails
-            log_color "Warning: container-retire failed, falling back to docker stop" "$YELLOW"
-            if docker stop -t 10 "$container" &>/dev/null; then
-                log_color "Stopped via docker stop: $container (retire failed)" "$YELLOW"
-                # Clean up GPU allocation manually
-                local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
-                if [ -f "$gpu_allocator" ]; then
-                    python3 "$gpu_allocator" release "$container" &>/dev/null || true
-                    log_color "GPU released manually for: $container" "$GREEN"
-                fi
-            else
-                log_color "Failed to stop/retire container: $container" "$RED"
-                return 1
-            fi
-        fi
+    # Stop container (10 second grace period)
+    if docker stop -t 10 "$container" &>/dev/null; then
+        log_color "Stopped container: $container (max runtime exceeded: ${runtime_hours}h)" "$GREEN"
+        logger -t ds01-maxruntime "Stopped container: $container (user: $username, runtime: ${runtime_hours}h)"
+
+        # Container is now stopped:
+        # - GPU will be freed by cleanup-stale-gpu-allocations after gpu_hold_after_stop timeout
+        # - Container will be removed by cleanup-stale-containers after container_hold_after_stop timeout
     else
-        # Fallback if container-retire not found
-        log "Warning: container-retire not found at $container_retire, using docker stop"
-        if docker stop -t 10 "$container" &>/dev/null; then
-            log_color "Stopped via docker stop: $container" "$YELLOW"
-            # Clean up GPU allocation manually
-            local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
-            if [ -f "$gpu_allocator" ]; then
-                python3 "$gpu_allocator" release "$container" &>/dev/null || true
-            fi
-        else
-            log_color "Failed to stop container: $container" "$RED"
-            return 1
-        fi
+        log_color "Failed to stop container: $container" "$RED"
+        return 1
     fi
 
     # Clean up runtime state file

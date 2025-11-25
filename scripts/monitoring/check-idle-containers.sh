@@ -260,46 +260,26 @@ NOTIFEOF
 
     chown "$username:$username" "$notification_file" 2>/dev/null || true
 
-    # Retire the container (stop + remove) to avoid stopped state
-    # This enforces the "running or removed" design principle
-    local container_name=$(echo "$container" | cut -d'.' -f1)
-    local container_retire="$INFRA_ROOT/scripts/user/container-retire"
+     # Stop and remove container directly (designed for automation efficiency)
+    # GPU freed automatically when container removed (Docker labels gone = GPU freed)
+    # This enforces the "running or removed" principle without user command overhead
 
-    if [ -f "$container_retire" ]; then
-        # Use container-retire to stop and remove (enforces "running or removed" principle)
-        # --force flag skips confirmations (automated context)
-        if sudo -u "$username" bash "$container_retire" "$container_name" --force &>/dev/null; then
-            log_color "Retired idle container: $container (stop + remove, GPU freed)" "$GREEN"
+    # Stop container (10 second grace period)
+    if docker stop -t 10 "$container" &>/dev/null; then
+        log_color "Stopped idle container: $container" "$GREEN"
+
+        # Remove container immediately (frees GPU automatically)
+        if docker rm "$container" &>/dev/null; then
+            log_color "Removed idle container: $container (GPU freed automatically)" "$GREEN"
+            logger -t ds01-idle "Retired idle container: $container (user: $username, idle: ${idle_seconds}s)"
         else
-            # Fallback: stop via docker if retire fails
-            log_color "Warning: container-retire failed, falling back to docker stop" "$YELLOW"
-            if docker stop -t 10 "$container" &>/dev/null; then
-                log_color "Stopped via docker stop: $container (retire failed)" "$YELLOW"
-                # Clean up GPU allocation manually
-                local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
-                if [ -f "$gpu_allocator" ]; then
-                    python3 "$gpu_allocator" release "$container" &>/dev/null || true
-                    log_color "GPU released manually for: $container" "$GREEN"
-                fi
-            else
-                log_color "Failed to stop/retire container: $container" "$RED"
-                return 1
-            fi
-        fi
-    else
-        # Fallback if container-retire not found
-        log "Warning: container-retire not found at $container_retire, using docker stop"
-        if docker stop -t 10 "$container" &>/dev/null; then
-            log_color "Stopped via docker stop: $container" "$YELLOW"
-            # Clean up GPU allocation manually
-            local gpu_allocator="$INFRA_ROOT/scripts/docker/gpu-allocator-smart.py"
-            if [ -f "$gpu_allocator" ]; then
-                python3 "$gpu_allocator" release "$container" &>/dev/null || true
-            fi
-        else
-            log_color "Failed to stop container: $container" "$RED"
+            log_color "Warning: Stopped but failed to remove: $container" "$YELLOW"
+            # Container is stopped - GPU will be freed by cleanup-stale-gpu-allocations cron
             return 1
         fi
+    else
+        log_color "Failed to stop idle container: $container" "$RED"
+        return 1
     fi
 
     # Clean up idle monitoring state file

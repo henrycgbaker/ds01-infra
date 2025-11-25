@@ -232,6 +232,125 @@ class GPUAllocatorSmart:
         user_allocs = self.state_reader.get_user_allocations(username)
         return len(user_allocs)
 
+    def release_stale_allocations(self, username: str = None) -> list:
+        """
+        Remove stopped containers that exceeded GPU hold timeout.
+        Container removal automatically releases GPU (Docker labels gone = GPU freed).
+
+        Args:
+            username: Optional - only check this user's containers (None = all users)
+
+        Returns:
+            List of (container, reason) tuples for removed containers
+        """
+        from datetime import timedelta
+        import re
+
+        def parse_duration(duration_str: str) -> Optional[timedelta]:
+            """Parse duration string like '24h', '0.5h', '1d' to timedelta"""
+            if not duration_str or duration_str == "null" or duration_str == "indefinite":
+                return None
+
+            duration_str = str(duration_str).strip().lower()
+
+            # Extract numeric value (supporting decimals)
+            match = re.search(r'([\d.]+)', duration_str)
+            if not match:
+                return None
+            value = float(match.group(1))
+
+            if 'h' in duration_str:
+                return timedelta(hours=value)
+            elif 'd' in duration_str:
+                return timedelta(days=value)
+            elif 'm' in duration_str:
+                return timedelta(minutes=value)
+            else:
+                # Default to hours
+                return timedelta(hours=value)
+
+        removed = []
+        now = datetime.now()
+
+        # Get all containers with GPU allocations (from Docker labels)
+        all_allocations = self.state_reader.get_all_allocations()
+
+        for gpu_slot, gpu_info in all_allocations.items():
+            for container in gpu_info['containers']:
+                # Get username from Docker label (not UID from container name)
+                try:
+                    result = subprocess.run(
+                        ['docker', 'inspect', '--format', '{{index .Config.Labels "ds01.user"}}', container],
+                        capture_output=True, text=True, check=True
+                    )
+                    user = result.stdout.strip()
+                    if not user or user == '<no value>':
+                        user = None
+                except subprocess.CalledProcessError:
+                    user = None
+
+                # Filter by username if specified
+                if username and user != username:
+                    continue
+
+                # Check if container is stopped
+                try:
+                    result = subprocess.run(
+                        ['docker', 'inspect', '--format', '{{.State.Running}}', container],
+                        capture_output=True, text=True, check=True
+                    )
+                    is_running = result.stdout.strip() == 'true'
+
+                    if is_running:
+                        continue  # Skip running containers
+
+                    # Container is stopped - get FinishedAt timestamp from Docker state (automatic)
+                    result = subprocess.run(
+                        ['docker', 'inspect', '--format', '{{.State.FinishedAt}}', container],
+                        capture_output=True, text=True, check=True
+                    )
+                    finished_at_str = result.stdout.strip()
+
+                    if not finished_at_str or finished_at_str == '0001-01-01T00:00:00Z':
+                        # Container never ran or invalid state - remove immediately (stale allocation)
+                        subprocess.run(['docker', 'rm', '-f', container], check=True)
+                        removed.append((container, "Invalid FinishedAt - stale allocation"))
+                        self._log_event("REMOVED_STALE", user or "unknown", container, gpu_slot,
+                                       reason="Invalid FinishedAt")
+                        continue
+
+                    # Parse stopped timestamp (remove Z suffix and parse)
+                    stopped_at = datetime.fromisoformat(finished_at_str.replace('Z', '+00:00')).replace(tzinfo=None)
+
+                    # Get user's gpu_hold_after_stop timeout
+                    if user:
+                        limits = self._get_user_limits(user)
+                        hold_timeout_str = limits.get('gpu_hold_after_stop')
+                        hold_timeout = parse_duration(hold_timeout_str)
+
+                        if hold_timeout is None:
+                            # Indefinite hold - don't remove
+                            continue
+
+                        # Check if timeout exceeded
+                        elapsed = now - stopped_at
+                        if elapsed > hold_timeout:
+                            # Remove container (automatically releases GPU)
+                            subprocess.run(['docker', 'rm', '-f', container], check=True)
+                            removed.append((container, f"Timeout exceeded ({elapsed.total_seconds():.0f}s > {hold_timeout.total_seconds():.0f}s)"))
+                            self._log_event("REMOVED_STALE", user, container, gpu_slot,
+                                           reason=f"Timeout exceeded: {elapsed.total_seconds():.0f}s")
+
+                except subprocess.CalledProcessError:
+                    # Container doesn't exist anymore - already removed
+                    removed.append((container, "Container no longer exists"))
+                except Exception as e:
+                    # Log error but continue
+                    print(f"Warning: Error checking container {container}: {e}", file=sys.stderr)
+                    continue
+
+        return removed
+
 
 def main():
     """CLI interface"""
@@ -257,6 +376,10 @@ def main():
     # user-count command
     parser_count = subparsers.add_parser('user-count', help='Show GPU count for user')
     parser_count.add_argument('user', help='Username')
+
+    # release-stale command
+    parser_stale = subparsers.add_parser('release-stale', help='Release stale GPU allocations from stopped containers')
+    parser_stale.add_argument('user', nargs='?', help='Optional: username to filter (default: all users)')
 
     args = parser.parse_args()
 
@@ -302,6 +425,17 @@ def main():
     elif args.command == 'user-count':
         count = allocator.get_user_gpu_count(args.user)
         print(count)
+
+    elif args.command == 'release-stale':
+        username = args.user if hasattr(args, 'user') and args.user else None
+        removed = allocator.release_stale_allocations(username)
+
+        if removed:
+            for container, reason in removed:
+                print(f"✓ Removed {container}: {reason}")
+            print(f"\n✓ Removed {len(removed)} stale container(s) (GPUs freed automatically)")
+        else:
+            print("✓ No stale containers found")
 
 
 if __name__ == '__main__':

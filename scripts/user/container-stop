@@ -435,11 +435,7 @@ fi
 # Stop container
 if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
 
-    # Mark container as stopped (starts GPU hold timer)
-    CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
-    if [ -f "$GPU_ALLOCATOR" ]; then
-        python3 "$GPU_ALLOCATOR" mark-stopped "$CONTAINER_TAG" >/dev/null 2>&1 || true
-    fi
+    # GPU hold timer starts automatically (Docker tracks FinishedAt timestamp)
 
     # Get container hold time (needed for messages below)
     CONTAINER_HOLD=$(python3 "$RESOURCE_PARSER" "$USERNAME" --container-hold-time 2>/dev/null || echo "12h")
