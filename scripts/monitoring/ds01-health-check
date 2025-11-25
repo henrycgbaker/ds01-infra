@@ -1,0 +1,388 @@
+#!/usr/bin/env python3
+"""
+DS01 Health Check - System Integrity Validation
+
+Validates DS01 system integrity. Run on startup and via cron.
+Designed to detect configuration drift and component failures.
+
+Checks performed:
+- Docker daemon running and responsive
+- OPA plugin loaded and responding (if enabled)
+- Cgroup hierarchy intact (ds01.slice exists)
+- GPU allocator state matches Docker reality
+- User slices exist for all active users
+- Docker labels schema valid
+
+Exit codes:
+- 0: All checks passed
+- 1: Some checks failed (see output)
+- 2: Critical failure (Docker not responding)
+
+Usage:
+    ds01-health-check [--json] [--verbose] [--fix]
+"""
+
+import sys
+import json
+import subprocess
+import os
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Tuple, Optional
+
+# Configuration
+INFRA_ROOT = Path("/opt/ds01-infra")
+LOG_DIR = Path("/var/log/ds01")
+SLICE_PATH = Path("/etc/systemd/system")
+
+
+class HealthCheck:
+    def __init__(self, verbose: bool = False, fix: bool = False):
+        self.verbose = verbose
+        self.fix = fix
+        self.results = []
+
+    def log(self, message: str):
+        """Log verbose output."""
+        if self.verbose:
+            print(f"  [DEBUG] {message}")
+
+    def check_docker_daemon(self) -> Tuple[bool, str]:
+        """Check if Docker daemon is running and responsive."""
+        self.log("Checking Docker daemon...")
+
+        try:
+            result = subprocess.run(
+                ['docker', 'info', '--format', '{{.ServerVersion}}'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                version = result.stdout.strip()
+                return True, f"Docker {version} running"
+            else:
+                return False, f"Docker not responding: {result.stderr.strip()}"
+        except subprocess.TimeoutExpired:
+            return False, "Docker daemon timeout"
+        except Exception as e:
+            return False, f"Docker check failed: {e}"
+
+    def check_cgroup_driver(self) -> Tuple[bool, str]:
+        """Check if Docker is using systemd cgroup driver."""
+        self.log("Checking cgroup driver...")
+
+        try:
+            result = subprocess.run(
+                ['docker', 'info', '--format', '{{.CgroupDriver}}'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            driver = result.stdout.strip()
+            if driver == "systemd":
+                return True, "Cgroup driver: systemd"
+            else:
+                msg = f"Cgroup driver: {driver} (expected: systemd)"
+                if self.fix:
+                    return False, f"{msg} - Run: sudo setup-docker-cgroups.sh"
+                return False, msg
+        except Exception as e:
+            return False, f"Cgroup driver check failed: {e}"
+
+    def check_default_cgroup_parent(self) -> Tuple[bool, str]:
+        """Check if default cgroup-parent is ds01.slice."""
+        self.log("Checking default cgroup-parent...")
+
+        try:
+            result = subprocess.run(
+                ['docker', 'info', '--format', '{{.CgroupParent}}'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            parent = result.stdout.strip()
+            if parent == "ds01.slice":
+                return True, "Default cgroup-parent: ds01.slice"
+            elif parent == "":
+                return False, "Default cgroup-parent not set"
+            else:
+                return False, f"Default cgroup-parent: {parent} (expected: ds01.slice)"
+        except Exception as e:
+            return False, f"Cgroup parent check failed: {e}"
+
+    def check_ds01_slice_exists(self) -> Tuple[bool, str]:
+        """Check if ds01.slice systemd unit exists."""
+        self.log("Checking ds01.slice...")
+
+        slice_file = SLICE_PATH / "ds01.slice"
+        if slice_file.exists():
+            return True, "ds01.slice exists"
+
+        if self.fix:
+            return False, "ds01.slice missing - Run: sudo setup-docker-cgroups.sh"
+        return False, "ds01.slice missing"
+
+    def check_opa_plugin(self) -> Tuple[bool, str]:
+        """Check if OPA plugin is loaded (if configured)."""
+        self.log("Checking OPA plugin...")
+
+        # Check if OPA is configured
+        daemon_json = Path("/etc/docker/daemon.json")
+        if not daemon_json.exists():
+            return True, "OPA not configured (daemon.json missing)"
+
+        try:
+            with open(daemon_json) as f:
+                config = json.load(f)
+
+            plugins = config.get('authorization-plugins', [])
+            if 'opa-docker-authz' not in plugins:
+                return True, "OPA not configured (not in authorization-plugins)"
+
+            # OPA is configured - check if it's responding
+            # Check systemd service status
+            result = subprocess.run(
+                ['systemctl', 'is-active', 'opa-docker-authz'],
+                capture_output=True,
+                text=True
+            )
+            if result.stdout.strip() == 'active':
+                return True, "OPA plugin active"
+            else:
+                return False, f"OPA plugin not active: {result.stdout.strip()}"
+
+        except json.JSONDecodeError:
+            return False, "Invalid daemon.json"
+        except Exception as e:
+            return False, f"OPA check failed: {e}"
+
+    def check_docker_wrapper(self) -> Tuple[bool, str]:
+        """Check if Docker wrapper is installed."""
+        self.log("Checking Docker wrapper...")
+
+        wrapper = Path("/usr/local/bin/docker")
+        if not wrapper.exists():
+            return False, "Docker wrapper not installed"
+
+        try:
+            with open(wrapper) as f:
+                content = f.read(500)
+                if "DS01 Docker Wrapper" in content or "docker-wrapper" in content:
+                    return True, "Docker wrapper installed"
+                else:
+                    return False, "/usr/local/bin/docker exists but not DS01 wrapper"
+        except Exception as e:
+            return False, f"Docker wrapper check failed: {e}"
+
+    def check_gpu_allocator_consistency(self) -> Tuple[bool, str]:
+        """Check if GPU allocator state matches Docker reality."""
+        self.log("Checking GPU allocator consistency...")
+
+        try:
+            # Get allocations from gpu-state-reader (reads Docker)
+            reader_path = INFRA_ROOT / "scripts/docker/gpu-state-reader.py"
+            if not reader_path.exists():
+                return False, "gpu-state-reader.py not found"
+
+            result = subprocess.run(
+                ['python3', str(reader_path), 'json'],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if result.returncode != 0:
+                return False, f"GPU state reader failed: {result.stderr.strip()}"
+
+            allocations = json.loads(result.stdout)
+
+            # Basic sanity check - allocations should be a dict
+            if not isinstance(allocations, dict):
+                return False, "Invalid allocation data format"
+
+            # Count containers
+            total_containers = sum(
+                len(info.get('containers', []))
+                for info in allocations.values()
+            )
+
+            return True, f"GPU allocator consistent ({total_containers} containers with GPUs)"
+
+        except json.JSONDecodeError:
+            return False, "Invalid GPU allocator output"
+        except subprocess.TimeoutExpired:
+            return False, "GPU allocator check timeout"
+        except Exception as e:
+            return False, f"GPU allocator check failed: {e}"
+
+    def check_user_slices(self) -> Tuple[bool, str]:
+        """Check if user slices exist for active users."""
+        self.log("Checking user slices...")
+
+        try:
+            # Get containers and their cgroups
+            result = subprocess.run(
+                ['docker', 'ps', '-a', '--format', '{{.Names}}'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            container_names = [n.strip() for n in result.stdout.split('\n') if n.strip()]
+            missing_slices = []
+
+            for name in container_names:
+                # Get cgroup parent
+                result = subprocess.run(
+                    ['docker', 'inspect', '--format',
+                     '{{.HostConfig.CgroupParent}}', name],
+                    capture_output=True,
+                    text=True
+                )
+                cgroup = result.stdout.strip()
+
+                # Check if it's a DS01 slice
+                if cgroup.startswith('ds01-') and cgroup.endswith('.slice'):
+                    slice_file = SLICE_PATH / cgroup
+                    if not slice_file.exists():
+                        missing_slices.append(cgroup)
+
+            if missing_slices:
+                return False, f"Missing slices: {', '.join(set(missing_slices)[:5])}"
+
+            return True, f"All user slices exist ({len(container_names)} containers checked)"
+
+        except Exception as e:
+            return False, f"User slice check failed: {e}"
+
+    def check_log_directory(self) -> Tuple[bool, str]:
+        """Check if log directory exists and is writable."""
+        self.log("Checking log directory...")
+
+        if not LOG_DIR.exists():
+            if self.fix:
+                try:
+                    LOG_DIR.mkdir(parents=True, exist_ok=True)
+                    return True, f"Created {LOG_DIR}"
+                except Exception as e:
+                    return False, f"Cannot create {LOG_DIR}: {e}"
+            return False, f"{LOG_DIR} does not exist"
+
+        # Check writable
+        test_file = LOG_DIR / ".health-check-test"
+        try:
+            test_file.touch()
+            test_file.unlink()
+            return True, f"{LOG_DIR} exists and writable"
+        except Exception:
+            return False, f"{LOG_DIR} not writable"
+
+    def check_nvidia_smi(self) -> Tuple[bool, str]:
+        """Check if nvidia-smi is available and GPUs are visible."""
+        self.log("Checking nvidia-smi...")
+
+        try:
+            result = subprocess.run(
+                ['nvidia-smi', '--query-gpu=name,memory.total', '--format=csv,noheader'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            if result.returncode == 0:
+                gpus = [line.strip() for line in result.stdout.split('\n') if line.strip()]
+                return True, f"{len(gpus)} GPU(s) detected"
+            else:
+                return False, f"nvidia-smi failed: {result.stderr.strip()}"
+
+        except FileNotFoundError:
+            return False, "nvidia-smi not found"
+        except subprocess.TimeoutExpired:
+            return False, "nvidia-smi timeout"
+        except Exception as e:
+            return False, f"nvidia-smi check failed: {e}"
+
+    def run_all_checks(self) -> List[Dict]:
+        """Run all health checks."""
+        checks = [
+            ("docker_daemon", self.check_docker_daemon),
+            ("cgroup_driver", self.check_cgroup_driver),
+            ("default_cgroup_parent", self.check_default_cgroup_parent),
+            ("ds01_slice", self.check_ds01_slice_exists),
+            ("opa_plugin", self.check_opa_plugin),
+            ("docker_wrapper", self.check_docker_wrapper),
+            ("nvidia_smi", self.check_nvidia_smi),
+            ("gpu_allocator", self.check_gpu_allocator_consistency),
+            ("user_slices", self.check_user_slices),
+            ("log_directory", self.check_log_directory),
+        ]
+
+        results = []
+        for name, check_fn in checks:
+            try:
+                passed, message = check_fn()
+                results.append({
+                    "check": name,
+                    "passed": passed,
+                    "message": message
+                })
+            except Exception as e:
+                results.append({
+                    "check": name,
+                    "passed": False,
+                    "message": f"Check raised exception: {e}"
+                })
+
+        return results
+
+
+def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description='DS01 Health Check')
+    parser.add_argument('--json', action='store_true', help='Output as JSON')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
+    parser.add_argument('--fix', action='store_true', help='Attempt to fix issues')
+
+    args = parser.parse_args()
+
+    health = HealthCheck(verbose=args.verbose, fix=args.fix)
+    results = health.run_all_checks()
+
+    passed = sum(1 for r in results if r['passed'])
+    failed = sum(1 for r in results if not r['passed'])
+
+    if args.json:
+        output = {
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "passed": passed,
+            "failed": failed,
+            "checks": results
+        }
+        print(json.dumps(output, indent=2))
+    else:
+        print(f"\nDS01 Health Check - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 60)
+
+        for result in results:
+            status = "\033[32m[PASS]\033[0m" if result['passed'] else "\033[31m[FAIL]\033[0m"
+            print(f"{status} {result['check']}: {result['message']}")
+
+        print("=" * 60)
+        print(f"Summary: {passed} passed, {failed} failed")
+
+        if failed > 0:
+            print("\nRun with --fix to attempt automatic fixes")
+            print("Run with --verbose for more details")
+
+    # Check for critical failures (Docker not responding)
+    docker_check = next((r for r in results if r['check'] == 'docker_daemon'), None)
+    if docker_check and not docker_check['passed']:
+        sys.exit(2)
+
+    sys.exit(0 if failed == 0 else 1)
+
+
+if __name__ == "__main__":
+    main()

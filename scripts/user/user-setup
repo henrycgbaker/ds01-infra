@@ -1,9 +1,19 @@
 #!/bin/bash
-# DS01 User Setup Wizard - Complete onboarding orchestrator
-# Tier 4 Wizard - Orchestrates: ssh-setup → project-init → vscode-setup
+# DS01 User Setup Wizard - L4 Wizard
+# Complete onboarding orchestrator
+# Orchestrates: ssh-setup → project-init → vscode-setup
 # File: /opt/ds01-infra/scripts/user/user-setup
 
 set -e
+
+# Source DS01 context library
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
+
+# Set orchestration context - suppresses atomic command "Next steps" output
+export DS01_CONTEXT="orchestration"
+export DS01_INTERFACE="orchestration"
 
 BLUE='\033[0;36m'
 GREEN='\033[0;32m'

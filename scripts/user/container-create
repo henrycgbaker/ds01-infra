@@ -1,8 +1,14 @@
 #!/bin/bash
-# DS01 Container Create - Creates containers via mlc-create-wrapper
-# Tier 2 Command - Can be used standalone or called by orchestrators
+# DS01 Container Create - L2 Atomic Command
+# Creates containers via mlc-create-wrapper
+# Can be used standalone or called by orchestrators
 
 set -e
+
+# Source DS01 context library for conditional output
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
 
 # Colors
 BLUE='\033[94m'
@@ -131,7 +137,8 @@ done
 
 # Interactive mode if no container name provided
 if [ -z "$CONTAINER_NAME" ]; then
-    if [ -z "$DS01_ORCHESTRATOR" ]; then
+    # Show header only in atomic context
+    if [[ -z "$DS01_ORCHESTRATOR" && "${DS01_CONTEXT:-atomic}" == "atomic" ]]; then
         echo ""
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${BOLD}DS01 Container Creation Wizard${NC}"
@@ -288,7 +295,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                                     echo "Using existing container '$CONTAINER_NAME'"
 
                                     # If called from orchestrator, don't exit - let orchestrator handle starting
-                                    if [ -n "$DS01_ORCHESTRATOR" ]; then
+                                    if [[ -n "$DS01_ORCHESTRATOR" || "${DS01_CONTEXT:-atomic}" == "orchestration" ]]; then
                                         export SKIP_CREATE=true
                                         # Continue to skip creation but allow orchestrator to start container
                                     else
@@ -881,8 +888,9 @@ if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
     echo -e "${GREEN}${BOLD}✓ Container Created Successfully!${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-    # Only show Tier 2 "Next steps" when NOT called from Tier 3 orchestrator
-    if [ -z "$DS01_ORCHESTRATOR" ]; then
+    # Only show L2 "Next steps" when NOT called from orchestrator
+    # Check both DS01_CONTEXT (new) and DS01_ORCHESTRATOR (legacy)
+    if [[ -z "$DS01_ORCHESTRATOR" && "${DS01_CONTEXT:-atomic}" == "atomic" ]]; then
         if [ "$GUIDED" = true ]; then
             echo ""
             echo -e "${BOLD}What Just Happened?${NC}"

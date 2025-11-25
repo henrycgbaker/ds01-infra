@@ -1,6 +1,7 @@
 #!/bin/bash
-# DS01 Container Run - Starts and attaches to containers via mlc-open
-# Tier 2 Command - Can be used standalone or called by orchestrators
+# DS01 Container Run - L2 Atomic Command
+# Starts and attaches to containers via mlc-open
+# Can be used standalone or called by orchestrators
 
 set -e
 
@@ -10,8 +11,20 @@ INFRA_ROOT="/opt/ds01-infra"
 MLC_OPEN="$INFRA_ROOT/aime-ml-containers/mlc-open"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
+# Source DS01 context library for conditional output
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
+
 # Source interactive library
-source /usr/local/lib/interactive-select.sh
+if [ -f "/usr/local/lib/interactive-select.sh" ]; then
+    source /usr/local/lib/interactive-select.sh
+elif [ -f "$INFRA_ROOT/scripts/lib/interactive-select.sh" ]; then
+    source "$INFRA_ROOT/scripts/lib/interactive-select.sh"
+else
+    echo "Error: interactive-select.sh not found"
+    exit 1
+fi
 
 # Colors
 BLUE='\033[94m'

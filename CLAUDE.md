@@ -22,48 +22,69 @@ DS01 Infrastructure: GPU-enabled container management for multi-user data scienc
 
 ## Architecture Design Principles
 
-### Tiered Hierarchical Design
+### Layered Architecture (Implementation Hierarchy)
 
-DS01 uses a **modular, layered architecture** that wraps and enhances AIME MLC without replacing it:
+DS01 uses a **5-layer implementation hierarchy** with **4 user-facing interfaces**:
 
-**TIER 1: Base System** (`aime-ml-containers` v2)
-- 11 core `mlc` commands providing container lifecycle management
-- 150+ pre-built framework images (PyTorch 2.8.0, TensorFlow 2.16.1, etc.)
-- Container naming: `{container-name}._.{user-id}` (AIME convention)
-- **DS01 approach**: Wrap strategically (mlc-create, mlc-stats), use directly (mlc-open, mlc-list, mlc-stop, etc.)
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         LAYER HIERARCHY (Implementation)                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│   L4: WIZARDS (Complete Guided Workflows)                                   │
+│   ├── user-setup           # SSH → project-init → vscode                    │
+│   └── project-init         # dir → git → readme → image → deploy            │
+│                                                                             │
+│   L3: ORCHESTRATORS (Multi-Step Container Sequences)                        │
+│   ├── container deploy     # create + start                                 │
+│   └── container retire     # stop + remove + free GPU                       │
+│                                                                             │
+│   L2: ATOMIC (Single-Purpose Commands)                                      │
+│   ├── Container: create, start, open, run, stop, remove, list, stats, exit  │
+│   └── Image:     create, list, update, delete                               │
+│                                                                             │
+│   L1: MLC (AIME Machine Learning Containers) ─────────────────── HIDDEN     │
+│   └── mlc-create, mlc-open, mlc-stop, mlc-remove, mlc-list                  │
+│                                                                             │
+│   L0: DOCKER (Foundational Container Runtime)                               │
+│   └── docker run, exec, stop, rm, build, images, ps, stats                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
-**TIER 2: Atomic Unit Commands** (Single-purpose, modular, reusable)
-- **Container Management** (8): `container-{create|run|start|stop|list|stats|remove|exit}`
-  - Wrap AIME commands with DS01 UX (interactive GUI, --guided mode, GPU management)
-  - Each command does ONE thing and does it well
-- **Image Management** (4): `image-{create|list|update|delete}`
-  - 4-phase workflow: Framework → Jupyter → Data Science → Use Case
-  - Shows AIME base packages, supports pip version specifiers
-- **Project Setup** (5): `{dir|git|readme|ssh|vscode}-{create|init|setup}`
-- All support `--guided` flag for educational mode
-- Can be used standalone or orchestrated
+### User-Facing Interfaces
 
-**TIER 3: Container Orchestrators** (Combine Tier 2 atomic commands)
-- **Ephemeral container model**: Containers are temporary compute, workspaces persist
-- `container-deploy`: Creates AND starts containers (container-create → container-start/run)
-  - Prompts: "Start in background or open terminal?"
-  - Supports `--background` and `--open` flags
-  - Default behavior for quick deployment
-- `container-retire`: Stops AND removes containers (container-stop → container-remove)
-  - Immediately releases GPU for others
-  - Preserves workspace files, Dockerfiles, and images
-  - Encourages "good citizen" resource management
+**DS01 ORCHESTRATION INTERFACE (DEFAULT)** - For all users
+- L4 Wizards: `user-setup`, `project-init`
+- L3 Orchestrators: `container deploy`, `container retire`
+- Shared L2: `image-*`, `container-list`, `container-stats`
+- Binary state model: containers are `running` or `removed` (no intermediate states)
 
-**TIER 4: Workflow Orchestrators** (Complete multi-step workflows)
-- Dispatchers: Support both `command subcommand` and `command-subcommand` syntax
-- `project-init`: dir-create → git-init → readme-create → image-create → container-deploy
-- `user-setup` (Complete onboarding): Educational first-time onboarding (ssh-setup → project-init → vscode-setup)
-   - Command variants: `user-setup`, `user setup`, `new-user`
+**DS01 ATOMIC INTERFACE (ADMIN)** - For admins and power users
+- Full L2 commands: `container-create`, `container-start`, `container-stop`, etc.
+- Full state model: `created` → `running` → `stopped` → `removed`
+- GPU hold timeout applies
 
-**TIER 4: Workflow Wizards** (Complete onboarding)
-- `user-setup`: Full onboarding (ssh-setup → project-init → vscode-setup)
-- Educational focus for first-time users
-- 69.4% code reduction vs original monolithic version
+**DOCKER INTERFACE (ADVANCED)** - Direct Docker commands
+- Still subject to resource enforcement (cgroups + OPA)
+- Containers placed in `ds01-{group}-{user}.slice`
+
+**OTHER INTERFACE** - External tools (VS Code Dev Containers, Docker Compose, etc.)
+- Allowed through OPA, subject to cgroup enforcement
+- Visible in dashboard as "Other" category
+
+### Conditional Output System
+
+Commands detect context via `DS01_CONTEXT` environment variable:
+- Orchestrators set `DS01_CONTEXT=orchestration` before calling atomic commands
+- Atomic commands suppress "Next steps" output when called from orchestrators
+- Users see interface-appropriate help based on entry point
+
+### Universal Enforcement
+
+ALL containers (from any interface) are subject to:
+- Systemd cgroups (`ds01.slice` hierarchy)
+- Docker wrapper (`/usr/local/bin/docker`) for per-user slice injection
+- OPA authorization plugin (fail-open with logging)
+- GPU allocation tracking via Docker labels
 
 ### Ephemeral Container Philosophy
 
@@ -158,32 +179,38 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 
 ### User Commands (Recommended)
 
-**Tier 3 Orchestrators (Ephemeral Model):**
+**L3 Orchestrators (Default - Ephemeral Model):**
 ```bash
 # Deploy container (create + start)
-container-deploy my-project                    # Interactive mode
-container-deploy my-project --open             # Create and open terminal
-container-deploy my-project --background       # Create and start in background
-container-deploy my-project --guided           # Beginner mode with explanations
+container deploy my-project                    # Interactive mode
+container deploy my-project --open             # Create and open terminal
+container deploy my-project --background       # Create and start in background
+container deploy my-project --guided           # Beginner mode with explanations
 
 # Retire container (stop + remove + free GPU)
-container-retire my-project                    # Interactive mode
-container-retire my-project --force            # Skip confirmations
-container-retire my-project --images           # Also remove Docker image
+container retire my-project                    # Interactive mode
+container retire my-project --force            # Skip confirmations
+container retire my-project --images           # Also remove Docker image
 ```
 
-**Tier 2 Atomic Commands (Advanced/Step-by-Step):**
+**L2 Atomic Commands (Admin/Advanced):**
 ```bash
 # Container lifecycle (manual control)
 container-create my-project                    # Create only
 container-start my-project                     # Start in background
-container-run my-project                       # Start and enter
+container-run my-project                       # Start and enter (L2)
 container-stop my-project                      # Stop only
 container-remove my-project                    # Remove only
 
-# Container inspection
+# Container inspection (shared with L3)
 container-list                                 # View all containers
 container-stats                                # Resource usage
+```
+
+**L4 Wizards (Complete onboarding):**
+```bash
+user-setup                                     # Full user onboarding
+project-init                                   # Create new project + deploy
 ```
 
 **Shell Configuration:**
@@ -293,20 +320,27 @@ Cron jobs run as root and check ALL containers against each owner's specific res
 
 ```
 scripts/
-├── docker/              # Container creation, GPU allocation (Tier 1)
-│   ├── mlc-create-wrapper.sh, mlc-patched.py
-│   ├── get_resource_limits.py, gpu_allocator.py
-├── user/                # User-facing commands (Tier 2, 3, 4)
-│   ├── Tier 2 (Atomic): container-{create|start|run|stop|remove|list|stats|exit}
-│   ├── Tier 2 (Atomic): image-{create|list|update|delete}
-│   ├── Tier 2 (Atomic): {dir|git|readme|ssh|vscode}-*
-│   ├── Tier 3 (Orchestrators): container-{deploy|retire}
-│   ├── Tier 4 (Workflows): user-setup, project-init, *-dispatcher.sh
+├── docker/              # L0/L1 - Container creation, GPU allocation
+│   ├── mlc-create-wrapper.sh, mlc-patched.py    # L1 (HIDDEN)
+│   ├── get_resource_limits.py, gpu_allocator_v2.py
+│   ├── docker-wrapper.sh                         # Universal enforcement
+│   ├── gpu-state-reader.py, event-logger.py
+├── user/                # L2/L3/L4 - User-facing commands
+│   ├── L2 (Atomic): container-{create|start|run|stop|remove|list|stats|exit}
+│   ├── L2 (Atomic): image-{create|list|update|delete}
+│   ├── L2 (Atomic): {dir|git|readme|ssh|vscode}-*
+│   ├── L3 (Orchestrators): container-{deploy|retire}
+│   ├── L4 (Wizards): user-setup, project-init, *-dispatcher.sh
 │   └── v1-backup/       # Backup of container workflow scripts before refactor
+├── lib/                 # Shared libraries
+│   ├── ds01-context.sh  # Context detection for conditional output
+│   └── interactive-select.sh
 ├── system/              # System administration
+│   ├── setup-docker-cgroups.sh, setup-opa-authz.sh  # Universal enforcement
 │   ├── setup-resource-slices.sh, create-user-slice.sh
 │   ├── add-user-to-docker.sh, deploy-commands.sh
 ├── monitoring/          # Metrics and auditing
+│   ├── ds01-health-check, detect-bare-metal.py
 │   ├── gpu-status-dashboard.py, check-idle-containers.sh
 │   ├── collect-*-metrics.sh, audit-*.sh
 ├── maintenance/         # Cleanup and housekeeping
@@ -330,8 +364,19 @@ sudo systemctl daemon-reload
 
 **Monitor system:**
 ```bash
-ds01-dashboard                           # Admin dashboard
-python3 scripts/docker/gpu_allocator.py status
+dashboard                                # Default snapshot view
+dashboard interfaces                     # Containers grouped by interface (Orchestration/Atomic/Docker/Other)
+dashboard users                          # Per-user breakdown
+dashboard monitor                        # Watch mode (1s refresh)
+dashboard allocations 20                 # Recent GPU allocation events
+
+# Check bare metal processes
+python3 scripts/monitoring/detect-bare-metal.py --json
+
+# Check system health
+ds01-health-check
+
+# View logs
 tail -f /var/log/ds01/gpu-allocations.log
 ```
 

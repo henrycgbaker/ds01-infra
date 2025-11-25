@@ -2,6 +2,11 @@
 """
 DS01 Unified Dashboard - Comprehensive system monitoring
 
+Updated for Layered Architecture:
+- Shows containers grouped by interface (Orchestration, Atomic, Docker, Other)
+- Bare metal process detection and warnings
+- Tracks ALL containers in ds01.slice
+
 Usage:
   dashboard                    # Default snapshot view
   dashboard --full             # All sections expanded
@@ -12,6 +17,7 @@ Usage:
   dashboard users              # Per-user summary
   dashboard allocations [N]    # Recent N allocations (default 10)
   dashboard monitor            # Continuous watch mode (1s refresh)
+  dashboard interfaces         # Container breakdown by interface
 """
 
 import sys
@@ -27,7 +33,8 @@ import importlib.util
 
 # Add script directory to path
 SCRIPT_DIR = Path(__file__).parent
-INFRA_ROOT = SCRIPT_DIR.parent.parent
+# Hardcode INFRA_ROOT since this script may be deployed to /usr/local/bin
+INFRA_ROOT = Path('/opt/ds01-infra')
 sys.path.insert(0, str(INFRA_ROOT / "scripts" / "docker"))
 
 # Import helper modules
@@ -334,6 +341,36 @@ class DashboardData:
         except subprocess.CalledProcessError:
             return []
 
+    def get_containers_by_interface(self) -> Dict:
+        """
+        Get all containers grouped by interface.
+        Uses updated GPUStateReader that tracks all containers in ds01.slice.
+        """
+        return self.state_reader.get_all_containers_by_interface()
+
+    def get_bare_metal_processes(self) -> Dict:
+        """
+        Detect processes running outside containers.
+        Returns warning info for display in dashboard.
+        """
+        try:
+            detect_script = INFRA_ROOT / 'scripts' / 'monitoring' / 'detect-bare-metal.py'
+            if not detect_script.exists():
+                return {'warning': False, 'total_count': 0, 'processes': []}
+
+            result = subprocess.run(
+                ['python3', str(detect_script), '--json'],
+                capture_output=True, text=True, timeout=30
+            )
+
+            if result.returncode == 0:
+                return json.loads(result.stdout)
+            else:
+                return {'warning': False, 'total_count': 0, 'processes': []}
+
+        except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):
+            return {'warning': False, 'total_count': 0, 'processes': []}
+
 
 class DashboardView:
     """Visual rendering with color coding"""
@@ -590,6 +627,76 @@ class DashboardView:
 
         print()
 
+    def render_interfaces_view(self):
+        """Render containers grouped by interface"""
+        by_interface = self.data.get_containers_by_interface()
+        bare_metal = self.data.get_bare_metal_processes()
+
+        print("═" * 70)
+        print(Colors.colorize("          CONTAINERS BY INTERFACE (Layered Architecture)", Colors.BOLD))
+        print("═" * 70)
+        print()
+
+        interface_names = {
+            'orchestration': ('DS01 ORCHESTRATION', Colors.GREEN, 'Default user interface'),
+            'atomic': ('DS01 ATOMIC', Colors.BLUE, 'Admin/advanced interface'),
+            'docker': ('DOCKER DIRECT', Colors.YELLOW, 'Direct docker commands'),
+            'other': ('OTHER', Colors.GRAY, 'VS Code, Compose, JupyterHub, etc.')
+        }
+
+        total_containers = 0
+        for interface, containers in by_interface.items():
+            name, color, desc = interface_names.get(interface, (interface.upper(), Colors.GRAY, ''))
+            count = len(containers)
+            total_containers += count
+
+            print(Colors.colorize(f"┌─ {name} ({count})", color))
+            print(Colors.colorize(f"│  {desc}", Colors.GRAY))
+
+            if not containers:
+                print(f"│  (no containers)")
+            else:
+                for c in containers[:10]:  # Limit to 10 per interface
+                    status_icon = "🟢" if c['running'] else "○"
+                    gpu_str = f"GPU:{c['gpu']}" if c.get('gpu') else "no GPU"
+                    user_str = c.get('user', 'unknown')[:12]
+                    name_str = c['name'][:25]
+                    print(f"│  {status_icon} {name_str:<25} [{user_str:<12}] {gpu_str}")
+
+                if len(containers) > 10:
+                    print(f"│  ... and {len(containers) - 10} more")
+
+            print("│")
+
+        print(f"└─ Total: {total_containers} containers")
+        print()
+
+        # Bare metal warning
+        if bare_metal.get('warning'):
+            print(Colors.colorize("⚠️  BARE METAL PROCESSES", Colors.RED))
+            print("┌" + "─" * 68 + "┐")
+            print(f"│ {bare_metal['total_count']} process(es) running outside containers" + " " * 30 + "│")
+            print(f"│ Compute workloads: {bare_metal.get('compute_count', 0)}" + " " * 45 + "│")
+
+            for proc in bare_metal.get('processes', [])[:5]:
+                flag = "*" if proc.get('is_compute') else " "
+                line = f"│ {flag} PID {proc['pid']:<6} {proc['username']:<10} CPU:{proc.get('cpu_percent', 0):>5.1f}% {proc['name'][:20]}"
+                print(line + " " * (69 - len(line)) + "│")
+
+            if bare_metal['total_count'] > 5:
+                print(f"│ ... and {bare_metal['total_count'] - 5} more" + " " * 50 + "│")
+
+            print("├" + "─" * 68 + "┤")
+            print("│ Please run workloads inside containers for proper isolation.       │")
+            print("│ Use: container deploy <name>                                       │")
+            print("└" + "─" * 68 + "┘")
+            print()
+
+        # Legend
+        print(Colors.colorize("Legend:", Colors.BLUE))
+        print("  🟢 Running    ○ Stopped    * Compute workload")
+        print()
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -600,7 +707,7 @@ def main():
 
     parser.add_argument('--full', action='store_true', help='Show all sections expanded')
     parser.add_argument('--temp', action='store_true', help='Show thermal/power info only')
-    parser.add_argument('command', nargs='?', choices=['mig-status', 'util', 'container', 'users', 'allocations', 'monitor'], help='Subcommand')
+    parser.add_argument('command', nargs='?', choices=['mig-status', 'util', 'container', 'users', 'allocations', 'monitor', 'interfaces'], help='Subcommand')
     parser.add_argument('args', nargs='*', help='Additional arguments')
 
     args = parser.parse_args()
@@ -615,6 +722,8 @@ def main():
     elif args.command == 'allocations':
         limit = int(args.args[0]) if args.args else 10
         view.render_allocations_view(limit)
+    elif args.command == 'interfaces':
+        view.render_interfaces_view()
     elif args.command == 'monitor':
         # Watch mode
         try:

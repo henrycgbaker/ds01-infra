@@ -1,11 +1,20 @@
 #!/bin/bash
-# DS01 Container Retire - Tier 3 Orchestrator
+# DS01 Container Retire - L3 Orchestrator
 # Streamlined workflow: Stop container → Remove container (single command)
 # Combines container-stop + container-remove with unified messaging
 
 set -e
 
-# Export orchestrator flag for coordinated behavior
+# Source DS01 context library
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
+
+# Set orchestration context - suppresses atomic command "Next steps" output
+export DS01_CONTEXT="orchestration"
+export DS01_INTERFACE="orchestration"
+
+# Legacy compatibility
 export DS01_ORCHESTRATOR=retire
 
 # Colors
@@ -40,7 +49,7 @@ fi
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Retire${NC}"
-    echo -e "${DIM}Tier 3 Orchestrator - Stops and removes containers in one command${NC}"
+    echo -e "${DIM}L3 Orchestrator - Stops and removes containers in one command${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-retire [name] [options]"

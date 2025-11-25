@@ -1,8 +1,18 @@
 #!/bin/bash
-# DS01 Project Init - Unified workflow with optional --guided mode
+# DS01 Project Init - L4 Wizard
+# Complete project initialization workflow
 # Usage: project-init [project-name] [--guided]
 
 set -e
+
+# Source DS01 context library
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
+
+# Set orchestration context - suppresses atomic command "Next steps" output
+export DS01_CONTEXT="orchestration"
+export DS01_INTERFACE="orchestration"
 
 BLUE='\033[0;36m'
 GREEN='\033[0;32m'

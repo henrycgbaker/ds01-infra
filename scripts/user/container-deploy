@@ -1,11 +1,20 @@
 #!/bin/bash
-# DS01 Container Deploy - Tier 3 Orchestrator
+# DS01 Container Deploy - L3 Orchestrator
 # Streamlined workflow: Create container → Start/Run container (single command)
 # Combines container-create + container-start/run with unified messaging
 
 set -e
 
-# Export orchestrator flag to suppress Tier 2 "Next steps" output
+# Source DS01 context library
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
+
+# Set orchestration context - suppresses atomic command "Next steps" output
+export DS01_CONTEXT="orchestration"
+export DS01_INTERFACE="orchestration"
+
+# Legacy compatibility
 export DS01_ORCHESTRATOR=deploy
 
 # Colors
@@ -31,7 +40,7 @@ CONTAINER_RUN="$SCRIPT_DIR/container-run"
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Deploy${NC}"
-    echo -e "${DIM}Tier 3 Orchestrator - Creates and starts containers in one command${NC}"
+    echo -e "${DIM}L3 Orchestrator - Creates and starts containers in one command${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-deploy [name] [image] [options]"
@@ -72,7 +81,7 @@ usage() {
     echo -e "  ${DIM}# Guided mode for beginners${NC}"
     echo "  container-deploy --guided"
     echo ""
-    echo -e "${CYAN}Alternative (Tier 2 commands):${NC}"
+    echo -e "${CYAN}Alternative (L2 Atomic commands):${NC}"
     echo "  If you prefer step-by-step control:"
     echo -e "  1. ${GREEN}container-create <name>${NC}   # Create container"
     echo -e "  2. ${GREEN}container-run <name>${NC}      # Start and enter"

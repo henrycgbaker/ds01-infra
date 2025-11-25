@@ -3,6 +3,12 @@
 GPU Allocator Smart - Stateless GPU Allocation Manager
 Uses Docker labels as single source of truth. No state files maintained.
 Reads current state from Docker via gpu-state-reader.py.
+
+Updated for DS01 Layered Architecture:
+- Interface-specific state handling:
+  - Orchestration: Binary state model (running/removed only)
+  - Atomic/Docker/Other: Full state model (created/running/stopped/removed)
+- GPU hold behavior varies by interface
 """
 
 import sys
@@ -13,6 +19,12 @@ import importlib.util
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Tuple
+
+# Interface constants (from gpu-state-reader.py)
+INTERFACE_ORCHESTRATION = "orchestration"
+INTERFACE_ATOMIC = "atomic"
+INTERFACE_DOCKER = "docker"
+INTERFACE_OTHER = "other"
 
 # Import our helper modules (handle hyphenated filenames)
 SCRIPT_DIR = Path(__file__).parent
@@ -84,6 +96,43 @@ class GPUAllocatorSmart:
 
         with open(self.log_file, 'a') as f:
             f.write(log_entry)
+
+    def _get_container_interface(self, container: str) -> str:
+        """
+        Get the interface a container was created with.
+        Returns: INTERFACE_ORCHESTRATION, INTERFACE_ATOMIC, INTERFACE_DOCKER, or INTERFACE_OTHER
+        """
+        try:
+            result = subprocess.run(
+                ['docker', 'inspect', '--format',
+                 '{{index .Config.Labels "ds01.interface"}}|||'
+                 '{{index .Config.Labels "ds01.managed"}}|||'
+                 '{{.Name}}'],
+                capture_output=True, text=True, check=True
+            )
+            output = result.stdout.strip()
+            parts = output.split('|||')
+            interface_label = parts[0] if len(parts) > 0 else ''
+            managed_label = parts[1] if len(parts) > 1 else ''
+            name = parts[2].lstrip('/') if len(parts) > 2 else ''
+
+            # Explicit interface label
+            if interface_label and interface_label != '<no value>':
+                return interface_label
+
+            # DS01 managed but no explicit interface -> atomic (backward compat)
+            if managed_label == 'true':
+                return INTERFACE_ATOMIC
+
+            # AIME naming convention
+            if '._.' in name:
+                return INTERFACE_ATOMIC
+
+            # Default: docker direct
+            return INTERFACE_DOCKER
+
+        except subprocess.CalledProcessError:
+            return INTERFACE_DOCKER
 
     def allocate_gpu(self, username: str, container: str,
                      max_gpus: Optional[int] = None) -> Tuple[Optional[str], str]:
@@ -237,6 +286,10 @@ class GPUAllocatorSmart:
         Remove stopped containers that exceeded GPU hold timeout.
         Container removal automatically releases GPU (Docker labels gone = GPU freed).
 
+        Interface-specific behavior:
+        - Orchestration: No hold timeout, stopped containers removed immediately
+        - Atomic/Docker/Other: Respect gpu_hold_after_stop timeout
+
         Args:
             username: Optional - only check this user's containers (None = all users)
 
@@ -293,6 +346,9 @@ class GPUAllocatorSmart:
                 if username and user != username:
                     continue
 
+                # Get container interface
+                interface = self._get_container_interface(container)
+
                 # Check if container is stopped
                 try:
                     result = subprocess.run(
@@ -321,8 +377,19 @@ class GPUAllocatorSmart:
 
                     # Parse stopped timestamp (remove Z suffix and parse)
                     stopped_at = datetime.fromisoformat(finished_at_str.replace('Z', '+00:00')).replace(tzinfo=None)
+                    elapsed = now - stopped_at
 
-                    # Get user's gpu_hold_after_stop timeout
+                    # INTERFACE-SPECIFIC STATE HANDLING
+                    if interface == INTERFACE_ORCHESTRATION:
+                        # Orchestration Interface: Binary state model
+                        # Stopped containers should be removed immediately (no limbo state)
+                        subprocess.run(['docker', 'rm', '-f', container], check=True)
+                        removed.append((container, f"Orchestration interface - binary state (stopped→removed)"))
+                        self._log_event("REMOVED_STALE", user or "unknown", container, gpu_slot,
+                                       reason=f"Orchestration binary state: stopped→removed")
+                        continue
+
+                    # Atomic/Docker/Other: Full state model with hold timeout
                     if user:
                         limits = self._get_user_limits(user)
                         hold_timeout_str = limits.get('gpu_hold_after_stop')
@@ -333,7 +400,6 @@ class GPUAllocatorSmart:
                             continue
 
                         # Check if timeout exceeded
-                        elapsed = now - stopped_at
                         if elapsed > hold_timeout:
                             # Remove container (automatically releases GPU)
                             subprocess.run(['docker', 'rm', '-f', container], check=True)
