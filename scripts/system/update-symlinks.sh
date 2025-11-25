@@ -1,7 +1,11 @@
 #!/bin/bash
-# DS01 Infrastructure - Symlink Management
-# Creates symlinks for all DS01 commands in /usr/local/bin
+# DS01 Infrastructure - Command Deployment
+# Copies all DS01 commands to /usr/local/bin (not symlinks)
 # Run with: sudo bash /opt/ds01-infra/scripts/system/update-symlinks.sh
+#
+# Security: Copies files instead of symlinking to keep /opt/ds01-infra secure
+# This allows /opt/ds01-infra to have restrictive permissions (700) while
+# commands in /usr/local/bin remain accessible (755) to all users
 #
 # Four-Tier Architecture:
 #   Tier 1: Base System (mlc-* wrappers)
@@ -22,7 +26,7 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}DS01 Infrastructure - Symlink Update${NC}"
+echo -e "${BOLD}DS01 Infrastructure - Command Deployment${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -43,7 +47,12 @@ create_symlink() {
         return 1
     fi
 
-    if ln -sf "$target" "$SYMLINK_DIR/$linkname" 2>/dev/null; then
+    # Copy file instead of symlinking (keeps /opt/ds01-infra secure)
+    # Remove old symlink/file first
+    rm -f "$SYMLINK_DIR/$linkname" 2>/dev/null
+
+    if cp "$target" "$SYMLINK_DIR/$linkname" 2>/dev/null; then
+        chmod 755 "$SYMLINK_DIR/$linkname" 2>/dev/null
         echo -e "${GREEN}✓${NC} $linkname ${description:+→ $description}"
         return 0
     else
@@ -87,10 +96,11 @@ create_symlink "$INFRA_ROOT/scripts/user/image-update" "image-update" && ((SUCCE
 create_symlink "$INFRA_ROOT/scripts/user/image-delete" "image-delete" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-echo -e "${BOLD}Project Setup Modules (5 commands):${NC}"
+echo -e "${BOLD}Project Setup Modules (6 commands):${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/dir-create" "dir-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/git-init" "git-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/readme-create" "readme-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/shell-setup" "shell-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ssh-setup" "ssh-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/vscode-setup" "vscode-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
