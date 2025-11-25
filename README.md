@@ -358,12 +358,31 @@ groups | grep docker
 docker info
 ```
 
-### Command Not Found
+### Commands Not Found
 
-**Symptom:** `user-setup: command not found`
+**Symptoms:** `bash: container-create: command not found` or similar DS01 command errors
 
-**Solution:**
+**Quick Fix:**
 ```bash
+# Option 1: Re-login (applies system-wide config)
+exit  # then log back in
+
+# Option 2: Reload shell config
+source ~/.bashrc
+
+# Option 3: Run shell-setup
+/opt/ds01-infra/scripts/user/shell-setup
+```
+
+**Verify PATH:**
+```bash
+echo $PATH | grep /usr/local/bin
+# Should show /usr/local/bin
+```
+
+**If commands still not found after PATH is correct:**
+```bash
+# Update symlinks (admin only)
 sudo scripts/system/update-symlinks.sh
 ```
 

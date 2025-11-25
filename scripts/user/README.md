@@ -321,6 +321,27 @@ vscode-setup [--guided]
 # Educational content about development workflows
 ```
 
+**shell-setup** - Configure shell PATH for DS01 commands
+```bash
+shell-setup                # Fix PATH configuration
+shell-setup --check        # Verify PATH
+shell-setup --guided       # Educational mode
+shell-setup --force        # Reconfigure even if already correct
+
+# If commands not accessible:
+/opt/ds01-infra/scripts/user/shell-setup
+```
+
+**Purpose:** Configure shell PATH for DS01 commands
+**Category:** Tier 2 - Setup Module
+
+**Problem:** Domain users may not have `/usr/local/bin` in PATH
+
+**Technical:**
+- Adds PATH config to `~/.bashrc` and `~/.zshrc`
+- Idempotent (safe to run multiple times)
+- Complements system-wide `/etc/profile.d/` configuration
+
 ## Command Flags
 
 ### Common Flags (All Commands)

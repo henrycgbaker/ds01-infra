@@ -500,6 +500,38 @@ sudo scripts/system/setup-resource-slices.sh
 sudo systemctl daemon-reload
 ```
 
+## System Configuration Mirrors
+
+DS01 tracks system configuration files in git for version control and reproducibility.
+
+### profile.d - Shell PATH Configuration
+
+**File:** `/opt/ds01-infra/config/etc-mirrors/profile.d/ds01-path.sh`
+**Deploy to:** `/etc/profile.d/ds01-path.sh`
+
+**Purpose:** System-wide PATH configuration for login shells
+
+**Deployment:**
+```bash
+sudo cp /opt/ds01-infra/config/etc-mirrors/profile.d/ds01-path.sh /etc/profile.d/ds01-path.sh
+sudo chmod 644 /etc/profile.d/ds01-path.sh
+```
+
+### skel - New User Template
+
+**File:** `/opt/ds01-infra/config/etc-mirrors/skel/.bashrc`
+**Deploy to:** `/etc/skel/.bashrc`
+
+**Purpose:** Template bashrc for new users with DS01 PATH configuration
+
+**Deployment:**
+```bash
+sudo cp /opt/ds01-infra/config/etc-mirrors/skel/.bashrc /etc/skel/.bashrc
+sudo chmod 644 /etc/skel/.bashrc
+```
+
+**Maintenance:** When Ubuntu updates `/etc/skel/.bashrc`, merge DS01 additions
+
 ## Related Documentation
 
 - [Root README](../README.md) - System overview

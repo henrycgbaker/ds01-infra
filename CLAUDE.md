@@ -186,6 +186,16 @@ container-list                                 # View all containers
 container-stats                                # Resource usage
 ```
 
+**Shell Configuration:**
+```bash
+shell-setup                # Fix PATH configuration
+shell-setup --check        # Verify PATH
+shell-setup --guided       # With explanations
+
+# If commands not accessible:
+/opt/ds01-infra/scripts/user/shell-setup
+```
+
 ### Development/Testing
 ```bash
 python3 scripts/docker/get_resource_limits.py <username>

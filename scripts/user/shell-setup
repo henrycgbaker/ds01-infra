@@ -1,0 +1,252 @@
+#!/bin/bash
+# DS01 Shell Setup - Configure shell PATH for DS01 commands
+# Tier 2 Command - Can be used standalone or called by orchestrators
+# File: /opt/ds01-infra/scripts/user/shell-setup
+
+set -e
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 Shell Setup${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  shell-setup [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided       Show detailed explanations for beginners"
+    echo "  --force        Reconfigure even if PATH already correct"
+    echo "  --check        Check PATH without making changes"
+    echo "  -h, --help     Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Configures your shell to access DS01 CLI commands."
+    echo "  Adds /usr/local/bin to PATH in ~/.bashrc and ~/.zshrc"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Check if PATH is configured${NC}"
+    echo "  shell-setup --check"
+    echo ""
+    echo -e "  ${DIM}# Fix PATH configuration${NC}"
+    echo "  shell-setup"
+    echo ""
+    echo -e "  ${DIM}# With explanations${NC}"
+    echo "  shell-setup --guided"
+    echo ""
+    echo -e "${YELLOW}💡 Tip:${NC} If you can't run 'shell-setup', use the absolute path:"
+    echo "  /opt/ds01-infra/scripts/user/shell-setup"
+    echo ""
+}
+
+# Parse arguments
+GUIDED=false
+FORCE=false
+CHECK_ONLY=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        --force)
+            FORCE=true
+            shift
+            ;;
+        --check)
+            CHECK_ONLY=true
+            shift
+            ;;
+        -h|--help|--info)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Check current PATH
+check_path() {
+    case ":${PATH}:" in
+        *:/usr/local/bin:*)
+            return 0  # PATH is correct
+            ;;
+        *)
+            return 1  # PATH is broken
+            ;;
+    esac
+}
+
+# Check if file has DS01 PATH config
+has_ds01_config() {
+    local file=$1
+    if [ ! -f "$file" ]; then
+        return 1
+    fi
+    grep -q "# DS01: Ensure /usr/local/bin is in PATH" "$file"
+}
+
+# Add PATH configuration to file
+add_path_config() {
+    local file=$1
+    local shell_name=$2
+
+    echo ""  >> "$file"
+    echo "# DS01: Ensure /usr/local/bin is in PATH for DS01 commands" >> "$file"
+    echo "# Required for: container-*, image-*, ds01-dashboard, etc." >> "$file"
+    echo 'case ":${PATH}:" in' >> "$file"
+    echo '    *:/usr/local/bin:*)' >> "$file"
+    echo '        # Already in PATH, do nothing' >> "$file"
+    echo '        ;;' >> "$file"
+    echo '    *)' >> "$file"
+    echo '        export PATH="/usr/local/bin:${PATH}"' >> "$file"
+    echo '        ;;' >> "$file"
+    echo 'esac' >> "$file"
+
+    echo -e "${GREEN}✓${NC} Added PATH configuration to $file"
+}
+
+# Main execution
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Configuring Shell for DS01 Commands${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What is PATH?${NC}"
+    echo ""
+    echo "  PATH is an environment variable that tells your shell where to"
+    echo "  find executable programs. When you type a command like 'container-create',"
+    echo "  your shell searches each directory in PATH to find it."
+    echo ""
+    echo -e "${BOLD}Why You Need This:${NC}"
+    echo ""
+    echo "  DS01 commands are installed in /usr/local/bin/, which may not be"
+    echo "  in your PATH by default. This script adds it to your shell configuration."
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+fi
+
+# Check current PATH status
+if check_path; then
+    echo -e "${GREEN}✓${NC} PATH is already configured correctly"
+    echo ""
+    echo "Current PATH includes: /usr/local/bin"
+
+    if [ "$CHECK_ONLY" = true ]; then
+        exit 0
+    fi
+
+    if [ "$FORCE" = false ]; then
+        echo ""
+        echo -e "${YELLOW}💡 Tip:${NC} Your PATH is already correct. No changes needed."
+        echo ""
+        echo "To reconfigure anyway, run:"
+        echo -e "  ${GREEN}shell-setup --force${NC}"
+        echo ""
+        exit 0
+    fi
+    echo ""
+    echo -e "${YELLOW}⚠${NC} Reconfiguring (--force mode)"
+    echo ""
+fi
+
+if [ "$CHECK_ONLY" = true ]; then
+    echo -e "${RED}✗${NC} PATH is not configured correctly"
+    echo ""
+    echo "Current PATH: $PATH"
+    echo ""
+    echo "To fix, run:"
+    echo -e "  ${GREEN}/opt/ds01-infra/scripts/user/shell-setup${NC}"
+    echo ""
+    exit 1
+fi
+
+# Configure bash
+BASHRC="$HOME/.bashrc"
+if [ -f "$BASHRC" ]; then
+    if has_ds01_config "$BASHRC" && [ "$FORCE" = false ]; then
+        echo -e "${GREEN}✓${NC} ~/.bashrc already configured"
+    else
+        if [ "$FORCE" = true ] && has_ds01_config "$BASHRC"; then
+            # Remove old config
+            sed -i '/# DS01: Ensure \/usr\/local\/bin is in PATH/,/^esac$/d' "$BASHRC"
+            # Also try old marker for backwards compatibility
+            sed -i '/# DS01: Add \/usr\/local\/bin to PATH/,/^esac$/d' "$BASHRC"
+        fi
+        add_path_config "$BASHRC" "bash"
+    fi
+else
+    echo -e "${YELLOW}⚠${NC} No ~/.bashrc found (will be created on next login)"
+fi
+
+# Configure zsh if it exists
+ZSHRC="$HOME/.zshrc"
+if [ -f "$ZSHRC" ]; then
+    if has_ds01_config "$ZSHRC" && [ "$FORCE" = false ]; then
+        echo -e "${GREEN}✓${NC} ~/.zshrc already configured"
+    else
+        if [ "$FORCE" = true ] && has_ds01_config "$ZSHRC"; then
+            # Remove old config
+            sed -i '/# DS01: Ensure \/usr\/local\/bin is in PATH/,/^esac$/d' "$ZSHRC"
+            sed -i '/# DS01: Add \/usr\/local\/bin to PATH/,/^esac$/d' "$ZSHRC"
+        fi
+        add_path_config "$ZSHRC" "zsh"
+    fi
+fi
+
+echo ""
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ Shell Configuration Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+echo -e "${BOLD}Next Steps:${NC}"
+echo ""
+echo "  1. ${BOLD}Reload your shell configuration:${NC}"
+echo -e "     ${GREEN}source ~/.bashrc${NC}"
+echo ""
+echo "  2. ${BOLD}Test a DS01 command:${NC}"
+echo -e "     ${GREEN}container-list${NC}"
+echo -e "     ${GREEN}ds01-status${NC}"
+echo ""
+
+if [ "$GUIDED" = true ]; then
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}What This Did:${NC}"
+    echo ""
+    echo "  • Added /usr/local/bin to your PATH in ~/.bashrc"
+    if [ -f "$ZSHRC" ]; then
+        echo "  • Added /usr/local/bin to your PATH in ~/.zshrc"
+    fi
+    echo "  • Used safe check to avoid duplicates"
+    echo ""
+    echo -e "${BOLD}Available Commands:${NC}"
+    echo ""
+    echo -e "  ${CYAN}alias-list${NC}           # See all DS01 commands"
+    echo -e "  ${CYAN}container-list${NC}       # List your containers"
+    echo -e "  ${CYAN}image-list${NC}           # List your images"
+    echo -e "  ${CYAN}ds01-dashboard${NC}       # Admin dashboard"
+    echo -e "  ${CYAN}user-setup${NC}           # Complete onboarding wizard"
+    echo ""
+fi
+
+echo -e "${YELLOW}📖 Documentation:${NC}"
+echo "   /home/shared/docs/getting-started.md"
+echo ""
