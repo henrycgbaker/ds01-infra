@@ -1,0 +1,52 @@
+# Test Resource Limits Configuration
+# Use short timeouts for testing
+
+defaults:
+  max_mig_instances: 1
+  max_cpus: 8
+  memory: "32g"
+  shm_size: "16g"
+  max_containers_per_user: 2
+  idle_timeout: "0.01h"              # 36 seconds (for testing)
+  max_runtime: "0.02h"               # 72 seconds (for testing)
+  gpu_hold_after_stop: "0.01h"       # 36 seconds (for testing)
+  container_hold_after_stop: "0.01h" # 36 seconds (for testing)
+  priority: 50
+
+groups:
+  students:
+    max_mig_instances: 1
+    max_cpus: 8
+    memory: "32g"
+    shm_size: "16g"
+    priority: 10
+    members:
+      - student1
+      - student2
+      - testuser
+
+  researchers:
+    max_mig_instances: 2
+    max_cpus: 16
+    memory: "64g"
+    shm_size: "32g"
+    priority: 50
+    members:
+      - researcher1
+
+  admins:
+    max_mig_instances: null  # unlimited
+    max_cpus: 32
+    memory: "128g"
+    shm_size: "64g"
+    priority: 100
+    members:
+      - admin1
+
+user_overrides:
+  special_user:
+    max_mig_instances: 4
+    priority: 90
+    max_runtime: "0.05h"  # 3 minutes
+
+default_group: students

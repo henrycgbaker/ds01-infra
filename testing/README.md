@@ -1,15 +1,91 @@
-# Testing - Test Suites & Validation
+# Testing - DS01 Infrastructure Test Suite
 
-Testing procedures and validation tools for DS01 infrastructure.
+Comprehensive test suite for DS01 GPU container management infrastructure.
 
-## Overview
+## Test Architecture
 
-DS01 testing organized into:
-- **Unit tests** - Individual component testing
-- **Integration tests** - End-to-end workflow testing
-- **Validation** - System health checks
+Tests are organized using standard testing taxonomy:
 
-## Test Suites
+```
+testing/
+├── conftest.py              # Pytest fixtures and shared config
+├── pytest.ini               # Pytest configuration
+├── run-tests.sh             # Unified test runner
+├── unit/                    # Unit tests (fast, isolated)
+│   ├── test_resource_limits.py
+│   ├── test_gpu_allocator.py
+│   ├── test_interface_detection.py
+│   └── test_context_lib.py
+├── component/               # Component tests (single component + deps)
+│   ├── test_gpu_state_reader.py
+│   ├── test_health_check.py
+│   └── test_bare_metal_detector.py
+├── integration/             # Integration tests (multiple components)
+│   ├── test_container_lifecycle.py
+│   └── test_gpu_allocation_flow.py
+├── e2e/                     # End-to-end tests (full workflows)
+│   └── test_container_workflow.py
+├── fixtures/                # Test data
+│   ├── resource-limits-test.yaml
+│   └── mock_gpu_state.json
+└── layered-architecture/    # Legacy bash tests (Phase tests)
+```
+
+## Quick Start
+
+```bash
+# Run all tests
+./run-tests.sh
+
+# Run specific category
+./run-tests.sh unit          # Fast, no external deps
+./run-tests.sh component     # May need Docker
+./run-tests.sh integration   # Multiple components
+./run-tests.sh e2e           # Full workflows (slow)
+
+# Skip slow/docker tests
+./run-tests.sh -m "not slow"
+./run-tests.sh --no-docker
+
+# Verbose output
+./run-tests.sh -v unit
+
+# With coverage
+./run-tests.sh --coverage
+```
+
+## Test Categories
+
+| Category | Speed | Dependencies | What it Tests |
+|----------|-------|--------------|---------------|
+| **unit** | Fast (<1s) | None | Pure logic, mocked deps |
+| **component** | Medium | Docker (optional) | Single component behavior |
+| **integration** | Medium | Docker | Multi-component interaction |
+| **e2e** | Slow | Docker + GPU | Full user workflows |
+
+## Test Markers
+
+Tests are tagged with markers for selective execution:
+
+```bash
+# Run only tests requiring Docker
+pytest -m requires_docker
+
+# Skip GPU tests
+pytest -m "not requires_gpu"
+
+# Run only fast tests
+pytest -m "not slow"
+```
+
+Available markers:
+- `unit`, `component`, `integration`, `e2e` - Test category
+- `slow` - Long-running tests
+- `requires_docker` - Needs Docker daemon
+- `requires_gpu` - Needs nvidia-smi/GPU
+- `requires_root` - Needs root privileges
+
+## Legacy Test Suites
 
 ### cleanup-automation/
 

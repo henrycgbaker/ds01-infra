@@ -1,0 +1,40 @@
+{
+  "gpus": {
+    "0": {
+      "type": "physical_gpu",
+      "containers": [
+        {
+          "container": "project-a._.1001",
+          "user": "student1",
+          "allocated_at": "2025-01-01T10:00:00Z",
+          "interface": "orchestration"
+        }
+      ],
+      "total_memory": "40960 MiB"
+    },
+    "1": {
+      "type": "physical_gpu",
+      "containers": [
+        {
+          "container": "research-exp._.2001",
+          "user": "researcher1",
+          "allocated_at": "2025-01-01T09:00:00Z",
+          "interface": "atomic"
+        }
+      ],
+      "total_memory": "40960 MiB"
+    },
+    "2": {
+      "type": "physical_gpu",
+      "containers": [],
+      "total_memory": "40960 MiB"
+    },
+    "3": {
+      "type": "physical_gpu",
+      "containers": [],
+      "total_memory": "40960 MiB"
+    }
+  },
+  "mig_enabled": false,
+  "last_updated": "2025-01-01T12:00:00Z"
+}
