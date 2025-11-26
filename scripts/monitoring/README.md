@@ -12,32 +12,43 @@ Real-time monitoring and historical metrics for:
 
 ## Key Tools
 
-### gpu-status-dashboard.py
+### DS01 Dashboard
 
-Interactive admin dashboard for system monitoring.
+Unified admin dashboard for system monitoring.
 
-**Command:** `ds01-dashboard`
+**Command:** `dashboard`
 
 **Features:**
-- GPU allocation status (who's using which GPU)
-- Container resource usage (CPU, memory, GPU utilization)
-- User resource quotas and consumption
-- Systemd cgroup statistics
-- Real-time updates
+- GPU/MIG allocation with hierarchical container display
+- Color-coded utilization bars (green <50%, yellow 50-80%, red >90%)
+- System resources (CPU, RAM, Disk, Swap)
+- Recent GPU allocations with timestamps
+- Active alerts and warnings
+- Per-user resource breakdown
 
 **Usage:**
 ```bash
-ds01-dashboard
+dashboard                    # Default compact view
+dashboard --full             # All sections expanded
+dashboard --watch / -w       # Watch mode (2s refresh)
+dashboard --json             # JSON output for scripting
 
-# Or directly:
-python3 scripts/monitoring/gpu-status-dashboard.py
+# Subcommands (modular sections)
+dashboard gpu                # GPU/MIG utilization with containers
+dashboard mig-config         # MIG partition configuration
+dashboard system             # CPU, Memory, Disk utilization
+dashboard containers         # All containers with stats
+dashboard users              # Per-user resource breakdown
+dashboard allocations [N]    # Recent N GPU allocations (default: 10)
+dashboard temp               # GPU temperatures
+dashboard alerts             # Active alerts and warnings
 ```
 
-**Display sections:**
-1. **GPU Allocations** - Current GPU assignments
-2. **Container Stats** - CPU, memory, GPU usage per container
-3. **User Quotas** - Resource limits and current usage
-4. **System Resources** - Overall system CPU, memory, GPU
+**Visual Features:**
+- Full GPUs shown in cyan, MIG-enabled GPUs in green
+- Allocated containers shown in yellow
+- FREE slots shown in green
+- Progress bars for all utilization metrics
 
 ### GPU Utilization Monitoring
 
