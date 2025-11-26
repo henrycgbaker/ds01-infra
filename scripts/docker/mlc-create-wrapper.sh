@@ -379,6 +379,17 @@ else
                     # Use Docker ID (UUID for MIG) instead of friendly ID
                     GPU_ARG="-g=device=$DOCKER_ID"
                     log_success "GPU $ALLOCATED_GPU allocated successfully"
+
+                    # Check soft limits (warn at 80%+)
+                    CURRENT_GPU_COUNT=$(python3 "$SCRIPT_DIR/gpu-state-reader.py" user "$CURRENT_USER" 2>/dev/null | grep -c "gpu_slot" || echo "0")
+                    if [ "$MAX_GPUS" != "999" ] && [ "$MAX_GPUS" -gt 0 ] 2>/dev/null; then
+                        GPU_PERCENT=$((CURRENT_GPU_COUNT * 100 / MAX_GPUS))
+                        if [ "$GPU_PERCENT" -ge 100 ]; then
+                            log_warning "GPU limit reached ($CURRENT_GPU_COUNT/$MAX_GPUS). This is your last available GPU."
+                        elif [ "$GPU_PERCENT" -ge 80 ]; then
+                            log_warning "GPU usage high ($CURRENT_GPU_COUNT/$MAX_GPUS, ${GPU_PERCENT}%). Consider retiring idle containers."
+                        fi
+                    fi
                 else
                     log_error "GPU allocator returned success but couldn't parse GPU ID"
                     log_error "Output: $ALLOC_OUTPUT"

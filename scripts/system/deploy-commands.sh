@@ -134,6 +134,7 @@ echo ""
 echo -e "${BOLD}User Utilities${NC}"
 echo ""
 
+create_symlink "$INFRA_ROOT/scripts/user/check-limits" "check-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ds01-status" "ds01-status" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ds01-run" "ds01-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/get-limits" "get-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
@@ -155,9 +156,16 @@ create_symlink "$INFRA_ROOT/scripts/admin/version" "version" && ((SUCCESS_COUNT+
 echo ""
 
 echo -e "${BOLD}Monitoring & Audit Commands${NC}"
+create_symlink "$INFRA_ROOT/scripts/admin/dashboard" "dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/container-dashboard.sh" "container-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-status-dashboard.py" "gpu-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-utilization-monitor.py" "gpu-utilization-monitor" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/mig-utilization-monitor.py" "mig-utilization-monitor" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/ds01-events" "ds01-events" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/resource-alert-checker.sh" "resource-alert-checker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/check-idle-containers.sh" "check-idle-containers" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/docker/gpu-queue-manager.py" "gpu-queue" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/maintenance/backup-logs.sh" "backup-logs" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/audit-system.sh" "audit-system" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/audit-docker.sh" "audit-docker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/audit-container.sh" "audit-container" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))

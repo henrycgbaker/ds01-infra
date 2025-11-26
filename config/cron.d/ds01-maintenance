@@ -1,0 +1,75 @@
+# DS01 Infrastructure Maintenance Cron Jobs
+# /opt/ds01-infra/config/cron.d/ds01-maintenance
+#
+# Install: sudo cp /opt/ds01-infra/config/cron.d/ds01-maintenance /etc/cron.d/
+#
+# All jobs run as root unless specified otherwise.
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+INFRA_ROOT=/opt/ds01-infra
+
+# ============================================================================
+# Resource Monitoring & Alerts
+# ============================================================================
+
+# Record GPU utilization (every 5 minutes for trend analysis)
+*/5 * * * * root python3 $INFRA_ROOT/scripts/monitoring/gpu-utilization-monitor.py --record >> /var/log/ds01/gpu-util-record.log 2>&1
+
+# Check for wasted GPU allocations (every 30 minutes)
+*/30 * * * * root python3 $INFRA_ROOT/scripts/monitoring/gpu-utilization-monitor.py --check-waste >> /var/log/ds01/gpu-waste-check.log 2>&1
+
+# Generate resource alerts for users approaching limits (every 15 minutes)
+*/15 * * * * root $INFRA_ROOT/scripts/monitoring/resource-alert-checker.sh >> /var/log/ds01/alert-checker.log 2>&1
+
+# Process GPU queue and notify waiting users (every 5 minutes)
+*/5 * * * * root python3 $INFRA_ROOT/scripts/docker/gpu-queue-manager.py process >> /var/log/ds01/gpu-queue.log 2>&1
+
+# ============================================================================
+# Container Lifecycle Management
+# ============================================================================
+
+# Check for idle containers (:30 past each hour)
+30 * * * * root $INFRA_ROOT/scripts/maintenance/check-idle-containers.sh >> /var/log/ds01/idle-cleanup.log 2>&1
+
+# Enforce max runtime (:45 past each hour)
+45 * * * * root $INFRA_ROOT/scripts/maintenance/enforce-max-runtime.sh >> /var/log/ds01/runtime-enforcement.log 2>&1
+
+# Clean up stale GPU allocations (:15 past each hour)
+15 * * * * root $INFRA_ROOT/scripts/maintenance/cleanup-stale-gpu-allocations.sh >> /var/log/ds01/gpu-cleanup.log 2>&1
+
+# Clean up stopped containers (:30 past each hour)
+30 * * * * root $INFRA_ROOT/scripts/maintenance/cleanup-stale-containers.sh >> /var/log/ds01/container-cleanup.log 2>&1
+
+# ============================================================================
+# State Validation (runs daily at 2am)
+# ============================================================================
+
+# Validate GPU allocation state consistency
+0 2 * * * root python3 $INFRA_ROOT/scripts/monitoring/validate-state.py --fix >> /var/log/ds01/state-validation.log 2>&1
+
+# ============================================================================
+# Health Checks (runs daily at 3am)
+# ============================================================================
+
+# Full system health check
+0 3 * * * root $INFRA_ROOT/scripts/monitoring/ds01-health-check >> /var/log/ds01/health-check.log 2>&1
+
+# ============================================================================
+# Log Management and Retention
+# ============================================================================
+
+# Clean old alerts daily
+0 4 * * * root $INFRA_ROOT/scripts/monitoring/resource-alert-checker.sh --clean >> /var/log/ds01/alert-cleanup.log 2>&1
+
+# Clean GPU queue daily
+0 4 * * * root python3 $INFRA_ROOT/scripts/docker/gpu-queue-manager.py clean >> /var/log/ds01/gpu-queue-cleanup.log 2>&1
+
+# Archive old logs weekly (Sunday 2am)
+0 2 * * 0 root $INFRA_ROOT/scripts/maintenance/backup-logs.sh >> /var/log/ds01/log-archive.log 2>&1
+
+# Clean old archives monthly (1st of month 3am)
+0 3 1 * * root $INFRA_ROOT/scripts/maintenance/backup-logs.sh --clean >> /var/log/ds01/log-archive.log 2>&1
+
+# Note: Standard logrotate handles daily rotation via /etc/logrotate.d/ds01
+# Install logrotate config: sudo cp $INFRA_ROOT/config/logrotate.d/ds01 /etc/logrotate.d/

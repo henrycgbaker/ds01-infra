@@ -39,6 +39,88 @@ python3 scripts/monitoring/gpu-status-dashboard.py
 3. **User Quotas** - Resource limits and current usage
 4. **System Resources** - Overall system CPU, memory, GPU
 
+### GPU Utilization Monitoring
+
+**gpu-utilization-monitor.py** - Real-time GPU utilization tracking
+
+Track actual GPU usage (not just allocation) and identify underutilized GPUs.
+
+```bash
+# Current snapshot
+gpu-utilization-monitor
+
+# JSON output
+gpu-utilization-monitor --json
+
+# Record to history (admin/cron)
+sudo gpu-utilization-monitor --record
+
+# Check for wasted allocations (>80% idle over 30min)
+sudo gpu-utilization-monitor --check-waste
+```
+
+**mig-utilization-monitor.py** - MIG instance-specific monitoring
+
+Track utilization per MIG instance with container mapping.
+
+```bash
+# Current MIG snapshot
+mig-utilization-monitor
+
+# JSON output
+mig-utilization-monitor --json
+
+# Record to history (admin/cron)
+sudo mig-utilization-monitor --record
+
+# Check for wasted MIG allocations
+sudo mig-utilization-monitor --check-waste
+```
+
+### Resource Alerts
+
+**resource-alert-checker.sh** - User resource usage alerts
+
+Generates alerts when users approach their resource limits (80% soft limit).
+
+```bash
+# Check all users
+sudo resource-alert-checker
+
+# Check specific user
+sudo resource-alert-checker username
+
+# Clean old alerts (>24h)
+sudo resource-alert-checker --clean
+```
+
+Alerts are stored in `/var/lib/ds01/alerts/<username>.json` and displayed on user login.
+
+### Event Logging
+
+**ds01-events** - Centralized event log viewer
+
+Query the append-only event log for all DS01 system events.
+
+```bash
+# Recent events
+ds01-events
+
+# Events for specific user
+ds01-events user alice
+
+# GPU events only
+ds01-events gpu
+
+# Failed/rejected events
+ds01-events errors
+
+# JSON output
+ds01-events --json
+```
+
+Events are logged to `/var/log/ds01/events.jsonl` in append-only format.
+
 ### GPU Monitoring
 
 **gpu_allocator.py status** - Current GPU allocations

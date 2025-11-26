@@ -137,7 +137,14 @@ policies:
   checkpoint_warning: 1h           # Warn users X hours before auto-stop
   require_workspace_mount: true     # Force all containers to mount /workspace
   enforce_storage_quotas: true      # Enable disk quotas
-  
+
+  # Soft limits - warn before hitting hard limits
+  soft_limit_threshold: 0.8        # Warn at 80% of hard limit (0.8 = 80%)
+
+  # High demand mode - more aggressive idle cleanup
+  high_demand_threshold: 0.8       # System is "high demand" at 80% GPU allocation
+  high_demand_idle_reduction: 0.5  # Reduce idle timeout by 50% during high demand
+
   # Error handling
   graceful_errors: true             # Show helpful error messages when limits exceeded
   suggest_alternatives: true        # Suggest alternatives when resource unavailable
@@ -147,6 +154,10 @@ advanced:
   enable_mps: false                 # MPS (Multi-Process Service) - disabled when MIG enabled
   network_mode: host                # or 'bridge'
   restart_policy: unless-stopped
+
+  # Log retention
+  log_retention_days: 30            # Days to keep logs before archiving
+  log_archive_days: 365             # Days to keep archives before deletion
 
 # Wizard defaults (for interactive setup) TODO: move this to a script
 wizard:

@@ -57,7 +57,11 @@ parse_limit() {
     fi
 }
 
-# Format usage bar
+# Soft limit threshold (read from config or default to 80%)
+SOFT_LIMIT_THRESHOLD="${SOFT_LIMIT_THRESHOLD:-80}"
+
+# Format usage bar with soft limit coloring
+# Green: <80%, Yellow: 80-99%, Red: 100%
 usage_bar() {
     local current="${1:-0}"
     local max="${2:-1}"
@@ -81,10 +85,11 @@ usage_bar() {
     local filled=$((percent * width / 100))
     local empty=$((width - filled))
 
+    # Color based on soft limit threshold
     local color="$GREEN"
-    if [[ $percent -ge 90 ]]; then
+    if [[ $percent -ge 100 ]]; then
         color="$RED"
-    elif [[ $percent -ge 70 ]]; then
+    elif [[ $percent -ge $SOFT_LIMIT_THRESHOLD ]]; then
         color="$YELLOW"
     fi
 
@@ -170,27 +175,48 @@ main() {
     fi
     echo ""
 
-    # Warnings
+    # Warnings and soft limit notifications
     local warnings=0
+    local soft_warnings=0
 
-    if [[ "$max_mig" != "unlimited" ]] && [[ $gpu_count -ge $max_mig ]]; then
-        echo -e "${RED}⚠ GPU LIMIT REACHED${NC}"
-        echo "  You have allocated all $max_mig of your allowed GPUs."
-        echo "  To get more GPUs, stop or remove a container first:"
-        echo "    container-list           # See your containers"
-        echo "    container-retire <name>  # Free GPU and remove container"
-        echo ""
-        warnings=$((warnings + 1))
+    # GPU limit checks
+    if [[ "$max_mig" != "unlimited" ]]; then
+        local gpu_percent=$((gpu_count * 100 / max_mig))
+        if [[ $gpu_count -ge $max_mig ]]; then
+            echo -e "${RED}⚠ GPU LIMIT REACHED${NC}"
+            echo "  You have allocated all $max_mig of your allowed GPUs."
+            echo "  To get more GPUs, stop or remove a container first:"
+            echo "    container-list           # See your containers"
+            echo "    container-retire <name>  # Free GPU and remove container"
+            echo ""
+            warnings=$((warnings + 1))
+        elif [[ $gpu_percent -ge $SOFT_LIMIT_THRESHOLD ]]; then
+            echo -e "${YELLOW}ℹ GPU USAGE HIGH${NC} (${gpu_percent}%)"
+            echo "  You're using $gpu_count of $max_mig GPUs."
+            echo "  Consider retiring idle containers to free resources."
+            echo ""
+            soft_warnings=$((soft_warnings + 1))
+        fi
     fi
 
-    if [[ "$max_containers" != "unlimited" ]] && [[ $container_count -ge $max_containers ]]; then
-        echo -e "${YELLOW}⚠ CONTAINER LIMIT REACHED${NC}"
-        echo "  You have $container_count containers (limit: $max_containers)."
-        echo "  Remove unused containers:"
-        echo "    container-list           # See your containers"
-        echo "    container-retire <name>  # Remove container"
-        echo ""
-        warnings=$((warnings + 1))
+    # Container limit checks
+    if [[ "$max_containers" != "unlimited" ]]; then
+        local container_percent=$((container_count * 100 / max_containers))
+        if [[ $container_count -ge $max_containers ]]; then
+            echo -e "${YELLOW}⚠ CONTAINER LIMIT REACHED${NC}"
+            echo "  You have $container_count containers (limit: $max_containers)."
+            echo "  Remove unused containers:"
+            echo "    container-list           # See your containers"
+            echo "    container-retire <name>  # Remove container"
+            echo ""
+            warnings=$((warnings + 1))
+        elif [[ $container_percent -ge $SOFT_LIMIT_THRESHOLD ]]; then
+            echo -e "${YELLOW}ℹ CONTAINER USAGE HIGH${NC} (${container_percent}%)"
+            echo "  You have $container_count of $max_containers containers."
+            echo "  Consider removing unused containers."
+            echo ""
+            soft_warnings=$((soft_warnings + 1))
+        fi
     fi
 
     if [[ "$allow_full_gpu" != "True" && "$allow_full_gpu" != "true" ]]; then
@@ -205,16 +231,40 @@ main() {
 
     echo "════════════════════════════════════════════════════════════"
 
-    if [[ $warnings -eq 0 ]]; then
+    if [[ $warnings -eq 0 && $soft_warnings -eq 0 ]]; then
         echo -e "${GREEN}✓ All resources available${NC}"
+    elif [[ $warnings -gt 0 ]]; then
+        echo -e "${RED}$warnings limit(s) reached - see above${NC}"
     else
-        echo -e "${YELLOW}$warnings warning(s) - see above${NC}"
+        echo -e "${YELLOW}$soft_warnings notice(s) - approaching limits${NC}"
+    fi
+
+    # Check if user is in GPU queue
+    local queue_file="/var/lib/ds01/gpu-queue.json"
+    if [[ -f "$queue_file" ]]; then
+        local queue_position
+        queue_position=$(python3 -c "
+import json
+with open('$queue_file') as f:
+    queue = json.load(f)
+positions = [(i+1, e['container']) for i, e in enumerate(queue) if e['user'] == '$USERNAME']
+if positions:
+    print('\\n'.join([f\"  #{p}: {c}\" for p, c in positions]))
+" 2>/dev/null)
+
+        if [[ -n "$queue_position" ]]; then
+            echo ""
+            echo -e "${BLUE}📋 GPU Queue Position:${NC}"
+            echo "$queue_position"
+            echo "  You'll be notified when a GPU is available."
+        fi
     fi
 
     echo ""
     echo "Commands:"
     echo "  container-deploy <name>   Create and start a container"
     echo "  container-list            View your containers"
+    echo "  gpu-queue list            View GPU queue"
     echo "  check-limits --verbose    Show detailed limit info"
     echo ""
 }

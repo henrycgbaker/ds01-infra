@@ -381,31 +381,33 @@ sudo systemctl daemon-reload
 **Monitor system:**
 ```bash
 dashboard                                # Default snapshot view
-dashboard interfaces                     # Containers grouped by interface (Orchestration/Atomic/Docker/Other)
+dashboard interfaces                     # Containers grouped by interface
 dashboard users                          # Per-user breakdown
 dashboard monitor                        # Watch mode (1s refresh)
-dashboard allocations 20                 # Recent GPU allocation events
+
+# GPU utilization (actual usage, not just allocation)
+gpu-utilization-monitor                  # Current GPU utilization snapshot
+gpu-utilization-monitor --json           # JSON output
+mig-utilization-monitor                  # MIG instance utilization
 
 # Check system health
 ds01-health-check                        # Full health check
-validate-state.py                        # Check GPU allocation consistency
-
-# View centralized event log
-ds01-events                              # Recent events
+ds01-events                              # View centralized event log
 ds01-events user alice                   # Events for specific user
-ds01-events gpu                          # GPU events only
-ds01-events errors                       # Failed/rejected events
-
-# Check bare metal processes
-python3 scripts/monitoring/detect-bare-metal.py --json
 ```
 
 **User self-service:**
 ```bash
-check-limits                             # Show your resource limits and usage
-check-limits --verbose                   # Detailed limit info
-quota-check                              # Check disk quota (if enabled)
+check-limits                             # Show your resource limits and usage (with soft limit warnings)
+gpu-queue position $USER                 # Check GPU queue position (if waiting)
 ```
+
+**Resource alerts & queue (cron-managed):**
+- `resource-alert-checker` - Generates alerts at 80% of limits (GPU, containers)
+- `gpu-queue` - GPU request queue for users waiting for availability
+- Alerts shown on login via `ds01-login-check`
+
+See [scripts/monitoring/README.md](scripts/monitoring/README.md) for full details.
 
 ## Security Notes
 

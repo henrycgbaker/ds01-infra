@@ -451,6 +451,76 @@ cat /var/lib/ds01/gpu-state.json | grep stopped_at
 python3 scripts/docker/gpu_allocator.py release --container <container>
 ```
 
+## Log Management
+
+### backup-logs.sh
+
+Archives old DS01 logs and manages retention.
+
+**Schedule:** Weekly (Sunday 2am via cron)
+
+**What it does:**
+1. Compresses logs older than `log_retention_days` (default: 30)
+2. Moves archives to `/var/log/ds01/archive/`
+3. Deletes archives older than `log_archive_days` (default: 365)
+
+**Usage:**
+```bash
+# Run archival
+sudo backup-logs
+
+# Check status
+backup-logs --status
+
+# Clean old archives
+sudo backup-logs --clean
+
+# Verify archives
+backup-logs --verify
+```
+
+**Configuration:**
+```yaml
+# config/resource-limits.yaml
+advanced:
+  log_retention_days: 30    # Days before archiving
+  log_archive_days: 365     # Days before deleting archives
+```
+
+**Log:** `/var/log/ds01/log-archive.log`
+
+### GPU Queue Management
+
+**gpu-queue-manager.py** - Manages GPU request queue for users waiting for GPUs.
+
+**Schedule:** Every 5 minutes (via cron)
+
+**Features:**
+- Users can queue for GPUs when none available
+- Notifications sent when GPUs become available
+- FIFO order with priority support
+- Auto-cleanup of stale entries (24h)
+
+**Usage:**
+```bash
+# View queue
+gpu-queue list
+
+# Add to queue
+gpu-queue add --user alice --gpus 1
+
+# Check position
+gpu-queue position alice
+
+# Process queue (admin)
+sudo gpu-queue process
+
+# Clean old entries
+sudo gpu-queue clean
+```
+
+**Queue file:** `/var/lib/ds01/gpu-queue.json`
+
 ## Related Documentation
 
 - [Root README](../../README.md) - System overview

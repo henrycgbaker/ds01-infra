@@ -88,9 +88,14 @@ show_user_commands() {
     echo -e "${BOLD}Setup & Configuration:${NC}"
     echo -e "  ${GREEN}user setup${NC}             Educational first-time user onboarding wizard"
     echo -e "       ${GREEN}also: user new${NC}"
-    echo -e "  ${GREEN}user get-limits${NC}        Show your resource limits and usage dashboard"
-    echo -e "       ${GREEN}also: user limits, get-limits${NC}"
+    echo -e "  ${GREEN}check-limits${NC}           Show resource limits with soft-limit warnings"
+    echo -e "       ${GREEN}also: user get-limits, get-limits${NC}"
     echo -e "  ${GREEN}project init${NC}           Create new project"
+    echo ""
+
+    echo -e "${BOLD}GPU Queue (when GPUs unavailable):${NC}"
+    echo -e "  ${GREEN}gpu-queue position \$USER${NC}  Check your position in queue"
+    echo -e "  ${GREEN}gpu-queue add${NC}          Join GPU waiting queue"
     echo ""
 
     echo -e "${BOLD}Container Orchestrators (Recommended):${NC}"
@@ -202,10 +207,24 @@ show_admin_commands() {
     echo ""
 
     echo -e "${BOLD}Monitoring & Audit:${NC}"
+    echo -e "  ${GREEN}gpu-utilization-monitor${NC}   Real-time GPU utilization (not just allocation)"
+    echo -e "  ${GREEN}mig-utilization-monitor${NC}   MIG instance utilization per GPU"
+    echo -e "  ${GREEN}ds01-events${NC}          View centralized event log"
     echo -e "  ${GREEN}audit-system${NC}         System-wide audit report"
     echo -e "  ${GREEN}audit-docker${NC}         Docker-specific audit"
     echo -e "  ${GREEN}audit-container${NC}      Container-specific audit"
     echo -e "  ${GREEN}ds01-logs${NC}            View infrastructure logs"
+    echo ""
+
+    echo -e "${BOLD}Resource Alerts & Queue:${NC}"
+    echo -e "  ${GREEN}resource-alert-checker${NC}   Generate alerts for users at 80%+ limits"
+    echo -e "  ${GREEN}gpu-queue list${NC}       Show GPU request queue"
+    echo -e "  ${GREEN}gpu-queue process${NC}    Process queue and notify users"
+    echo -e "  ${GREEN}check-idle-containers${NC}   Check for idle containers (cron)"
+    echo ""
+
+    echo -e "${BOLD}Maintenance:${NC}"
+    echo -e "  ${GREEN}backup-logs${NC}          Archive and manage log retention"
     echo ""
 
     echo -e "${BOLD}Utilities:${NC}"

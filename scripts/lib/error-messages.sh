@@ -13,6 +13,24 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# Contact info for ad-hoc quota requests (edit these to customize)
+DS01_LAB_NAME="${DS01_LAB_NAME:-Data Science Lab}"
+DS01_ADMIN_NAME="${DS01_ADMIN_NAME:-Henry Baker}"
+DS01_ADMIN_ROLE="${DS01_ADMIN_ROLE:-Research Engineer}"
+DS01_ADMIN_EMAIL="${DS01_ADMIN_EMAIL:-h.baker@hertie-school.org}"
+
+# Show contact information for resource requests
+show_contact_info() {
+    echo -e "  ${BLUE}╭──────────────────────────────────────────────────────────╮${NC}"
+    echo -e "  ${BLUE}│${NC}  ${BOLD}Need more resources?${NC}                                    ${BLUE}│${NC}"
+    echo -e "  ${BLUE}│${NC}  You can discuss arranging larger quotas (ideally in     ${BLUE}│${NC}"
+    echo -e "  ${BLUE}│${NC}  advance) by contacting the ${DS01_LAB_NAME}.              ${BLUE}│${NC}"
+    echo -e "  ${BLUE}│${NC}                                                          ${BLUE}│${NC}"
+    echo -e "  ${BLUE}│${NC}  Contact: ${BOLD}${DS01_ADMIN_NAME}${NC} (${DS01_ADMIN_ROLE})              ${BLUE}│${NC}"
+    echo -e "  ${BLUE}│${NC}  Email:   ${BOLD}${DS01_ADMIN_EMAIL}${NC}                   ${BLUE}│${NC}"
+    echo -e "  ${BLUE}╰──────────────────────────────────────────────────────────╯${NC}"
+}
+
 # Display a resource limit error with guidance
 show_limit_error() {
     local error_code="$1"
@@ -41,6 +59,8 @@ show_limit_error() {
             echo "    container-deploy <name> --no-gpu"
             echo ""
             echo -e "  Run ${BLUE}check-limits${NC} to see your full resource status."
+            echo ""
+            show_contact_info
             ;;
 
         *FULL_GPU_NOT_ALLOWED*)
@@ -57,9 +77,11 @@ show_limit_error() {
             echo "    • Development and debugging"
             echo ""
             echo "  If you need full GPU access for large model training,"
-            echo "  contact your administrator to request researcher access."
+            echo "  you can request researcher access."
             echo ""
             echo -e "  Run ${BLUE}check-limits${NC} to see your current permissions."
+            echo ""
+            show_contact_info
             ;;
 
         *No\ GPUs\ available*|*all\ allocated*)
@@ -73,8 +95,12 @@ show_limit_error() {
             echo "    1. Wait a few minutes and try again"
             echo "    2. Run 'dashboard' to see current GPU usage"
             echo "    3. Start container without GPU:  container-deploy <name> --no-gpu"
+            echo -e "    4. ${BLUE}Join notification queue:${NC}  gpu-queue add $username <container> 1"
             echo ""
             echo "  GPUs are usually freed within a few hours as jobs complete."
+            echo "  The queue will notify you when a GPU becomes available."
+            echo ""
+            show_contact_info
             ;;
 
         *No\ MIG\ instances*|*only\ full\ GPUs*)
@@ -90,6 +116,7 @@ show_limit_error() {
             echo "    2. Run 'dashboard' to see current usage"
             echo "    3. Start without GPU:  container-deploy <name> --no-gpu"
             echo ""
+            show_contact_info
             ;;
 
         *CONTAINER_LIMIT*)
@@ -106,6 +133,7 @@ show_limit_error() {
             echo "    1. View your containers:  container-list"
             echo "    2. Remove an old one:     container-retire <name>"
             echo ""
+            show_contact_info
             ;;
 
         *)
@@ -117,7 +145,8 @@ show_limit_error() {
             echo "  Error: $error_code"
             echo ""
             echo -e "  Run ${BLUE}check-limits${NC} to see your resource status."
-            echo "  Contact admin if you believe this is an error."
+            echo ""
+            show_contact_info
             ;;
     esac
 
@@ -180,4 +209,4 @@ show_quota_warning() {
 }
 
 # Export functions
-export -f show_limit_error show_bare_metal_warning show_quota_warning
+export -f show_contact_info show_limit_error show_bare_metal_warning show_quota_warning

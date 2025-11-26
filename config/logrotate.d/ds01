@@ -1,0 +1,46 @@
+# DS01 Infrastructure Log Rotation Configuration
+# /opt/ds01-infra/config/logrotate.d/ds01
+#
+# Install: sudo cp /opt/ds01-infra/config/logrotate.d/ds01 /etc/logrotate.d/
+
+# Main DS01 logs
+/var/log/ds01/*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    sharedscripts
+    postrotate
+        # Notify any long-running processes to reopen log files
+        [ -f /var/run/ds01.pid ] && kill -HUP $(cat /var/run/ds01.pid) 2>/dev/null || true
+    endscript
+}
+
+# JSON Lines event logs (need special handling)
+/var/log/ds01/*.jsonl {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    dateext
+    dateformat -%Y%m%d
+}
+
+# GPU utilization history (can be larger)
+/var/log/ds01/gpu-utilization.jsonl {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0644 root root
+    dateext
+    dateformat -%Y%m%d
+}

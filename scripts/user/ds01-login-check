@@ -81,6 +81,40 @@ check_storage() {
     fi
 }
 
+# Check for pending alerts
+check_alerts() {
+    local alerts_file="/var/lib/ds01/alerts/${USER}.json"
+
+    if [[ -f "$alerts_file" ]]; then
+        # Read alerts using Python (handles JSON properly)
+        local alert_count
+        alert_count=$(python3 -c "import json; print(len(json.load(open('$alerts_file'))))" 2>/dev/null || echo "0")
+
+        if [[ "$alert_count" -gt 0 ]]; then
+            echo ""
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}📢 You have $alert_count resource alert(s):${NC}"
+            echo ""
+
+            # Display each alert
+            python3 -c "
+import json
+with open('$alerts_file') as f:
+    alerts = json.load(f)
+for alert in alerts:
+    icon = '⚠' if 'limit' in alert['type'] else 'ℹ'
+    print(f\"   {icon}  {alert['message']}\")
+" 2>/dev/null || true
+
+            echo ""
+            echo "   Run 'check-limits' for details."
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+        fi
+    fi
+}
+
 # Run checks
+check_alerts
 check_bare_metal
 # check_storage  # Enable if quota system is active

@@ -1,6 +1,17 @@
 #!/bin/bash
 # /opt/ds01-infra/scripts/monitoring/check-idle-containers.sh
 # Monitor container activity and handle idle cleanup with warnings
+#
+# This script must be run as root (via cron or sudo)
+
+# Check if running as root when executed directly
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if [ "$EUID" -ne 0 ]; then
+        echo "Error: This script must be run as root (for log/state access)"
+        echo "Usage: sudo $0"
+        exit 1
+    fi
+fi
 
 set -e
 
@@ -27,6 +38,54 @@ log() {
 
 log_color() {
     echo -e "${2}[$(date '+%Y-%m-%d %H:%M:%S')]${NC} $1" | tee -a "$LOG_FILE"
+}
+
+# Check if system is in high demand mode (>80% GPU allocation)
+is_high_demand() {
+    local threshold="${1:-0.8}"
+
+    # Get total GPU count
+    local total_gpus=$(nvidia-smi -L 2>/dev/null | wc -l)
+    if [ "$total_gpus" -eq 0 ]; then
+        echo "false"
+        return
+    fi
+
+    # Count allocated GPUs (containers with GPU labels)
+    local allocated_containers=$(docker ps --filter "label=ds01.gpu.allocated" --format "{{.Names}}" 2>/dev/null | wc -l)
+
+    # Calculate allocation percentage
+    local allocation_percent
+    allocation_percent=$(echo "scale=2; $allocated_containers / $total_gpus" | bc)
+
+    # Compare with threshold
+    if (( $(echo "$allocation_percent >= $threshold" | bc -l) )); then
+        echo "true"
+    else
+        echo "false"
+    fi
+}
+
+# Get high demand settings from config
+get_high_demand_settings() {
+    CONFIG_FILE="$CONFIG_FILE" python3 - <<'PYEOF'
+import yaml
+import os
+import sys
+
+try:
+    config_file = os.environ['CONFIG_FILE']
+    with open(config_file) as f:
+        config = yaml.safe_load(f)
+
+    policies = config.get('policies', {})
+    threshold = policies.get('high_demand_threshold', 0.8)
+    reduction = policies.get('high_demand_idle_reduction', 0.5)
+
+    print(f"{threshold} {reduction}")
+except Exception as e:
+    print("0.8 0.5")
+PYEOF
 }
 
 # Get idle timeout for user (in hours)
@@ -164,7 +223,13 @@ is_container_active() {
     fi
     
     # Check network activity (bytes transmitted in last interval)
-    local net_rx=$(docker stats "$container" --no-stream --format "{{.NetIO}}" 2>/dev/null | cut -d'/' -f1 | numfmt --from=iec || echo "0")
+    # Docker returns "0B / 0B" format - strip trailing B and handle edge cases
+    local net_raw=$(docker stats "$container" --no-stream --format "{{.NetIO}}" 2>/dev/null | cut -d'/' -f1 | tr -d ' ')
+    # Handle "0B" specially (numfmt doesn't like bare "0B")
+    local net_rx=0
+    if [ -n "$net_raw" ] && [ "$net_raw" != "0B" ]; then
+        net_rx=$(echo "$net_raw" | numfmt --from=iec 2>/dev/null || echo "0")
+    fi
     if [ "$net_rx" -gt 1000000 ]; then  # > 1MB
         echo "true"
         return
@@ -183,6 +248,14 @@ send_warning() {
     local user_home=$(eval echo "~$username")
     local warning_file="$user_home/.ds01-idle-warning"
     
+    local high_demand_notice=""
+    if [ "$HIGH_DEMAND_MODE" = "true" ]; then
+        high_demand_notice="
+⚡ HIGH DEMAND MODE ACTIVE
+   GPU allocation is >80%. Idle timeouts reduced.
+   Container will stop sooner than normal."
+    fi
+
     cat > "$warning_file" << WARNEOF
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⚠️  IDLE CONTAINER WARNING
@@ -191,7 +264,7 @@ send_warning() {
 Container: $container
 Status: IDLE (no activity detected)
 Action: Will auto-stop in ~${hours_until_stop} hours
-
+${high_demand_notice}
 This container will be automatically stopped to free
 resources for other users. Your work in /workspace
 is safe and will persist.
@@ -206,7 +279,7 @@ To disable this warning (if actively training):
 To stop and retire now (frees GPU immediately):
   container-retire $(echo $container | cut -d'.' -f1)
 
-Questions? Email: 
+Questions? Run 'check-limits' or contact admin.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 WARNEOF
     
@@ -290,6 +363,24 @@ NOTIFEOF
 monitor_containers() {
     log_color "Starting idle container monitoring" "$BLUE"
 
+    # Check for high demand mode
+    local high_demand_settings=$(get_high_demand_settings)
+    local hd_threshold=$(echo "$high_demand_settings" | cut -d' ' -f1)
+    local hd_reduction=$(echo "$high_demand_settings" | cut -d' ' -f2)
+
+    HIGH_DEMAND_MODE=$(is_high_demand "$hd_threshold")
+    HIGH_DEMAND_REDUCTION="$hd_reduction"
+
+    if [ "$HIGH_DEMAND_MODE" = "true" ]; then
+        log_color "HIGH DEMAND MODE: GPU allocation above ${hd_threshold}. Idle timeouts reduced by ${hd_reduction}." "$YELLOW"
+
+        # Log event
+        if [ -f "$INFRA_ROOT/scripts/docker/event-logger.py" ]; then
+            python3 "$INFRA_ROOT/scripts/docker/event-logger.py" "system.high_demand" \
+                --message "High demand mode active - idle timeouts reduced" 2>/dev/null || true
+        fi
+    fi
+
     # Get all running containers (using AIME naming convention: name._.uid)
     # This is more robust than relying on labels
     local containers=$(docker ps --format "{{.Names}}" | grep '\._\.' || true)
@@ -348,6 +439,14 @@ process_container() {
         return 0
     fi
 
+    # Apply high-demand reduction if active
+    local original_timeout_seconds="$timeout_seconds"
+    if [ "$HIGH_DEMAND_MODE" = "true" ]; then
+        # Reduce timeout by the configured factor (e.g., 0.5 = 50% of normal)
+        timeout_seconds=$(echo "scale=0; $timeout_seconds * $HIGH_DEMAND_REDUCTION / 1" | bc)
+        log "High demand: Reduced timeout for $container from ${original_timeout_seconds}s to ${timeout_seconds}s"
+    fi
+
     # Check if container is active
     local active=$(is_container_active "$container")
 
@@ -396,5 +495,7 @@ process_container() {
     return 0
 }
 
-# Run monitoring
-monitor_containers
+# Only run when executed, not sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    monitor_containers
+fi
