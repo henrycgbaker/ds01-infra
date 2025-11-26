@@ -16,6 +16,7 @@ import json
 import yaml
 import subprocess
 import importlib.util
+import fcntl
 from pathlib import Path
 from datetime import datetime
 from typing import Optional, Dict, Tuple
@@ -54,6 +55,21 @@ class GPUAllocatorSmart:
         self.log_file = self.log_dir / "gpu-allocations.log"
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
+        # Lock file for preventing race conditions
+        self.lock_file = self.log_dir / "gpu-allocator.lock"
+
+    def _acquire_lock(self):
+        """Acquire exclusive lock for GPU allocation operations"""
+        self._lock_fd = open(self.lock_file, 'w')
+        fcntl.flock(self._lock_fd, fcntl.LOCK_EX)
+
+    def _release_lock(self):
+        """Release the exclusive lock"""
+        if hasattr(self, '_lock_fd') and self._lock_fd:
+            fcntl.flock(self._lock_fd, fcntl.LOCK_UN)
+            self._lock_fd.close()
+            self._lock_fd = None
+
     def _load_config(self) -> dict:
         """Load YAML configuration"""
         if not self.config_path.exists():
@@ -63,25 +79,53 @@ class GPUAllocatorSmart:
             return yaml.safe_load(f)
 
     def _get_user_limits(self, username: str) -> Dict:
-        """Get user's resource limits from config"""
-        # Check user_overrides first
+        """Get user's resource limits from config (merges defaults + group/override)"""
+        defaults = self.config.get('defaults', {}) or {}
+        groups = self.config.get('groups', {}) or {}
+
+        # Check user_overrides first (highest priority)
         user_overrides = self.config.get('user_overrides', {}) or {}
         if username in user_overrides:
-            return user_overrides[username]
+            base_limits = defaults.copy()
+            base_limits.update(user_overrides[username])
+            base_limits['_group'] = 'override'
+            return base_limits
 
         # Check groups
-        groups = self.config.get('groups', {}) or {}
         for group_name, group_config in groups.items():
             if group_config and username in group_config.get('members', []):
-                return group_config
+                base_limits = defaults.copy()
+                group_limits = {k: v for k, v in group_config.items() if k != 'members'}
+                base_limits.update(group_limits)
+                base_limits['_group'] = group_name
+                return base_limits
 
         # Default group
         default_group = self.config.get('default_group', 'student')
         if default_group in groups:
-            return groups[default_group]
+            base_limits = defaults.copy()
+            group_config = groups[default_group]
+            group_limits = {k: v for k, v in group_config.items() if k != 'members'}
+            base_limits.update(group_limits)
+            base_limits['_group'] = default_group
+            return base_limits
 
-        # Fallback defaults
-        return self.config.get('defaults', {}) or {}
+        # Fallback to defaults only
+        base_limits = defaults.copy()
+        base_limits['_group'] = 'default'
+        return base_limits
+
+    def _can_use_full_gpu(self, username: str) -> bool:
+        """Check if user is allowed to use full (non-MIG) GPUs"""
+        limits = self._get_user_limits(username)
+        # Default to False - students and default users cannot use full GPUs
+        return limits.get('allow_full_gpu', False)
+
+    def _is_full_gpu(self, gpu_slot: str) -> bool:
+        """Check if a GPU slot is a full GPU (not MIG instance)"""
+        # Full GPU slots don't have a decimal (e.g., "0", "1")
+        # MIG slots have decimal (e.g., "1.0", "1.2")
+        return '.' not in str(gpu_slot)
 
     def _get_user_priority(self, username: str) -> int:
         """Get user's allocation priority"""
@@ -89,13 +133,40 @@ class GPUAllocatorSmart:
         return limits.get('priority', 10)
 
     def _log_event(self, event_type: str, user: str, container: str,
-                   gpu_id: Optional[str] = None, reason: str = "", priority: int = 0):
-        """Append event to log file"""
-        timestamp = datetime.now().isoformat()
-        log_entry = f"{timestamp}|{event_type}|{user}|{container}|{gpu_id or 'N/A'}|priority={priority}|{reason}\n"
+                   gpu_id: Optional[str] = None, reason: str = ""):
+        """Log event to centralized event logger (events.jsonl)"""
+        # Map legacy event types to new event types
+        event_map = {
+            "ALLOCATED": "gpu.allocated",
+            "REJECTED": "gpu.rejected",
+            "RELEASED": "gpu.released",
+        }
+        mapped_type = event_map.get(event_type, f"gpu.{event_type.lower()}")
 
-        with open(self.log_file, 'a') as f:
-            f.write(log_entry)
+        # Build event-logger.py command
+        event_logger = str(SCRIPT_DIR / 'event-logger.py')
+        args = ['python3', event_logger, 'log', mapped_type,
+                f'user={user}', f'container={container}']
+
+        if gpu_id:
+            args.append(f'gpu={gpu_id}')
+        if reason:
+            args.append(f'reason={reason}')
+
+        # Log to centralized event system (fail silently)
+        try:
+            subprocess.run(args, capture_output=True, check=False)
+        except Exception:
+            pass
+
+        # Also write to legacy log file for backwards compatibility
+        timestamp = datetime.now().isoformat()
+        log_entry = f"{timestamp}|{event_type}|{user}|{container}|{gpu_id or 'N/A'}|{reason}\n"
+        try:
+            with open(self.log_file, 'a') as f:
+                f.write(log_entry)
+        except Exception:
+            pass
 
     def _get_container_interface(self, container: str) -> str:
         """
@@ -135,64 +206,88 @@ class GPUAllocatorSmart:
             return INTERFACE_DOCKER
 
     def allocate_gpu(self, username: str, container: str,
-                     max_gpus: Optional[int] = None) -> Tuple[Optional[str], str]:
+                     max_gpus: Optional[int] = None,
+                     require_full_gpu: bool = False) -> Tuple[Optional[str], str]:
         """
         Allocate GPU for a container (stateless - reads from Docker).
+        Uses file lock to prevent race conditions.
 
         Args:
             username: User requesting GPU
             container: Container name (full tag: name._.userid)
             max_gpus: User's max GPU limit (from resource-limits.yaml)
+            require_full_gpu: If True, only allocate full GPU (not MIG)
 
         Returns:
             Tuple of (gpu_id, status_message)
             gpu_id: Slot ID (e.g., "1.2") if successful, None if failed
             status_message: "SUCCESS", "ALREADY_ALLOCATED", or error reason
         """
-        # Check if container already has GPU (read from Docker)
-        container_gpu = self.state_reader.get_container_gpu(container)
-        if container_gpu:
-            gpu_slot = container_gpu['gpu_slot']
-            return gpu_slot, "ALREADY_ALLOCATED"
+        try:
+            # Acquire exclusive lock to prevent race conditions
+            self._acquire_lock()
 
-        # Get user's limits if not provided
-        if max_gpus is None:
+            # Check if container already has GPU (read from Docker)
+            container_gpu = self.state_reader.get_container_gpu(container)
+            if container_gpu:
+                gpu_slot = container_gpu['gpu_slot']
+                return gpu_slot, "ALREADY_ALLOCATED"
+
+            # Get user's limits
             limits = self._get_user_limits(username)
-            max_gpus = limits.get('max_mig_instances', 1)
 
-            # Handle unlimited
-            if max_gpus is None or max_gpus == "unlimited":
-                max_gpus = 999
+            if max_gpus is None:
+                max_gpus = limits.get('max_mig_instances', 1)
+                # Handle unlimited
+                if max_gpus is None or max_gpus == "unlimited":
+                    max_gpus = 999
 
-        # Check user's current GPU count
-        user_allocs = self.state_reader.get_user_allocations(username)
-        current_count = len(user_allocs)
+            # Check full GPU permission if requesting full GPU
+            if require_full_gpu and not self._can_use_full_gpu(username):
+                group = limits.get('_group', 'default')
+                reason = f"FULL_GPU_NOT_ALLOWED (group={group}, allow_full_gpu=false)"
+                self._log_event("REJECTED", username, container, reason=reason)
+                return None, reason
 
-        if current_count >= max_gpus:
-            reason = f"USER_AT_LIMIT ({current_count}/{max_gpus})"
-            priority = self._get_user_priority(username)
-            self._log_event("REJECTED", username, container, reason=reason, priority=priority)
-            return None, reason
+            # Check user's current GPU count
+            user_allocs = self.state_reader.get_user_allocations(username)
+            current_count = len(user_allocs)
 
-        # Get priority for allocation
-        priority = self._get_user_priority(username)
+            if current_count >= max_gpus:
+                reason = f"USER_AT_LIMIT ({current_count}/{max_gpus})"
+                self._log_event("REJECTED", username, container, reason=reason)
+                return None, reason
 
-        # Find available GPU
-        suggestion = self.availability_checker.suggest_gpu_for_user(username, max_gpus, priority)
+            # Find available GPU
+            # Pass allow_full_gpu to availability checker so it can filter appropriately
+            allow_full = self._can_use_full_gpu(username)
+            suggestion = self.availability_checker.suggest_gpu_for_user(
+                username, max_gpus, self._get_user_priority(username),
+                require_full_gpu=require_full_gpu, allow_full_gpu=allow_full
+            )
 
-        if not suggestion['success']:
-            reason = suggestion['error']
-            self._log_event("REJECTED", username, container, reason=reason, priority=priority)
-            return None, reason
+            if not suggestion['success']:
+                reason = suggestion['error']
+                self._log_event("REJECTED", username, container, reason=reason)
+                return None, reason
 
-        gpu_slot = suggestion['gpu_slot']
-        gpu_uuid = suggestion['gpu_uuid']
+            gpu_slot = suggestion['gpu_slot']
 
-        # Log allocation
-        reason = f"ALLOCATED (user has {current_count + 1}/{max_gpus} GPUs)"
-        self._log_event("ALLOCATED", username, container, gpu_slot, reason, priority)
+            # Double-check full GPU permission (belt and suspenders)
+            if self._is_full_gpu(gpu_slot) and not allow_full:
+                reason = f"FULL_GPU_NOT_ALLOWED (got slot {gpu_slot}, user cannot use full GPUs)"
+                self._log_event("REJECTED", username, container, reason=reason)
+                return None, reason
 
-        return gpu_slot, "SUCCESS"
+            # Log allocation
+            reason = f"ALLOCATED (user has {current_count + 1}/{max_gpus} GPUs)"
+            self._log_event("ALLOCATED", username, container, gpu_slot, reason)
+
+            return gpu_slot, "SUCCESS"
+
+        finally:
+            # Always release the lock
+            self._release_lock()
 
     def get_docker_id(self, gpu_slot: str) -> str:
         """

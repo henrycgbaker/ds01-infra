@@ -385,7 +385,14 @@ else
                     exit 1
                 fi
             else
-                log_error "GPU allocation failed: $ALLOC_OUTPUT"
+                # Use friendly error messages
+                ERROR_MESSAGES="$SCRIPT_DIR/../lib/error-messages.sh"
+                if [ -f "$ERROR_MESSAGES" ]; then
+                    source "$ERROR_MESSAGES"
+                    show_limit_error "$ALLOC_OUTPUT" "$CURRENT_USER" "$CONTAINER_TAG"
+                else
+                    log_error "GPU allocation failed: $ALLOC_OUTPUT"
+                fi
                 exit 1
             fi
         else

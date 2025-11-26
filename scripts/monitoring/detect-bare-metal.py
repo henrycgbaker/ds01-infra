@@ -293,6 +293,23 @@ def main():
     detector = BareMetalDetector()
     result = detector.detect(exclude_users=args.exclude_users)
 
+    # Log to centralized event system if warnings detected
+    if result['warning']:
+        try:
+            event_logger = Path("/opt/ds01-infra/scripts/docker/event-logger.py")
+            if event_logger.exists():
+                for user in result['users_affected']:
+                    user_procs = result['by_user'].get(user, [])
+                    pids = ','.join(str(p['pid']) for p in user_procs[:5])
+                    count = len(user_procs)
+                    subprocess.run([
+                        'python3', str(event_logger), 'log', 'bare_metal.warning',
+                        f'user={user}', f'pids={pids}', f'count={count}',
+                        f'message={count} process(es) running outside containers'
+                    ], capture_output=True, check=False)
+        except Exception:
+            pass  # Logging should never break detection
+
     if args.json:
         print(json.dumps(result, indent=2))
         return

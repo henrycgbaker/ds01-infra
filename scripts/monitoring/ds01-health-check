@@ -353,6 +353,20 @@ def main():
     passed = sum(1 for r in results if r['passed'])
     failed = sum(1 for r in results if not r['passed'])
 
+    # Log health check to centralized event system
+    try:
+        event_logger = INFRA_ROOT / "scripts/docker/event-logger.py"
+        if event_logger.exists():
+            status = "pass" if failed == 0 else "fail"
+            failed_checks = ','.join(r['check'] for r in results if not r['passed'])
+            args_list = ['python3', str(event_logger), 'log', 'health.check',
+                         f'status={status}', f'checks_passed={passed}', f'checks_failed={failed}']
+            if failed_checks:
+                args_list.append(f'failed_checks={failed_checks}')
+            subprocess.run(args_list, capture_output=True, check=False)
+    except Exception:
+        pass  # Logging should never break health checks
+
     if args.json:
         output = {
             "timestamp": datetime.utcnow().isoformat() + "Z",

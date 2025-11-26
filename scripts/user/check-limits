@@ -1,0 +1,222 @@
+#!/bin/bash
+# /opt/ds01-infra/scripts/user/check-limits
+# DS01 Resource Limit Checker
+#
+# Shows users their current resource usage vs limits with clear guidance.
+#
+# Usage:
+#   check-limits              # Check your limits
+#   check-limits --verbose    # Show all details
+
+set -e
+
+INFRA_ROOT="/opt/ds01-infra"
+SCRIPT_DIR="$INFRA_ROOT/scripts"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+USERNAME="${USER}"
+VERBOSE="${1:-}"
+
+# Get user's limits from YAML
+get_limits() {
+    python3 "$SCRIPT_DIR/docker/get_resource_limits.py" "$USERNAME" 2>/dev/null
+}
+
+# Get current GPU allocations
+get_gpu_usage() {
+    local count
+    count=$(python3 "$SCRIPT_DIR/docker/gpu-state-reader.py" user "$USERNAME" 2>/dev/null | \
+        grep -c "gpu_slot" 2>/dev/null) || count=0
+    echo "${count:-0}"
+}
+
+# Get container count
+get_container_count() {
+    docker ps -a --filter "label=ds01.user=$USERNAME" --format "{{.Names}}" 2>/dev/null | wc -l
+}
+
+# Get running container count
+get_running_count() {
+    docker ps --filter "label=ds01.user=$USERNAME" --format "{{.Names}}" 2>/dev/null | wc -l
+}
+
+# Parse limit value (handles "null" as unlimited)
+parse_limit() {
+    local val="$1"
+    if [[ "$val" == "null" || "$val" == "None" || -z "$val" ]]; then
+        echo "unlimited"
+    else
+        echo "$val"
+    fi
+}
+
+# Format usage bar
+usage_bar() {
+    local current="${1:-0}"
+    local max="${2:-1}"
+    local width=20
+
+    # Ensure current is a valid number
+    current=$(echo "$current" | tr -d '[:space:]')
+    [[ ! "$current" =~ ^[0-9]+$ ]] && current=0
+
+    if [[ "$max" == "unlimited" ]]; then
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━${NC} ($current used, no limit)"
+        return
+    fi
+
+    # Ensure max is a valid number
+    max=$(echo "$max" | tr -d '[:space:]')
+    [[ ! "$max" =~ ^[0-9]+$ ]] && max=1
+    [[ "$max" -eq 0 ]] && max=1
+
+    local percent=$((current * 100 / max))
+    local filled=$((percent * width / 100))
+    local empty=$((width - filled))
+
+    local color="$GREEN"
+    if [[ $percent -ge 90 ]]; then
+        color="$RED"
+    elif [[ $percent -ge 70 ]]; then
+        color="$YELLOW"
+    fi
+
+    local bar=""
+    for ((i=0; i<filled; i++)); do bar+="━"; done
+    for ((i=0; i<empty; i++)); do bar+="─"; done
+
+    echo -e "${color}${bar}${NC} ($current/$max, ${percent}%)"
+}
+
+# Main display
+main() {
+    echo -e "\n${BOLD}DS01 Resource Limits for ${BLUE}$USERNAME${NC}\n"
+    echo "════════════════════════════════════════════════════════════"
+
+    # Get limits
+    local limits
+    limits=$(get_limits)
+
+    if [[ -z "$limits" ]]; then
+        echo -e "${RED}Could not retrieve limits. Contact admin.${NC}"
+        exit 1
+    fi
+
+    # Parse key limits
+    local max_mig=$(echo "$limits" | grep -oP 'max_mig_instances:\s*\K\S+' || echo "2")
+    local max_containers=$(echo "$limits" | grep -oP 'max_containers_per_user:\s*\K\S+' || echo "3")
+    local allow_full_gpu=$(echo "$limits" | grep -oP 'allow_full_gpu:\s*\K\S+' || echo "False")
+    local max_gpus_per_container=$(echo "$limits" | grep -oP 'max_gpus_per_container:\s*\K\S+' || echo "1")
+    local group=$(echo "$limits" | grep -oP '_group:\s*\K\S+' || echo "student")
+    local storage=$(echo "$limits" | grep -oP 'storage_workspace:\s*\K\S+' || echo "100G")
+
+    max_mig=$(parse_limit "$max_mig")
+    max_containers=$(parse_limit "$max_containers")
+
+    # Get current usage
+    local gpu_count=$(get_gpu_usage)
+    local container_count=$(get_container_count)
+    local running_count=$(get_running_count)
+
+    # Display group
+    echo -e "Your group: ${BOLD}$group${NC}"
+    echo ""
+
+    # GPU Usage
+    echo -e "${BOLD}GPU Allocation:${NC}"
+    if [[ "$max_mig" == "unlimited" ]]; then
+        echo -e "  Current: $gpu_count GPUs/MIGs"
+        usage_bar "$gpu_count" "unlimited"
+    else
+        echo -n "  "
+        usage_bar "$gpu_count" "$max_mig"
+    fi
+
+    # Full GPU access
+    if [[ "$allow_full_gpu" == "True" || "$allow_full_gpu" == "true" ]]; then
+        echo -e "  Full GPU access: ${GREEN}✓ Allowed${NC}"
+    else
+        echo -e "  Full GPU access: ${YELLOW}✗ MIG instances only${NC}"
+    fi
+    echo -e "  Max GPUs per container: $max_gpus_per_container"
+    echo ""
+
+    # Container Usage
+    echo -e "${BOLD}Containers:${NC}"
+    if [[ "$max_containers" == "unlimited" ]]; then
+        echo -e "  Current: $running_count running, $container_count total"
+        usage_bar "$container_count" "unlimited"
+    else
+        echo -n "  "
+        usage_bar "$container_count" "$max_containers"
+        echo -e "  ($running_count running)"
+    fi
+    echo ""
+
+    # Storage
+    echo -e "${BOLD}Storage Limit:${NC} $storage"
+    if command -v quota &>/dev/null; then
+        quota -s 2>/dev/null | tail -n +3 | head -1 || echo "  (quota system not active)"
+    else
+        local home_usage=$(du -sh "$HOME" 2>/dev/null | cut -f1 || echo "unknown")
+        echo "  Current home directory: $home_usage"
+    fi
+    echo ""
+
+    # Warnings
+    local warnings=0
+
+    if [[ "$max_mig" != "unlimited" ]] && [[ $gpu_count -ge $max_mig ]]; then
+        echo -e "${RED}⚠ GPU LIMIT REACHED${NC}"
+        echo "  You have allocated all $max_mig of your allowed GPUs."
+        echo "  To get more GPUs, stop or remove a container first:"
+        echo "    container-list           # See your containers"
+        echo "    container-retire <name>  # Free GPU and remove container"
+        echo ""
+        warnings=$((warnings + 1))
+    fi
+
+    if [[ "$max_containers" != "unlimited" ]] && [[ $container_count -ge $max_containers ]]; then
+        echo -e "${YELLOW}⚠ CONTAINER LIMIT REACHED${NC}"
+        echo "  You have $container_count containers (limit: $max_containers)."
+        echo "  Remove unused containers:"
+        echo "    container-list           # See your containers"
+        echo "    container-retire <name>  # Remove container"
+        echo ""
+        warnings=$((warnings + 1))
+    fi
+
+    if [[ "$allow_full_gpu" != "True" && "$allow_full_gpu" != "true" ]]; then
+        if [[ "$VERBOSE" == "--verbose" || "$VERBOSE" == "-v" ]]; then
+            echo -e "${BLUE}ℹ FULL GPU ACCESS${NC}"
+            echo "  Your group ($group) can only use MIG instances, not full GPUs."
+            echo "  MIG instances provide isolated GPU slices - sufficient for most workloads."
+            echo "  If you need full GPU access, contact your administrator."
+            echo ""
+        fi
+    fi
+
+    echo "════════════════════════════════════════════════════════════"
+
+    if [[ $warnings -eq 0 ]]; then
+        echo -e "${GREEN}✓ All resources available${NC}"
+    else
+        echo -e "${YELLOW}$warnings warning(s) - see above${NC}"
+    fi
+
+    echo ""
+    echo "Commands:"
+    echo "  container-deploy <name>   Create and start a container"
+    echo "  container-list            View your containers"
+    echo "  check-limits --verbose    Show detailed limit info"
+    echo ""
+}
+
+main

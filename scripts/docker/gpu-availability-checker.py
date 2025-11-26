@@ -128,10 +128,24 @@ class GPUAvailabilityChecker:
             'user_allocations': user_allocs
         }
 
-    def suggest_gpu_for_user(self, username: str, max_gpus: int = None, priority: int = 10) -> Dict:
+    def _is_full_gpu(self, gpu_slot: str) -> bool:
+        """Check if a GPU slot is a full GPU (not MIG instance)"""
+        # Full GPU slots don't have a decimal (e.g., "0", "1")
+        # MIG slots have decimal (e.g., "1.0", "1.2")
+        return '.' not in str(gpu_slot)
+
+    def suggest_gpu_for_user(self, username: str, max_gpus: int = None, priority: int = 10,
+                             require_full_gpu: bool = False, allow_full_gpu: bool = False) -> Dict:
         """
         Suggest which GPU to allocate for a user.
-        Uses least-allocated strategy.
+        Uses least-allocated strategy with full GPU access control.
+
+        Args:
+            username: User requesting GPU
+            max_gpus: User's max GPU limit
+            priority: User's allocation priority (not currently used)
+            require_full_gpu: If True, only suggest full GPUs (not MIG)
+            allow_full_gpu: If False, filter out full GPUs from suggestions
 
         Returns:
             Dict with 'gpu_slot', 'gpu_uuid', or error if none available
@@ -155,10 +169,54 @@ class GPUAvailabilityChecker:
                 'user_current': availability['user_current_count']
             }
 
-        # Use least-allocated strategy - just pick first available
-        # (In future: could implement priority-based selection)
-        gpu_slot = sorted(available.keys())[0]
-        gpu_info = available[gpu_slot]
+        # Filter GPUs based on full GPU permissions
+        filtered_available = {}
+        for slot, info in available.items():
+            is_full = self._is_full_gpu(slot)
+
+            # If user requires full GPU, only include full GPUs
+            if require_full_gpu and not is_full:
+                continue
+
+            # If user is not allowed full GPUs, exclude them
+            if not allow_full_gpu and is_full:
+                continue
+
+            filtered_available[slot] = info
+
+        if not filtered_available:
+            if require_full_gpu:
+                return {
+                    'success': False,
+                    'error': 'No full GPUs available (only MIG instances free)',
+                    'user_current': availability['user_current_count']
+                }
+            elif not allow_full_gpu:
+                return {
+                    'success': False,
+                    'error': 'No MIG instances available (only full GPUs free, user not permitted)',
+                    'user_current': availability['user_current_count']
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'No GPUs available matching criteria',
+                    'user_current': availability['user_current_count']
+                }
+
+        # Use least-allocated strategy - prefer MIG instances if available and allowed
+        # Sort: MIG instances first (they have '.'), then by slot ID
+        def sort_key(slot):
+            is_mig = '.' in slot
+            # MIG instances get priority (sort first) unless require_full_gpu
+            if require_full_gpu:
+                return (is_mig, slot)  # Full GPUs first
+            else:
+                return (not is_mig, slot)  # MIG instances first
+
+        sorted_slots = sorted(filtered_available.keys(), key=sort_key)
+        gpu_slot = sorted_slots[0]
+        gpu_info = filtered_available[gpu_slot]
 
         return {
             'success': True,

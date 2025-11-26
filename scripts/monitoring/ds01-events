@@ -1,0 +1,181 @@
+#!/bin/bash
+# /opt/ds01-infra/scripts/monitoring/ds01-events
+# DS01 Event Query Tool - Query centralized event logs
+#
+# Usage:
+#   ds01-events              # Show last 20 events
+#   ds01-events tail 50      # Show last 50 events
+#   ds01-events user alice   # Events for user alice
+#   ds01-events type gpu     # Events matching type "gpu"
+#   ds01-events today        # Today's events
+#   ds01-events errors       # Failed/rejected events
+#   ds01-events json         # Raw JSON output
+
+set -e
+
+EVENTS_FILE="/var/log/ds01/events.jsonl"
+EVENT_LOGGER="/opt/ds01-infra/scripts/docker/event-logger.py"
+
+# Check if events file exists
+if [[ ! -f "$EVENTS_FILE" ]]; then
+    echo "No events logged yet ($EVENTS_FILE not found)"
+    exit 0
+fi
+
+# Format single event for display
+format_event() {
+    local json="$1"
+    local ts=$(echo "$json" | jq -r '.ts // "?"')
+    local event=$(echo "$json" | jq -r '.event // "?"')
+    local user=$(echo "$json" | jq -r '.user // ""')
+    local container=$(echo "$json" | jq -r '.container // ""')
+    local gpu=$(echo "$json" | jq -r '.gpu // ""')
+    local reason=$(echo "$json" | jq -r '.reason // .status // ""')
+
+    # Build output line
+    local line="$ts $event"
+    [[ -n "$user" ]] && line="$line user=$user"
+    [[ -n "$container" ]] && line="$line container=$container"
+    [[ -n "$gpu" ]] && line="$line gpu=$gpu"
+    [[ -n "$reason" ]] && line="$line reason=$reason"
+
+    echo "$line"
+}
+
+# Main command handling
+command="${1:-tail}"
+arg="${2:-20}"
+
+case "$command" in
+    tail|last)
+        # Show last N events
+        count="${arg:-20}"
+        echo -e "\nLast $count events:\n"
+        tail -n "$count" "$EVENTS_FILE" | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    user)
+        # Events for specific user
+        if [[ -z "$arg" ]]; then
+            echo "Usage: ds01-events user <username>"
+            exit 1
+        fi
+        echo -e "\nEvents for user '$arg':\n"
+        grep "\"user\":.*\"$arg\"" "$EVENTS_FILE" | tail -50 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    type|event)
+        # Events matching type pattern
+        if [[ -z "$arg" ]]; then
+            echo "Usage: ds01-events type <pattern>"
+            exit 1
+        fi
+        echo -e "\nEvents matching '$arg':\n"
+        grep "\"event\":.*\"$arg" "$EVENTS_FILE" | tail -50 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    today)
+        # Today's events
+        today=$(date +%Y-%m-%d)
+        echo -e "\nEvents for $today:\n"
+        grep "\"ts\":.*\"$today" "$EVENTS_FILE" | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    errors|failures)
+        # Failed/rejected events
+        echo -e "\nError events:\n"
+        grep -E '(rejected|failed|error|warning)' "$EVENTS_FILE" | tail -50 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    gpu)
+        # GPU-related events
+        echo -e "\nGPU events:\n"
+        grep '"event":"gpu\.' "$EVENTS_FILE" | tail -50 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    container)
+        # Container-related events
+        echo -e "\nContainer events:\n"
+        grep '"event":"container\.' "$EVENTS_FILE" | tail -50 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    health)
+        # Health check events
+        echo -e "\nHealth check events:\n"
+        grep '"event":"health\.' "$EVENTS_FILE" | tail -20 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    json)
+        # Raw JSON output
+        count="${arg:-20}"
+        tail -n "$count" "$EVENTS_FILE"
+        ;;
+
+    count|stats)
+        # Event statistics
+        echo -e "\nEvent Statistics:\n"
+        total=$(wc -l < "$EVENTS_FILE")
+        echo "Total events: $total"
+        echo ""
+        echo "By type:"
+        jq -r '.event' "$EVENTS_FILE" 2>/dev/null | sort | uniq -c | sort -rn | head -10
+        echo ""
+        echo "By user (top 10):"
+        jq -r '.user // "system"' "$EVENTS_FILE" 2>/dev/null | sort | uniq -c | sort -rn | head -10
+        ;;
+
+    search)
+        # Free-form search
+        if [[ -z "$arg" ]]; then
+            echo "Usage: ds01-events search <pattern>"
+            exit 1
+        fi
+        echo -e "\nSearching for '$arg':\n"
+        grep -i "$arg" "$EVENTS_FILE" | tail -50 | while read -r line; do
+            format_event "$line"
+        done
+        ;;
+
+    help|--help|-h)
+        echo "DS01 Event Query Tool"
+        echo ""
+        echo "Usage: ds01-events <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  tail [N]          Show last N events (default: 20)"
+        echo "  user <username>   Show events for a user"
+        echo "  type <pattern>    Show events matching type"
+        echo "  today             Show today's events"
+        echo "  errors            Show error/failure events"
+        echo "  gpu               Show GPU events"
+        echo "  container         Show container events"
+        echo "  health            Show health check events"
+        echo "  json [N]          Raw JSON output"
+        echo "  stats             Show event statistics"
+        echo "  search <pattern>  Free-form search"
+        echo ""
+        echo "Events file: $EVENTS_FILE"
+        ;;
+
+    *)
+        echo "Unknown command: $command"
+        echo "Run 'ds01-events help' for usage"
+        exit 1
+        ;;
+esac

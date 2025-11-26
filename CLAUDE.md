@@ -15,10 +15,10 @@ Instructions for AI assistants working with this repository.
 DS01 Infrastructure: GPU-enabled container management for multi-user data science workloads.
 
 **Core capabilities:**
-- Dynamic MIG-aware GPU allocation with priority scheduling
+- Dynamic MIG-aware GPU allocation with access control (MIG vs full GPU)
 - Per-user/group resource limits (YAML config + systemd cgroups)
 - Container lifecycle automation (idle detection, auto-cleanup)
-- Monitoring and metrics collection
+- Centralized event logging and monitoring
 
 ## Architecture Design Principles
 
@@ -137,7 +137,13 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 **Resource Management:**
 - `config/resource-limits.yaml` - Central config (defaults, groups, user_overrides, policies)
 - `scripts/docker/get_resource_limits.py` - YAML parser
-- `scripts/docker/gpu_allocator.py` - Stateful GPU allocation with priority scheduling
+- `scripts/docker/gpu_allocator_v2.py` - Stateless GPU allocation with file locking (race-safe)
+- `scripts/docker/gpu-availability-checker.py` - Available GPU queries with access control
+
+**Centralized Logging:**
+- `scripts/docker/event-logger.py` - Append-only JSON event log
+- `/var/log/ds01/events.jsonl` - All events (GPU allocation, container lifecycle, health checks)
+- `scripts/monitoring/ds01-events` - Query tool for event log
 
 ## Documentation Structure
 
@@ -256,13 +262,19 @@ Priority order (highest to lowest):
 3. `defaults` - Fallback
 
 **Key fields:**
-- `max_mig_instances`: Max GPUs/MIG instances per user
+- `max_mig_instances`: Max GPUs/MIG instances per user total
+- `max_gpus_per_container`: Max GPUs per single container
+- `allow_full_gpu`: Can user access full (non-MIG) GPUs? (default: false)
 - `max_cpus`, `memory`, `shm_size`: Per-container compute limits
 - `max_containers_per_user`: Max simultaneous containers
-- `idle_timeout`: Auto-stop after GPU inactivity (e.g., "48h")
-- `gpu_hold_after_stop`: Hold GPU after stop (e.g., "24h", null = indefinite)
-- `container_hold_after_stop`: Auto-remove container after stop (e.g., "12h", null = never)
-- `priority`: Allocation priority (1-100)
+- `idle_timeout`: Auto-stop after GPU inactivity (e.g., "2h")
+- `gpu_hold_after_stop`: Hold GPU after stop (e.g., "0.25h", null = indefinite)
+- `container_hold_after_stop`: Auto-remove container after stop (e.g., "0.5h", null = never)
+
+**Group access control:**
+- `student`: MIG only (`allow_full_gpu: false`)
+- `researcher`: MIG or full GPU (`allow_full_gpu: true`)
+- `admin`: Unlimited access
 
 **Special values:**
 - `null` for max_mig_instances = unlimited (admin only)
@@ -335,13 +347,16 @@ scripts/
 ├── lib/                 # Shared libraries
 │   ├── ds01-context.sh       # Context detection for conditional output
 │   ├── interactive-select.sh # Container selection UI
-│   └── container-session.sh  # Unified handler for start/run/attach
+│   ├── container-session.sh  # Unified handler for start/run/attach
+│   ├── container-logger.sh   # Centralized event logging wrapper
+│   └── error-messages.sh     # User-friendly error messages
 ├── system/              # System administration
 │   ├── setup-docker-cgroups.sh, setup-opa-authz.sh  # Universal enforcement
 │   ├── setup-resource-slices.sh, create-user-slice.sh
 │   ├── add-user-to-docker.sh, deploy-commands.sh
 ├── monitoring/          # Metrics and auditing
 │   ├── ds01-health-check, detect-bare-metal.py
+│   ├── ds01-events, validate-state.py      # Event log and state validation
 │   ├── gpu-status-dashboard.py, check-idle-containers.sh
 │   ├── collect-*-metrics.sh, audit-*.sh
 ├── maintenance/         # Cleanup and housekeeping
@@ -371,14 +386,25 @@ dashboard users                          # Per-user breakdown
 dashboard monitor                        # Watch mode (1s refresh)
 dashboard allocations 20                 # Recent GPU allocation events
 
+# Check system health
+ds01-health-check                        # Full health check
+validate-state.py                        # Check GPU allocation consistency
+
+# View centralized event log
+ds01-events                              # Recent events
+ds01-events user alice                   # Events for specific user
+ds01-events gpu                          # GPU events only
+ds01-events errors                       # Failed/rejected events
+
 # Check bare metal processes
 python3 scripts/monitoring/detect-bare-metal.py --json
+```
 
-# Check system health
-ds01-health-check
-
-# View logs
-tail -f /var/log/ds01/gpu-allocations.log
+**User self-service:**
+```bash
+check-limits                             # Show your resource limits and usage
+check-limits --verbose                   # Detailed limit info
+quota-check                              # Check disk quota (if enabled)
 ```
 
 ## Security Notes

@@ -21,7 +21,7 @@ import sys
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, List
 
@@ -48,7 +48,7 @@ class EventLogger:
             True if logged successfully, False otherwise
         """
         event = {
-            "ts": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "event": event_type,
             **kwargs
         }

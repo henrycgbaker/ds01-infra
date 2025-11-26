@@ -42,10 +42,20 @@ has_cgroup_parent if {
 }
 
 # Helper: Validate cgroup-parent is a DS01 slice
+# Must match pattern: ds01-{group}-{user}.slice or ds01.slice (daemon default)
 valid_cgroup_parent if {
     cgroup := input.Body.HostConfig.CgroupParent
-    startswith(cgroup, "ds01")
+    startswith(cgroup, "ds01-")
     endswith(cgroup, ".slice")
+    # Reject path traversal and invalid characters
+    not contains(cgroup, "..")
+    not contains(cgroup, "//")
+    not contains(cgroup, " ")
+}
+
+# Also valid: the parent slice ds01.slice itself
+valid_cgroup_parent if {
+    input.Body.HostConfig.CgroupParent == "ds01.slice"
 }
 
 # Also allow no cgroup-parent (will use daemon default ds01.slice)
@@ -75,7 +85,9 @@ deny if {
 blocked_cgroup_patterns := [
     "system.slice",     # Don't allow into system slice
     "user.slice",       # Don't allow into generic user slice
-    "../",              # Path traversal
+    "../",              # Path traversal (with slash)
+    "..",               # Path traversal (without slash)
+    "//",               # Double slash
 ]
 
 # Information for monitoring/logging
