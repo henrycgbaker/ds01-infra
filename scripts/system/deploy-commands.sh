@@ -80,7 +80,7 @@ echo ""
 echo -e "${BOLD}Container Management (10 commands):${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/container-create" "container-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-run" "container-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-open" "container-open" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-attach" "container-attach" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-pause" "container-pause" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))

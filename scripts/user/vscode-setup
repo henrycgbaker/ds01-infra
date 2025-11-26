@@ -239,7 +239,7 @@ echo ""
 if [ -n "$CONTAINER_NAME" ]; then
     echo "  ${BOLD}Option A: Using VS Code Terminal${NC}"
     echo "    1. Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
-    echo -e "    2. Enter container: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
+    echo -e "    2. Enter container: ${GREEN}container-attach $CONTAINER_NAME${NC}"
     echo -e "    3. Navigate to: ${GREEN}$PROJECT_DIR${NC}"
     echo "    4. Start coding!"
     echo ""
@@ -252,7 +252,7 @@ if [ -n "$CONTAINER_NAME" ]; then
 else
     echo -e "  ${BOLD}Option A: Using VS Code Terminal${NC}"
     echo -e "    1. Open terminal in VS Code (Ctrl+\` or Terminal → New Terminal)"
-    echo -e "    2. Enter container: ${GREEN}container-deploy <container_name>${NC}"
+    echo -e "    2. Enter container: ${GREEN}container-attach <container_name>${NC}"
     echo -e "    3. Navigate: ${GREEN}cd /workspace/$PROJECT_NAME${NC}"
     echo "    4. Start coding!"
     echo ""

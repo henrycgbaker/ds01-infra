@@ -73,7 +73,7 @@ usage() {
     echo "  container-deploy my-project"
     echo ""
     echo -e "  ${DIM}# Deploy from custom image and open terminal${NC}"
-    echo "  container-deploy my-project my-project-image --open"
+    echo "  container-deploy my-project my-project-image && container-attach my-project"
     echo ""
     echo -e "  ${DIM}# Deploy in background for SSH access${NC}"
     echo "  container-deploy my-project --background"
@@ -192,6 +192,16 @@ echo ""
 
 # If start mode not specified, prompt
 if [ -z "$START_MODE" ]; then
+    # Require explicit flag in non-interactive mode
+    if [ ! -t 0 ] || [ ! -t 1 ]; then
+        echo -e "${RED}Error: Non-interactive mode requires --background or --open flag${NC}"
+        echo ""
+        echo "Usage:"
+        echo "  container-deploy my-project --background  # Start in background"
+        echo "  container-deploy my-project --open        # Start and attach immediately"
+        exit 1
+    fi
+
     if [ "$GUIDED" = true ]; then
         echo -e "${CYAN}ℹ ${NC}${BOLD}How to start the container?${NC}"
         echo ""
@@ -264,7 +274,7 @@ case $START_MODE in
                 echo ""
             else
                 echo -e "${BOLD}Next steps:${NC}"
-                echo -e "  • Access container: ${GREEN}container-deploy $CONTAINER_NAME --open${NC}"
+                echo -e "  • Attach to container: ${GREEN}container-attach $CONTAINER_NAME${NC}"
                 echo -e "  • Check status:     ${GREEN}container-list${NC}"
                 echo -e "  • View stats:       ${GREEN}container-stats${NC}"
                 echo ""
@@ -375,7 +385,7 @@ case $START_MODE in
                     echo -e "${GREEN}✓${NC} Container kept running"
                     echo ""
                     echo -e "${BOLD}Next steps:${NC}"
-                    echo -e "  Reconnect: ${GREEN}container-deploy $CONTAINER_NAME --open${NC}"
+                    echo -e "  Reconnect: ${GREEN}container-attach $CONTAINER_NAME${NC}"
                     echo -e "  Status:    ${GREEN}container-list${NC}"
                     echo ""
                     if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then

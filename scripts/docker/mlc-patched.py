@@ -54,7 +54,13 @@ mlc_version = "2.1.2"         # Version number of AIME MLC
 
 # Obtain user and group id, user name for different tasks by create, open,...
 user_id = os.getuid()
-user_name = os.getlogin()
+# os.getlogin() can fail in some situations (sudo, cron, certain terminals)
+# Fallback to pwd.getpwuid() which is more reliable
+try:
+    user_name = os.getlogin()
+except OSError:
+    import pwd
+    user_name = pwd.getpwuid(user_id).pw_name
 group_id = os.getgid()      
 
 # Coloring the frontend (ANSI escape codes) and i/o 
@@ -1416,30 +1422,46 @@ def build_docker_run_command(
         "apt-get install sudo git -q -y > /dev/null 2>&1;",
         # DS01 FIX: Robust user/group creation with conflict resolution
         # Step 1: Remove any existing group with same GID (prevents conflicts)
+        f"echo 'DS01 DEBUG Step 1: Checking for GID {group_id} conflicts'; "
         f"if getent group {group_id} > /dev/null 2>&1; then "
         f"EXISTING_GROUP=$(getent group {group_id} | cut -d: -f1); "
+        f"echo \"DS01 DEBUG Step 1: Found existing group: $EXISTING_GROUP\"; "
         f"if [ \"$EXISTING_GROUP\" != \"{user_name}\" ]; then "
-        f"groupdel $EXISTING_GROUP 2>/dev/null || true; "
-        f"fi; fi;",
+        f"echo \"DS01 DEBUG Step 1: Removing conflicting group $EXISTING_GROUP\"; "
+        f"groupdel $EXISTING_GROUP 2>&1 || echo \"DS01 DEBUG Step 1: groupdel failed: $?\"; "
+        f"else echo 'DS01 DEBUG Step 1: Group name matches, no removal needed'; fi; "
+        f"else echo 'DS01 DEBUG Step 1: No existing group with GID {group_id}'; fi;",
         # Step 2: Create group with specific GID
+        f"echo 'DS01 DEBUG Step 2: Creating group {user_name} with gid={group_id}'; "
         f"if ! getent group {group_id} > /dev/null 2>&1; then "
-        f"addgroup --gid {group_id} {user_name} 2>/dev/null || groupadd -g {group_id} {user_name} 2>/dev/null || true; "
-        f"fi;",
+        f"addgroup --gid {group_id} {user_name} 2>&1 && echo 'DS01 DEBUG Step 2: addgroup succeeded' || "
+        f"{{ groupadd -g {group_id} {user_name} 2>&1 && echo 'DS01 DEBUG Step 2: groupadd succeeded' || "
+        f"echo 'DS01 DEBUG Step 2: Group creation FAILED'; }}; "
+        f"else echo 'DS01 DEBUG Step 2: Group {group_id} already exists (skipping creation)'; fi;",
         # Step 3: Remove any existing user with same UID (prevents conflicts)
+        f"echo 'DS01 DEBUG Step 3: Checking for UID {user_id} conflicts'; "
         f"if getent passwd {user_id} > /dev/null 2>&1; then "
         f"EXISTING_USER=$(getent passwd {user_id} | cut -d: -f1); "
+        f"echo \"DS01 DEBUG Step 3: Found existing user: $EXISTING_USER\"; "
         f"if [ \"$EXISTING_USER\" != \"{user_name}\" ]; then "
-        f"userdel -r $EXISTING_USER 2>/dev/null || true; "
-        f"fi; fi;",
+        f"echo \"DS01 DEBUG Step 3: Removing conflicting user $EXISTING_USER\"; "
+        f"userdel -r $EXISTING_USER 2>&1 || echo \"DS01 DEBUG Step 3: userdel failed: $?\"; "
+        f"else echo 'DS01 DEBUG Step 3: User name matches, no removal needed'; fi; "
+        f"else echo 'DS01 DEBUG Step 3: No existing user with UID {user_id}'; fi;",
         # Step 4: Create user with specific UID and GID
+        f"echo 'DS01 DEBUG Step 4: Creating user {user_name} (uid={user_id}, gid={group_id})'; "
         f"if ! getent passwd {user_id} > /dev/null 2>&1; then "
-        f"adduser --uid {user_id} --gid {group_id} {user_name} --disabled-password --gecos aime 2>/dev/null || "
-        f"useradd -u {user_id} -g {group_id} -d /home/{user_name} -m -s /bin/bash {user_name} 2>/dev/null || true; "
-        f"fi;",
-        # Step 5: Verify and report
+        f"adduser --uid {user_id} --gid {group_id} {user_name} --disabled-password --gecos aime 2>&1 && echo 'DS01 DEBUG Step 4: adduser succeeded' || "
+        f"{{ useradd -u {user_id} -g {group_id} -d /home/{user_name} -m -s /bin/bash {user_name} 2>&1 && echo 'DS01 DEBUG Step 4: useradd succeeded' || "
+        f"echo 'DS01 DEBUG Step 4: User creation FAILED'; }}; "
+        f"else echo 'DS01 DEBUG Step 4: User {user_id} already exists (skipping creation)'; fi;",
+        # Step 5: Verify and report with detailed debug info
+        f"echo 'DS01 DEBUG: Checking user {user_name} (uid={user_id}, gid={group_id})'; "
+        f"echo 'DS01 DEBUG: /etc/passwd entry:'; getent passwd {user_id} 2>&1 || echo 'NOT FOUND'; "
+        f"echo 'DS01 DEBUG: /etc/group entry:'; getent group {group_id} 2>&1 || echo 'NOT FOUND'; "
         f"if getent passwd {user_id} > /dev/null 2>&1 && getent group {group_id} > /dev/null 2>&1; then "
         f"echo 'User setup: OK'; "
-        f"else echo 'User setup: FAILED'; fi;",
+        f"else echo 'User setup: FAILED - uid={user_id} gid={group_id}'; fi;",
         # Step 6: Configure user
         f"passwd -d {user_name} 2>/dev/null || true;",
         f"usermod -aG sudo {user_name} 2>/dev/null || true;",
@@ -2066,8 +2088,29 @@ def main():
                 dir_to_be_added
             )
             
-            # ToDo: compare subprocess.Popen with subprocess.run  
+            # ToDo: compare subprocess.Popen with subprocess.run
             result_run_cmd = subprocess.run(docker_prepare_container, capture_output=True, text=True )
+
+            # DS01: Print user setup result for debugging
+            if 'User setup: FAILED' in result_run_cmd.stdout:
+                print(f"{WARNING}Warning: User/group setup may have failed{RESET}")
+                # Extract and print debug lines
+                for line in result_run_cmd.stdout.split('\n'):
+                    if 'DS01 DEBUG' in line or 'User setup' in line or 'NOT FOUND' in line:
+                        print(f"{HINT}  {line}{RESET}")
+            elif 'User setup: OK' in result_run_cmd.stdout:
+                pass  # Silently succeed
+            else:
+                print(f"{WARNING}Warning: Could not verify user setup - no confirmation in output{RESET}")
+                # Print any relevant lines for debugging
+                for line in result_run_cmd.stdout.split('\n'):
+                    if 'DS01 DEBUG' in line or 'error' in line.lower():
+                        print(f"{HINT}  {line}{RESET}")
+
+            if result_run_cmd.returncode != 0:
+                print(f"{WARNING}Warning: Container prep returned code {result_run_cmd.returncode}{RESET}")
+                if result_run_cmd.stderr:
+                    print(f"{HINT}stderr: {result_run_cmd.stderr[-300:]}{RESET}")
 
             # Commit the container: saves the current state of the container as a new image.
             # ToDo: compare subprocess.Popen with subprocess.run  

@@ -39,7 +39,7 @@ DS01 uses a **5-layer implementation hierarchy** with **4 user-facing interfaces
 │   └── container retire     # stop + remove + free GPU                       │
 │                                                                             │
 │   L2: ATOMIC (Single-Purpose Commands)                                      │
-│   ├── Container: create, start, open, run, stop, remove, list, stats, exit  │
+│   ├── Container: create, start, attach, run, stop, remove, list, stats, exit│
 │   └── Image:     create, list, update, delete                               │
 │                                                                             │
 │   L1: MLC (AIME Machine Learning Containers) ─────────────────── HIDDEN     │
@@ -326,15 +326,16 @@ scripts/
 │   ├── docker-wrapper.sh                         # Universal enforcement
 │   ├── gpu-state-reader.py, event-logger.py
 ├── user/                # L2/L3/L4 - User-facing commands
-│   ├── L2 (Atomic): container-{create|start|run|stop|remove|list|stats|exit}
+│   ├── L2 (Atomic): container-{create|start|attach|run|stop|remove|list|stats|exit}
 │   ├── L2 (Atomic): image-{create|list|update|delete}
 │   ├── L2 (Atomic): {dir|git|readme|ssh|vscode}-*
 │   ├── L3 (Orchestrators): container-{deploy|retire}
 │   ├── L4 (Wizards): user-setup, project-init, *-dispatcher.sh
 │   └── v1-backup/       # Backup of container workflow scripts before refactor
 ├── lib/                 # Shared libraries
-│   ├── ds01-context.sh  # Context detection for conditional output
-│   └── interactive-select.sh
+│   ├── ds01-context.sh       # Context detection for conditional output
+│   ├── interactive-select.sh # Container selection UI
+│   └── container-session.sh  # Unified handler for start/run/attach
 ├── system/              # System administration
 │   ├── setup-docker-cgroups.sh, setup-opa-authz.sh  # Universal enforcement
 │   ├── setup-resource-slices.sh, create-user-slice.sh
