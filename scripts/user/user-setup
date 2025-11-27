@@ -323,19 +323,23 @@ else
 fi
 
 # ============================================================================
-# STEP 3: VS CODE SETUP
+# STEP 3: CONFIGURE VS CODE FOR REMOTE ACCESS
 # ============================================================================
 
 echo -e ""
-echo -e "${CYAN}━━━ Step 3: VS Code Setup ━━━${NC}\n"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Step 3: Configure VS Code for Remote Access${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e ""
 
 SERVER_IP=$(hostname -I | awk '{print $1}')
 
-echo -e "${BOLD}Install these extensions in VS Code:${NC}"
+# --- Step 3.1: Install Extensions ---
+echo -e "${CYAN}━━━ Step 1: Install Extensions ━━━${NC}"
 echo -e ""
 echo -e "  ${CYAN}Required:${NC}"
-echo -e "    • Remote - SSH (ms-vscode-remote.remote-ssh)"
-echo -e "    • Dev Containers (ms-vscode-remote.remote-containers)"
+echo -e "    • Remote - SSH (ms-vscode-remote.remote-ssh) ${DIM}(needed now)${NC}"
+echo -e "    • Dev Containers (ms-vscode-remote.remote-containers) ${DIM}(needed later)${NC}"
 echo -e ""
 echo -e "  ${CYAN}Recommended:${NC}"
 echo -e "    • Python"
@@ -349,22 +353,28 @@ read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Press Enter when extensions are installed..." </dev/tty
 echo -e ""
 
-# ============================================================================
-# STEP 4: CONFIGURE SSH IN VS CODE
-# ============================================================================
-
-echo -e "${CYAN}━━━ Step 4: Configure SSH in VS Code ━━━${NC}\n"
-
-echo -e "In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Open SSH Configuration File\"${NC}"
+# --- Step 3.2: Configure SSH Credentials ---
+echo -e "${CYAN}━━━ Step 2: Configure Your SSH Credentials in VS Code ━━━${NC}"
 echo -e ""
-echo -e "Add this configuration:"
+echo -e "  We need to add this configuration:"
 echo -e ""
-echo -e "${GREEN}Host ds01${NC}"
-echo -e "${GREEN}    HostName ${SERVER_IP}${NC}"
-echo -e "${GREEN}    User ${USERNAME}${NC}"
-echo -e "${GREEN}    IdentityFile ~/.ssh/ds01_id_ed25519${NC}"
-echo -e "${GREEN}    ForwardAgent yes${NC}"
-echo -e "${GREEN}    ServerAliveInterval 60${NC}"
+echo -e "  ${GREEN}Host ds01${NC}"
+echo -e "  ${GREEN}    HostName ${SERVER_IP}${NC}"
+echo -e "  ${GREEN}    User ${USERNAME}${NC}"
+echo -e "  ${GREEN}    IdentityFile ~/.ssh/ds01_id_ed25519${NC}"
+echo -e "  ${GREEN}    ForwardAgent yes${NC}"
+echo -e "  ${GREEN}    ServerAliveInterval 60${NC}"
+echo -e ""
+echo -e "  to this dotfile: ${CYAN}~/.ssh/config${NC}"
+echo -e ""
+echo -e "${BOLD}Option A: via Remote SSH extension (recommended):${NC}"
+echo -e ""
+echo -e "  In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Open SSH Configuration File\"${NC}"
+echo -e ""
+echo -e "${BOLD}Option B: via Terminal${NC}"
+echo -e ""
+echo -e "  Open on your LOCAL machine:"
+echo -e "    ${GREEN}nano ~/.ssh/config${NC}"
 echo -e ""
 
 # Clear any buffered input before prompting
@@ -372,20 +382,14 @@ read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Press Enter when saved..." </dev/tty
 echo -e ""
 
-# ============================================================================
-# STEP 5: TEST CONNECTION
-# ============================================================================
-
-echo -e "${CYAN}━━━ Step 5: Test Connection ━━━${NC}\n"
-
+# --- Step 3.3: Test Connection ---
+echo -e "${CYAN}━━━ Step 3: Test Connection ━━━${NC}"
+echo -e ""
 echo -e "In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Connect to Host\" → ds01${NC}"
 echo -e ""
-
-if is_beginner "REMOTE"; then
-    echo -e "${DIM}VS Code will open a new window connected to the server.${NC}"
-    echo -e "${DIM}You should see 'SSH: ds01' in the bottom-left corner.${NC}"
-    echo -e ""
-fi
+echo -e "VS Code will open a new window connected to the server."
+echo -e "You should see 'SSH: ds01' in the bottom-left corner."
+echo -e ""
 
 # Clear any buffered input before prompting
 read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
@@ -393,22 +397,8 @@ read -p "Press Enter after connecting..." </dev/tty
 echo -e ""
 
 # ============================================================================
-# JUPYTER ACCESS (brief mention)
-# ============================================================================
-
-echo -e "${CYAN}━━━ Jupyter Access ━━━${NC}\n"
-
-echo -e "For Jupyter notebooks in VS Code, the ${CYAN}Jupyter extension${NC} handles everything."
-echo -e "Just open any .ipynb file after connecting."
-echo -e ""
-echo -e "For browser-based access, run: ${GREEN}jupyter-setup --guided${NC}"
-echo -e ""
-
-# ============================================================================
 # CREATE ONBOARDING DOCUMENT
 # ============================================================================
-
-echo -e "${CYAN}━━━ Creating Reference Documents ━━━${NC}\n"
 
 onboarding-create
 
@@ -418,19 +408,49 @@ onboarding-create
 
 echo -e ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ User Setup Complete!${NC}"
+echo -e "${GREEN}${BOLD}✓ SSH Setup Complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e ""
 
 echo -e "${BOLD}What we accomplished:${NC}"
-echo -e ""
-echo -e "  ${GREEN}✓${NC} SSH keys configured"
-echo -e "  ${GREEN}✓${NC} VS Code extensions installed"
-echo -e "  ${GREEN}✓${NC} SSH connection configured"
-echo -e "  ${GREEN}✓${NC} Reference guide at ~/ONBOARDING.md"
+echo -e "  ${GREEN}✓${NC} Generated private/public key pair on the server"
+echo -e "  ${GREEN}✓${NC} Added public key to server's authorized_keys"
+echo -e "  ${GREEN}✓${NC} You saved private key to your local machine"
+echo -e "  ${GREEN}✓${NC} You configured SSH in your IDE"
 echo -e ""
 
-echo -e "${BOLD}Next Steps:${NC}"
+echo -e "${BOLD}How to connect:${NC}"
+echo -e "  Terminal:  ${GREEN}ssh ds01${NC}"
+echo -e "  VS Code:   ${CYAN}Remote-SSH: Connect to Host → ds01${NC}"
+echo -e ""
+
+echo -e "All of this info is saved in ${CYAN}~/ONBOARDING.md${NC} for future reference."
+echo -e ""
+
+# Clear any buffered input before prompting
+read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+read -p "Press Enter to continue..." </dev/tty
+echo -e ""
+
+# ============================================================================
+# JUPYTER ACCESS (brief mention)
+# ============================================================================
+
+echo -e "${CYAN}━━━ Jupyter Access ━━━${NC}"
+echo -e ""
+echo -e "For Jupyter notebooks in VS Code, the ${CYAN}Jupyter extension${NC} handles everything."
+echo -e "Just open any .ipynb file after connecting."
+echo -e ""
+echo -e "For browser-based access, run: ${GREEN}jupyter-setup --guided${NC}"
+echo -e ""
+
+# ============================================================================
+# NEXT STEPS
+# ============================================================================
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}Next Steps${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e ""
 echo -e "  Create your first project:"
 echo -e "    ${GREEN}project-init --guided${NC}"
@@ -440,17 +460,10 @@ echo -e "    ${GREEN}project-init my-project${NC}"
 echo -e ""
 
 echo -e "${BOLD}Helpful Commands:${NC}"
-echo -e ""
 echo -e "   ${CYAN}project-init${NC}              Create a new project"
 echo -e "   ${CYAN}container deploy${NC}          Deploy a container"
 echo -e "   ${CYAN}container-list${NC}            See all your containers"
 echo -e "   ${CYAN}check-limits${NC}              View your resource quotas"
-echo -e ""
-
-echo -e "${BOLD}Documentation:${NC}"
-echo -e ""
-echo -e "   ${CYAN}~/ONBOARDING.md${NC}           Quick reference guide"
-echo -e "   https://github.com/hertie-data-science-lab/ds01-user-docs"
 echo -e ""
 
 echo -e "${GREEN}Welcome to DS01! Happy computing!${NC}"
