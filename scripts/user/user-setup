@@ -334,7 +334,7 @@ echo -e ""
 
 SERVER_IP=$(hostname -I | awk '{print $1}')
 
-# --- Step 3.1: Install Extensions ---
+# --- Step 1: Install Extensions ---
 echo -e "${CYAN}━━━ Step 1: Install Extensions ━━━${NC}"
 echo -e ""
 echo -e "  ${CYAN}Required:${NC}"
@@ -348,12 +348,11 @@ echo -e "    • Docker"
 echo -e "    • GitLens"
 echo -e ""
 
-# Clear any buffered input before prompting
 read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Press Enter when extensions are installed..." </dev/tty
 echo -e ""
 
-# --- Step 3.2: Configure SSH Credentials ---
+# --- Step 2: Configure SSH Credentials ---
 echo -e "${CYAN}━━━ Step 2: Configure Your SSH Credentials in VS Code ━━━${NC}"
 echo -e ""
 echo -e "  We need to add this configuration:"
@@ -371,18 +370,18 @@ echo -e "${BOLD}Option A: via Remote SSH extension (recommended):${NC}"
 echo -e ""
 echo -e "  In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Open SSH Configuration File\"${NC}"
 echo -e ""
+echo -e ""
 echo -e "${BOLD}Option B: via Terminal${NC}"
 echo -e ""
 echo -e "  Open on your LOCAL machine:"
 echo -e "    ${GREEN}nano ~/.ssh/config${NC}"
 echo -e ""
 
-# Clear any buffered input before prompting
 read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Press Enter when saved..." </dev/tty
 echo -e ""
 
-# --- Step 3.3: Test Connection ---
+# --- Step 3: Test Connection ---
 echo -e "${CYAN}━━━ Step 3: Test Connection ━━━${NC}"
 echo -e ""
 echo -e "In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Connect to Host\" → ds01${NC}"
@@ -391,22 +390,14 @@ echo -e "VS Code will open a new window connected to the server."
 echo -e "You should see 'SSH: ds01' in the bottom-left corner."
 echo -e ""
 
-# Clear any buffered input before prompting
 read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Press Enter after connecting..." </dev/tty
 echo -e ""
 
 # ============================================================================
-# CREATE ONBOARDING DOCUMENT
-# ============================================================================
-
-onboarding-create
-
-# ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 
-echo -e ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}${BOLD}✓ SSH Setup Complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -427,10 +418,15 @@ echo -e ""
 echo -e "All of this info is saved in ${CYAN}~/ONBOARDING.md${NC} for future reference."
 echo -e ""
 
-# Clear any buffered input before prompting
 read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Press Enter to continue..." </dev/tty
 echo -e ""
+
+# ============================================================================
+# CREATE ONBOARDING DOCUMENT
+# ============================================================================
+
+/opt/ds01-infra/scripts/user/onboarding-create
 
 # ============================================================================
 # JUPYTER ACCESS (brief mention)

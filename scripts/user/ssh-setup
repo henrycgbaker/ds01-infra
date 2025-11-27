@@ -175,52 +175,19 @@ show_step2_public_key() {
     echo -e ""
 }
 
-# Step 3: VS Code / SSH config
-show_step3_ide_config() {
-    echo -e ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Step 3: Configure Your IDE (VS Code / Terminal)${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e ""
-    echo -e "Add this to ${CYAN}~/.ssh/config${NC} on your ${BOLD}LOCAL${NC} machine:"
-    echo -e ""
-    echo -e "${CYAN}┌────────────────────────────────────────────────────────────────┐${NC}"
-    echo -e "Host ds01"
-    echo -e "    HostName $SERVER_IP"
-    echo -e "    User $USERNAME"
-    echo -e "    IdentityFile ~/.ssh/ds01_id_ed25519"
-    echo -e "    ForwardAgent yes"
-    echo -e "    ServerAliveInterval 60"
-    echo -e "${CYAN}└────────────────────────────────────────────────────────────────┘${NC}"
-    echo -e ""
-    read -p "Press Enter to continue..." </dev/tty
-    echo ""
-    echo -e "${BOLD}Then in VS Code:${NC}"
-    echo -e "  1. Install 'Remote - SSH' extension"
-    echo -e "  2. Command Palette → 'Remote-SSH: Connect to Host'"
-    echo -e "  3. Select 'ds01'"
-}
 
-# Final summary
+# Final summary (minimal - VS Code config happens in user-setup)
 show_summary() {
     echo -e ""
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✓ SSH Setup Complete!${NC}"
+    echo -e "${GREEN}${BOLD}✓ SSH Keys Ready!${NC}"
     echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e ""
     echo -e "${BOLD}What we accomplished:${NC}"
     echo -e "  ${GREEN}✓${NC} Generated private/public key pair on the server"
     echo -e "  ${GREEN}✓${NC} Added public key to server's authorized_keys"
     echo -e "  ${GREEN}✓${NC} You saved private key to your local machine"
-    echo -e "  ${GREEN}✓${NC} You configured SSH in your IDE"
     echo -e ""
-    echo -e "${BOLD}How to connect:${NC}"
-    echo -e "  Terminal:  ${GREEN}ssh ds01${NC}"
-    echo -e "  VS Code:   ${GREEN}Remote-SSH: Connect to Host → ds01${NC}"
-    echo -e ""
-    echo -e "${DIM}All of this info is saved in ~/ONBOARDING.md for future reference.${NC}"
-    echo -e ""
-    read -p "Press Enter to continue..." </dev/tty
 }
 
 # Full guided flow for new or existing keys
@@ -243,9 +210,7 @@ run_guided_flow() {
 
     show_step2_public_key
     read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-    read -p "Press Enter to continue to IDE setup..." </dev/tty
-
-    show_step3_ide_config
+    read -p "Press Enter to continue..." </dev/tty
 
     show_summary
 }
