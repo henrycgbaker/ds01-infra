@@ -134,8 +134,18 @@ if [ -n "$PROJECT_NAME_ARG" ]; then
     PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     echo -e "Project name: ${CYAN}$PROJECT_NAME${NC}"
 else
-    read -p "Project name (e.g., thesis, cv-experiments, nlp-project): " PROJECT_NAME
-    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+    # Loop until valid project name is provided
+    while true; do
+        read -p "Project name (e.g., thesis, cv-experiments, nlp-project): " PROJECT_NAME </dev/tty
+        PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+
+        if [ -z "$PROJECT_NAME" ]; then
+            echo -e "${RED}✗ Project name cannot be empty${NC}"
+            echo ""
+            continue
+        fi
+        break
+    done
 fi
 
 PROJECT_DIR="$HOME/workspace/$PROJECT_NAME"
@@ -311,89 +321,29 @@ if [ -f "$PROJECT_DIR/README.md" ]; then
     echo ""
 fi
 
-# Step 5: Docker Image Creation
+# ============================================================================
+# FINAL SUMMARY
+# ============================================================================
+
 echo ""
-echo -e "${BOLD}Step 5: Docker Image${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}✓ Project Setup Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-IMAGE_NAME=""
-if [ "$INTERACTIVE" = true ]; then
-    read -p "Create a custom Docker image? [Y/n]: " CREATE_IMAGE
-    CREATE_IMAGE=${CREATE_IMAGE:-Y}
-else
-    CREATE_IMAGE="n"
+echo -e "${BOLD}What we created:${NC}"
+echo ""
+echo -e "  ${GREEN}✓${NC} Project directory: ~/workspace/$PROJECT_NAME"
+if [ "$SKIP_GIT" = false ]; then
+    echo -e "  ${GREEN}✓${NC} Git repository initialized"
 fi
-
-if [[ "$CREATE_IMAGE" =~ ^[Yy] ]]; then
-    IMAGE_NAME="${PROJECT_NAME}-image"
-
-    # Call Tier 2 module: image-create
-    GUIDED_FLAG=""
-    if [ "$GUIDED" = true ]; then
-        GUIDED_FLAG="--guided"
-    fi
-
-    image-create "$IMAGE_NAME" --type="$PROJECT_TYPE" $GUIDED_FLAG
+if [ -f "$PROJECT_DIR/README.md" ]; then
+    echo -e "  ${GREEN}✓${NC} README.md with project template"
 fi
+echo ""
 
-# Show Summary BEFORE entering container
-
-if [ "$GUIDED" = true ]; then
-    echo -e "${YELLOW}${BOLD}━━━ Next: Deploying a Container ━━━${NC}\n"
-    echo -e "${BOLD}What is a Container?${NC}"
-    echo "  Think of a container like a 'computing environment' that:"
-    echo "  • Has all your tools pre-installed (Python, PyTorch, etc.)"
-    echo "  • Can access GPUs for machine learning"
-    echo "  • Can be started, stopped, and restarted anytime"
-    echo "  • Is separate from your files (which live in workspace)"
-    echo ""
-    echo -e "${BOLD}Container vs. Workspace:${NC}"
-    echo -e "  ${CYAN}Workspace${NC} (~/workspace/$PROJECT_NAME)"
-    echo "    → Your PERMANENT storage - all files saved here persist"
-    echo "    → Edit code here (in VS Code, PyCharm, or directly)"
-    echo "    → This is like your 'hard drive'"
-    echo ""
-    echo -e "  ${CYAN}Container${NC} (your-project)"
-    echo "    → Your COMPUTING environment with GPU access"
-    echo "    → Can be stopped/restarted without losing workspace files"
-    echo "    → This is like your 'computer' that you can turn on/off"
-    echo ""
-    echo -e "${BOLD}The Workflow:${NC}"
-    echo "  1. Write/edit code in your workspace (via VS Code SSH or directly)"
-    echo "  2. Run code inside container (which has GPUs and software)"
-    echo "  3. Results save back to workspace (persistent storage)"
-    echo ""
-fi
-
-# Step 6: Container Deployment (AFTER showing summary)
-if [ -n "$IMAGE_NAME" ] && [ "$INTERACTIVE" = true ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-    read -p "Would you like to deploy a container now? [Y/n]: " DEPLOY_CONTAINER
-    DEPLOY_CONTAINER=${DEPLOY_CONTAINER:-Y}
-
-    if [[ "$DEPLOY_CONTAINER" =~ ^[Yy] ]]; then
-        echo ""
-
-        # Deploy container using Tier 3 orchestrator (create + start/run)
-        GUIDED_FLAG=""
-        if [ "$GUIDED" = true ]; then
-            GUIDED_FLAG="--guided"
-        fi
-
-        if command -v container-deploy &> /dev/null; then
-            # container-deploy handles: create container + prompt for background/terminal
-            container-deploy "$PROJECT_NAME" "$IMAGE_NAME" $GUIDED_FLAG || true
-
-            # Show reminder after exiting (if user chose to enter terminal)
-            echo ""
-            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${BOLD}Reminder: Your project is in ${CYAN}$PROJECT_DIR${NC}"
-            echo -e "${BOLD}Re-enter container: ${GREEN}container attach $PROJECT_NAME${NC}"
-            echo ""
-        else
-            echo -e "${YELLOW}Container deploy command not found${NC}"
-            echo "Deploy manually with: container-deploy $PROJECT_NAME $IMAGE_NAME"
-        fi
-    fi
-fi
+echo -e "${BOLD}Next Steps:${NC}"
+echo -e "  1. Create a Docker image:        ${GREEN}image-create${NC}"
+echo -e "  2. Deploy a container:           ${GREEN}container-deploy${NC}"
+echo -e "  3. For guided setup:             ${GREEN}container-deploy --guided${NC}"
+echo ""

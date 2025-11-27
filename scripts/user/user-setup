@@ -181,11 +181,10 @@ echo -e ""
 echo -e "This wizard will help you:"
 echo -e ""
 echo -e "  ${GREEN}1.${NC} Generate SSH keys - secure remote access"
-echo -e "  ${GREEN}2.${NC} Setup your first ds01 project - directory structure + Git"
-echo -e "  ${GREEN}3.${NC} Build Docker images - your custom environment"
-echo -e "  ${GREEN}4.${NC} Deploy Containers - GPU-enabled compute environments"
-echo -e "  ${GREEN}5.${NC} Configure VS Code for remote dev - connecting your IDE to a running container"
-echo -e "  ${GREEN}6.${NC} Run Jupyter - Lab & Hub; notebook access via ports etc"
+echo -e "  ${GREEN}2.${NC} Configure VS Code - extensions and SSH connection"
+echo -e "  ${GREEN}3.${NC} Create reference documents - quick command guide"
+echo -e ""
+echo -e "After setup, run ${CYAN}project-init${NC} to create your first project."
 echo -e ""
 
 if is_beginner "REMOTE"; then
@@ -324,98 +323,92 @@ else
 fi
 
 # ============================================================================
-# STEP 3: PROJECT SETUP
+# STEP 3: VS CODE SETUP
 # ============================================================================
 
 echo -e ""
-echo -e "${CYAN}━━━ Step 3: Project Setup ━━━${NC}\n"
+echo -e "${CYAN}━━━ Step 3: VS Code Setup ━━━${NC}\n"
 
-CREATE_PROJECT=true
-PROJECT_NAME=""
+SERVER_IP=$(hostname -I | awk '{print $1}')
 
-if [ "$NEEDS_PROJECT" = false ]; then
-    echo -e "You already have project(s) in ~/workspace"
+echo -e "${BOLD}Install these extensions in VS Code:${NC}"
+echo -e ""
+echo -e "  ${CYAN}Required:${NC}"
+echo -e "    • Remote - SSH (ms-vscode-remote.remote-ssh)"
+echo -e "    • Dev Containers (ms-vscode-remote.remote-containers)"
+echo -e ""
+echo -e "  ${CYAN}Recommended:${NC}"
+echo -e "    • Python"
+echo -e "    • Jupyter"
+echo -e "    • Docker"
+echo -e "    • GitLens"
+echo -e ""
+
+# Clear any buffered input before prompting
+read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+read -p "Press Enter when extensions are installed..." </dev/tty
+echo -e ""
+
+# ============================================================================
+# STEP 4: CONFIGURE SSH IN VS CODE
+# ============================================================================
+
+echo -e "${CYAN}━━━ Step 4: Configure SSH in VS Code ━━━${NC}\n"
+
+echo -e "In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Open SSH Configuration File\"${NC}"
+echo -e ""
+echo -e "Add this configuration:"
+echo -e ""
+echo -e "${GREEN}Host ds01${NC}"
+echo -e "${GREEN}    HostName ${SERVER_IP}${NC}"
+echo -e "${GREEN}    User ${USERNAME}${NC}"
+echo -e "${GREEN}    IdentityFile ~/.ssh/ds01_id_ed25519${NC}"
+echo -e "${GREEN}    ForwardAgent yes${NC}"
+echo -e "${GREEN}    ServerAliveInterval 60${NC}"
+echo -e ""
+
+# Clear any buffered input before prompting
+read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+read -p "Press Enter when saved..." </dev/tty
+echo -e ""
+
+# ============================================================================
+# STEP 5: TEST CONNECTION
+# ============================================================================
+
+echo -e "${CYAN}━━━ Step 5: Test Connection ━━━${NC}\n"
+
+echo -e "In VS Code: ${CYAN}Command Palette → \"Remote-SSH: Connect to Host\" → ds01${NC}"
+echo -e ""
+
+if is_beginner "REMOTE"; then
+    echo -e "${DIM}VS Code will open a new window connected to the server.${NC}"
+    echo -e "${DIM}You should see 'SSH: ds01' in the bottom-left corner.${NC}"
     echo -e ""
-
-    # Clear any buffered input before prompting
-    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-
-    # Force user to answer
-    echo -n "Create a new project anyway? [Y/n]: "
-    read -r CREATE_NEW </dev/tty
-    CREATE_NEW=${CREATE_NEW:-Y}
-
-    if [[ ! "$CREATE_NEW" =~ ^[Yy]$ ]]; then
-        CREATE_PROJECT=false
-        echo -e "${YELLOW}Skipped${NC} - Using existing projects"
-
-        # Ask which project to use for VS Code setup
-        echo -e ""
-        echo -e "Select a project for VS Code setup:"
-        PROJECTS=($(ls ~/workspace 2>/dev/null))
-        for i in "${!PROJECTS[@]}"; do
-            echo -e "  $((i+1))) ${PROJECTS[$i]}"
-        done
-        read -p "Choice [1-${#PROJECTS[@]}]: " PROJECT_CHOICE </dev/tty
-        if [ -n "$PROJECT_CHOICE" ] && [ "$PROJECT_CHOICE" -ge 1 ] && [ "$PROJECT_CHOICE" -le "${#PROJECTS[@]}" ]; then
-            PROJECT_NAME="${PROJECTS[$((PROJECT_CHOICE-1))]}"
-        fi
-    fi
 fi
 
-if [ "$CREATE_PROJECT" = true ]; then
-    if is_beginner "HPC"; then
-        echo -e "Let's create your first project!"
-        echo -e ""
-        echo -e "This will set up:"
-        echo -e "  • Project directory with standard structure"
-        echo -e "  • Git version control"
-        echo -e "  • Docker image for your environment"
-        echo -e "  • Running container with GPU access"
-        echo -e ""
-        read -p "Press Enter to continue..." </dev/tty
-        echo ""
-    fi
-
-    # Call project-init (L4 wizard - handles its own skill awareness)
-    project-init
-
-    # Capture project name from last created project
-    if [ -d ~/workspace ]; then
-        PROJECT_NAME=$(ls -t ~/workspace | head -1)
-    fi
-fi
-
-# ============================================================================
-# STEP 4: VS CODE SETUP
-# ============================================================================
-
+# Clear any buffered input before prompting
+read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+read -p "Press Enter after connecting..." </dev/tty
 echo -e ""
-echo -e "${CYAN}━━━ Step 4: VS Code Connection ━━━${NC}\n"
-
-# Call vscode-setup with project info
-PROJECT_FLAG=""
-if [ -n "$PROJECT_NAME" ]; then
-    PROJECT_FLAG="--project=$PROJECT_NAME"
-fi
-
-vscode-setup $PROJECT_FLAG
 
 # ============================================================================
-# STEP 5: JUPYTER SETUP (brief)
+# JUPYTER ACCESS (brief mention)
 # ============================================================================
 
+echo -e "${CYAN}━━━ Jupyter Access ━━━${NC}\n"
+
+echo -e "For Jupyter notebooks in VS Code, the ${CYAN}Jupyter extension${NC} handles everything."
+echo -e "Just open any .ipynb file after connecting."
 echo -e ""
-echo -e "${CYAN}━━━ Step 5: Jupyter Access ━━━${NC}\n"
-
-jupyter-setup --brief
-
-# ============================================================================
-# STEP 6: CREATE ONBOARDING DOCUMENT
-# ============================================================================
-
+echo -e "For browser-based access, run: ${GREEN}jupyter-setup --guided${NC}"
 echo -e ""
-echo -e "${CYAN}━━━ Step 6: Creating Reference Documents ━━━${NC}\n"
+
+# ============================================================================
+# CREATE ONBOARDING DOCUMENT
+# ============================================================================
+
+echo -e "${CYAN}━━━ Creating Reference Documents ━━━${NC}\n"
 
 onboarding-create
 
@@ -425,55 +418,38 @@ onboarding-create
 
 echo -e ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Onboarding Complete!${NC}"
+echo -e "${GREEN}${BOLD}✓ User Setup Complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e ""
 
-echo -e "${BOLD}What You've Set Up:${NC}"
+echo -e "${BOLD}What we accomplished:${NC}"
 echo -e ""
-echo -e "  ${GREEN}✓${NC} SSH keys for remote access"
-if [ -n "$PROJECT_NAME" ]; then
-    echo -e "  ${GREEN}✓${NC} Project: $PROJECT_NAME"
-    echo -e "  ${GREEN}✓${NC} Docker image built"
-    echo -e "  ${GREEN}✓${NC} Container deployed"
-fi
-echo -e "  ${GREEN}✓${NC} VS Code connection configured"
-echo -e "  ${GREEN}✓${NC} Onboarding guide at ~/ONBOARDING.md"
+echo -e "  ${GREEN}✓${NC} SSH keys configured"
+echo -e "  ${GREEN}✓${NC} VS Code extensions installed"
+echo -e "  ${GREEN}✓${NC} SSH connection configured"
+echo -e "  ${GREEN}✓${NC} Reference guide at ~/ONBOARDING.md"
 echo -e ""
 
 echo -e "${BOLD}Next Steps:${NC}"
 echo -e ""
-echo -e "  ${CYAN}1.${NC} Connect VS Code to DS01"
-echo -e "     • Command Palette → 'Remote-SSH: Connect to Host' → 'ds01'"
+echo -e "  Create your first project:"
+echo -e "    ${GREEN}project-init --guided${NC}"
 echo -e ""
-
-if [ -n "$PROJECT_NAME" ]; then
-    echo -e "  ${CYAN}2.${NC} Open your project"
-    echo -e "     • File → Open Folder → ${CYAN}/home/$USERNAME/workspace/$PROJECT_NAME${NC}"
-    echo -e ""
-
-    echo -e "  ${CYAN}3.${NC} Attach to your container"
-    echo -e "     • Terminal: ${GREEN}container attach $PROJECT_NAME${NC}"
-    echo -e "     • Or use Dev Containers extension"
-    echo -e ""
-fi
+echo -e "  Or for quick setup (experienced users):"
+echo -e "    ${GREEN}project-init my-project${NC}"
+echo -e ""
 
 echo -e "${BOLD}Helpful Commands:${NC}"
 echo -e ""
-echo -e "   ${CYAN}container deploy <name>${NC}   Deploy a new container"
-echo -e "   ${CYAN}container attach <name>${NC}   Enter a running container"
-echo -e "   ${CYAN}container retire <name>${NC}   Stop and remove container"
+echo -e "   ${CYAN}project-init${NC}              Create a new project"
+echo -e "   ${CYAN}container deploy${NC}          Deploy a container"
 echo -e "   ${CYAN}container-list${NC}            See all your containers"
 echo -e "   ${CYAN}check-limits${NC}              View your resource quotas"
-echo -e "   ${CYAN}project-init${NC}              Create another project"
 echo -e ""
 
 echo -e "${BOLD}Documentation:${NC}"
 echo -e ""
 echo -e "   ${CYAN}~/ONBOARDING.md${NC}           Quick reference guide"
-if [ -n "$PROJECT_NAME" ] && [ -f ~/workspace/$PROJECT_NAME/README.md ]; then
-    echo -e "   ${CYAN}~/workspace/$PROJECT_NAME/README.md${NC}"
-fi
 echo -e "   https://github.com/hertie-data-science-lab/ds01-user-docs"
 echo -e ""
 
