@@ -1,0 +1,11 @@
+# DS01 Docker Group Auto-Add Sudoers Configuration
+# Allows any user to add themselves to docker group on first login
+# File: /etc/sudoers.d/ds01-docker-group
+#
+# DEPLOYMENT:
+#   sudo cp /opt/ds01-infra/config/etc-mirrors/sudoers.d/ds01-docker-group /etc/sudoers.d/
+#   sudo chmod 440 /etc/sudoers.d/ds01-docker-group
+#   sudo visudo -c  # Validate syntax
+
+# Allow all users to run add-user-to-docker.sh as root without password
+ALL ALL=(root) NOPASSWD: /opt/ds01-infra/scripts/system/add-user-to-docker.sh

@@ -10,6 +10,11 @@ if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/ds01-context.sh
 fi
 
+# Source skill assessment library for helper functions
+if [[ -f "/opt/ds01-infra/scripts/lib/skill-assessment.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/skill-assessment.sh
+fi
+
 # Set orchestration context - suppresses atomic command "Next steps" output
 export DS01_CONTEXT="orchestration"
 export DS01_INTERFACE="orchestration"
@@ -71,6 +76,24 @@ if [ -n "$PROJECT_NAME_ARG" ]; then
     INTERACTIVE=false
 fi
 
+# Use skill level if set (from user-setup's skill assessment)
+# DS01_SKILL_HPC: 0=beginner, 2=expert
+if [[ "${DS01_SKILL_HPC:-}" == "0" ]]; then
+    GUIDED=true
+fi
+
+# Helper functions for skill-aware output (if not already defined)
+if ! type is_beginner &>/dev/null; then
+    is_beginner() {
+        local area="${1:-HPC}"
+        case "$area" in
+            REMOTE) [[ "${DS01_SKILL_REMOTE:-0}" == "0" ]] ;;
+            GIT)    [[ "${DS01_SKILL_GIT:-0}" == "0" ]] ;;
+            HPC)    [[ "${DS01_SKILL_HPC:-0}" == "0" ]] ;;
+        esac
+    }
+fi
+
 # Header
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -98,11 +121,11 @@ echo -e "${BOLD}Step 1: Project Information${NC}"
 
 if [ "$GUIDED" = true ]; then
     echo ""
-    echo -e "${DIM}A project is your workspace directory containing:"
-    echo -e "  • Your code (scripts, notebooks)"
-    echo -e "  • Your data (datasets, outputs)"
+    echo -e "A project is your workspace directory containing:"
+    echo -e "  • Your code ${DIM}(scripts, notebooks)${NC}"
+    echo -e "  • Your data ${DIM}(datasets, outputs)${NC}"
     echo -e "  • Configuration files"
-    echo -e "  • Everything persists across container restarts${NC}"
+    echo -e "  • Everything persists across container restarts"
 fi
 echo ""
 
@@ -172,7 +195,7 @@ if [ "$EXISTING_PROJECT" = false ]; then
         echo -e "  ${BOLD}1)${NC} Data Science structure ${GREEN}(recommended)${NC}"
         echo -e "     ${DIM}Organized folders: data/, models/, notebooks/, scripts/, outputs/${NC}"
         echo -e "  ${BOLD}2)${NC} Blank directory"
-        echo -e "     ${BOLD}Empty project folder - set up your own structure${NC}"
+        echo -e "     ${DIM}Empty project folder - set up your own structure${NC}"
         read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE
     else
         STRUCTURE_CHOICE="1"
@@ -220,6 +243,34 @@ if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
     fi
 
     git-init "$PROJECT_NAME" $GUIDED_FLAG
+
+    # Git remote setup (optional)
+    if [ "$INTERACTIVE" = true ]; then
+        echo ""
+        if is_beginner "GIT"; then
+            echo -e "${DIM}A Git remote lets you backup your code to GitHub/GitLab${NC}"
+            echo -e "${DIM}and collaborate with others. You can add this later too.${NC}"
+            echo ""
+        fi
+        read -p "Add a Git remote (e.g., GitHub URL)? [y/N]: " ADD_REMOTE </dev/tty
+        if [[ "$ADD_REMOTE" =~ ^[Yy]$ ]]; then
+            echo ""
+            echo "Enter the remote URL (e.g., git@github.com:username/repo.git)"
+            read -p "Remote URL: " REMOTE_URL </dev/tty
+            if [ -n "$REMOTE_URL" ]; then
+                cd "$PROJECT_DIR"
+                if git remote add origin "$REMOTE_URL" 2>/dev/null; then
+                    echo -e "${GREEN}✓${NC} Remote 'origin' added: $REMOTE_URL"
+                    echo ""
+                    echo "Push your code later with:"
+                    echo -e "  ${GREEN}cd $PROJECT_DIR && git push -u origin main${NC}"
+                else
+                    echo -e "${YELLOW}⚠${NC} Could not add remote (may already exist)"
+                fi
+                cd - >/dev/null
+            fi
+        fi
+    fi
 else
     SKIP_GIT=true
 fi
@@ -338,7 +389,7 @@ if [ -n "$IMAGE_NAME" ] && [ "$INTERACTIVE" = true ]; then
             echo ""
             echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo -e "${BOLD}Reminder: Your project is in ${CYAN}$PROJECT_DIR${NC}"
-            echo -e "${BOLD}Re-enter container: ${GREEN}container-run $PROJECT_NAME${NC}"
+            echo -e "${BOLD}Re-enter container: ${GREEN}container attach $PROJECT_NAME${NC}"
             echo ""
         else
             echo -e "${YELLOW}Container deploy command not found${NC}"

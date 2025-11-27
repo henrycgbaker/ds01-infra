@@ -116,6 +116,12 @@ if [ -z "$PROJECT_NAME" ]; then
     exit 1
 fi
 
+# Use skill level if set (from user-setup's skill assessment)
+# DS01_SKILL_GIT: 0=beginner, 2=expert
+if [[ "${DS01_SKILL_GIT:-}" == "0" ]]; then
+    GUIDED=true
+fi
+
 PROJECT_DIR="$WORKSPACE_DIR/$PROJECT_NAME"
 
 # Validate project directory exists
@@ -136,7 +142,7 @@ if [ -d "$PROJECT_DIR/.git" ]; then
     cd "$PROJECT_DIR"
     git status --short 2>/dev/null || true
     echo ""
-    exit 0y
+    exit 0
 fi
 
 # Show guided introduction
@@ -157,7 +163,7 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "  4. ${CYAN}Remote repository${NC} (optional) - Link to GitHub/GitLab"
     echo ""
-    echo -e "${YELLOW}💡 Pro Tip:${NC} Commit code and configs, NOT raw data or large models!"
+    echo -e "${YELLOW}💡 Tip:${NC} Commit code and configs, NOT raw data or large models!"
     echo "   Use Git LFS for model weights, store datasets separately."
     echo ""
     read -p "Press Enter to initialize Git..." </dev/tty

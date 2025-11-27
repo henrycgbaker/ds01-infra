@@ -17,6 +17,12 @@ NC='\033[0m'
 USERNAME=$(whoami)
 WORKSPACE_DIR="$HOME/workspace"
 
+# Check if we're in orchestration context (called by project-init/user-setup)
+IS_ORCHESTRATED=false
+if [[ "${DS01_CONTEXT:-}" == "orchestration" ]]; then
+    IS_ORCHESTRATED=true
+fi
+
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Directory Create${NC}"
@@ -172,9 +178,7 @@ if [ "$GUIDED" = true ]; then
     echo ""
 fi
 
-# TODO: only show this header in GUI mode i.e. run without args (if run with args -> no GUI, no header etc, just confirmatory output)
-if [ "$GUIDED" = false ]; then
-fi
+# Non-guided mode: minimal output (called with args from orchestrators)
 
 # Check for existing directory
 if [ -d "$PROJECT_DIR" ]; then
@@ -240,23 +244,27 @@ if [ "$GUIDED" = true ]; then
         echo "  ✓ Created blank directory for custom structure"
     fi
 
-    echo ""
-    echo -e "${BOLD}Next Steps:${NC}"
-    echo ""
-    echo "  1) Navigate to your project:"
-    echo -e "     ${GREEN}cd $PROJECT_DIR${NC}"
-    echo ""
-    echo "  2) Initialize Git repository:"
-    echo -e "     ${GREEN}git-init $PROJECT_NAME${NC}"
-    echo ""
-    echo "  3) Create README and requirements:"
-    echo -e "     ${GREEN}readme-create $PROJECT_NAME${NC}"
-    echo ""
-    echo "  4) Or run full project setup:"
-    echo -e "     ${GREEN}project-init $PROJECT_NAME${NC}"
-    echo ""
+    # Only show next steps if NOT called from an orchestrator
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo ""
+        echo -e "${BOLD}Next Steps:${NC}"
+        echo ""
+        echo "  1) Navigate to your project:"
+        echo -e "     ${GREEN}cd $PROJECT_DIR${NC}"
+        echo ""
+        echo "  2) Initialize Git repository:"
+        echo -e "     ${GREEN}git-init $PROJECT_NAME${NC}"
+        echo ""
+        echo "  3) Create README and requirements:"
+        echo -e "     ${GREEN}readme-create $PROJECT_NAME${NC}"
+        echo ""
+        echo "  4) Or run full project setup:"
+        echo -e "     ${GREEN}project-init $PROJECT_NAME${NC}"
+        echo ""
+    fi
 else
-
+    # Non-guided: brief confirmation
+    echo -e "${GREEN}✓${NC} Created: $PROJECT_DIR"
 fi
 
 exit 0

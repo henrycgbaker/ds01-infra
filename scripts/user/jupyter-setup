@@ -1,0 +1,269 @@
+#!/bin/bash
+# DS01 Jupyter Setup - Configure Jupyter Lab access
+# Tier 2 Command - Can be used standalone or called by orchestrators
+# File: /opt/ds01-infra/scripts/user/jupyter-setup
+
+set -e
+
+# Colors
+BLUE='\033[94m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+DIM='\033[2m'
+NC='\033[0m'
+
+USERNAME=$(whoami)
+
+# Check if we're in orchestration context (called by user-setup)
+IS_ORCHESTRATED=false
+if [[ "${DS01_CONTEXT:-}" == "orchestration" ]]; then
+    IS_ORCHESTRATED=true
+fi
+
+usage() {
+    echo ""
+    echo -e "${BOLD}DS01 Jupyter Setup${NC}"
+    echo ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo "  jupyter-setup [options]"
+    echo ""
+    echo -e "${CYAN}Options:${NC}"
+    echo "  --guided       Full setup with detailed explanations"
+    echo "  --port-forward Show SSH port forwarding commands only"
+    echo "  --brief        Minimal output (for orchestrators)"
+    echo "  -h, --help     Show this help message"
+    echo ""
+    echo -e "${CYAN}Description:${NC}"
+    echo "  Configures Jupyter Lab access for the DS01 server."
+    echo "  Default: VS Code Jupyter extension setup (recommended)"
+    echo ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  ${DIM}# Quick VS Code setup${NC}"
+    echo "  jupyter-setup"
+    echo ""
+    echo -e "  ${DIM}# Full guided setup with port forwarding${NC}"
+    echo "  jupyter-setup --guided"
+    echo ""
+    echo -e "  ${DIM}# Just port forwarding commands${NC}"
+    echo "  jupyter-setup --port-forward"
+    echo ""
+}
+
+# Parse arguments
+GUIDED=false
+PORT_FORWARD_ONLY=false
+BRIEF=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --guided)
+            GUIDED=true
+            shift
+            ;;
+        --port-forward)
+            PORT_FORWARD_ONLY=true
+            shift
+            ;;
+        --brief)
+            BRIEF=true
+            shift
+            ;;
+        -h|--help|--info)
+            usage
+            exit 0
+            ;;
+        *)
+            echo -e "${RED}✗ Unknown option: $1${NC}\n"
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# Use skill level if set (from user-setup's skill assessment)
+# DS01_SKILL_REMOTE: 0=beginner, 2=expert
+if [[ "${DS01_SKILL_REMOTE:-}" == "0" ]]; then
+    GUIDED=true
+fi
+
+# Get server IP
+SERVER_IP=$(hostname -I | awk '{print $1}')
+
+# ============================================================================
+# PORT FORWARDING ONLY MODE
+# ============================================================================
+
+show_port_forward_commands() {
+    echo ""
+    echo -e "${BOLD}SSH Port Forwarding for Jupyter${NC}"
+    echo ""
+    echo "Run this on your ${CYAN}local machine${NC}:"
+    echo ""
+    echo -e "${GREEN}ssh -L 8888:localhost:8888 ${USERNAME}@${SERVER_IP}${NC}"
+    echo ""
+    echo "Or with your SSH config (if set up):"
+    echo -e "${GREEN}ssh -L 8888:localhost:8888 ds01${NC}"
+    echo ""
+    echo "Then in your container:"
+    echo -e "${GREEN}jupyter lab --no-browser --ip=0.0.0.0 --port=8888${NC}"
+    echo ""
+    echo "Access in browser: ${CYAN}http://localhost:8888${NC}"
+    echo ""
+}
+
+if [ "$PORT_FORWARD_ONLY" = true ]; then
+    show_port_forward_commands
+    exit 0
+fi
+
+# ============================================================================
+# BRIEF MODE (for orchestrators)
+# ============================================================================
+
+if [ "$BRIEF" = true ]; then
+    echo ""
+    echo -e "${BOLD}Jupyter Access${NC}"
+    echo ""
+    echo "  ${CYAN}Recommended:${NC} Use VS Code with Jupyter extension"
+    echo "    1. Install 'Jupyter' extension in VS Code"
+    echo "    2. Open any .ipynb file"
+    echo ""
+    echo "  ${CYAN}Alternative:${NC} Run 'jupyter-setup --guided' for browser setup"
+    echo ""
+    exit 0
+fi
+
+# ============================================================================
+# GUIDED MODE (full explanations)
+# ============================================================================
+
+if [ "$GUIDED" = true ]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Jupyter Lab Setup${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Jupyter Lab lets you run interactive notebooks for:"
+    echo "  • Data exploration and visualization"
+    echo "  • ML model prototyping"
+    echo "  • Documenting experiments"
+    echo ""
+    echo -e "${BOLD}Two Ways to Use Jupyter on DS01:${NC}"
+    echo ""
+    echo "  ${CYAN}Option 1: VS Code (Recommended)${NC}"
+    echo "    • Easiest setup - just install an extension"
+    echo "    • Full IDE features (autocomplete, debugging)"
+    echo "    • No port forwarding needed"
+    echo ""
+    echo "  ${CYAN}Option 2: Browser${NC}"
+    echo "    • Classic Jupyter Lab experience"
+    echo "    • Requires SSH port forwarding"
+    echo "    • Better for collaborators without VS Code"
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Option 1: VS Code Setup${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  ${BOLD}Step 1: Install Extensions${NC}"
+    echo "    In VS Code, install these extensions:"
+    echo "    • 'Remote - SSH' (to connect to DS01)"
+    echo "    • 'Jupyter' (to run notebooks)"
+    echo ""
+    echo "  ${BOLD}Step 2: Connect to DS01${NC}"
+    echo "    • Command Palette (Ctrl+Shift+P)"
+    echo "    • Type: 'Remote-SSH: Connect to Host'"
+    echo "    • Select 'ds01' (from your SSH config)"
+    echo ""
+    echo "  ${BOLD}Step 3: Open a Notebook${NC}"
+    echo "    • Navigate to your project"
+    echo "    • Open any .ipynb file"
+    echo "    • VS Code handles everything automatically"
+    echo ""
+    read -p "Press Enter to see browser setup..." </dev/tty
+    echo ""
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Option 2: Browser Setup${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "  ${BOLD}What is Port Forwarding?${NC}"
+    echo ""
+    echo "  Jupyter Lab runs on the server (port 8888), but you"
+    echo "  need to access it from your browser. Port forwarding"
+    echo "  creates a secure tunnel:"
+    echo ""
+    echo "    Your Browser → localhost:8888 → SSH tunnel → Server:8888"
+    echo ""
+    echo "  ${BOLD}Step 1: Start Port Forwarding (on your local machine)${NC}"
+    echo ""
+    echo -e "    ${GREEN}ssh -L 8888:localhost:8888 ds01${NC}"
+    echo ""
+    echo "  This keeps the tunnel open while you work."
+    echo ""
+    echo "  ${BOLD}Step 2: Start Jupyter (in your container)${NC}"
+    echo ""
+    echo -e "    ${GREEN}jupyter lab --no-browser --ip=0.0.0.0 --port=8888${NC}"
+    echo ""
+    echo "  Copy the URL with the token that appears."
+    echo ""
+    echo "  ${BOLD}Step 3: Open in Browser${NC}"
+    echo ""
+    echo "    Go to: ${CYAN}http://localhost:8888${NC}"
+    echo "    Paste the token if prompted"
+    echo ""
+    read -p "Press Enter to continue..." </dev/tty
+    echo ""
+
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✓ Jupyter Setup Complete!${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Quick Reference:${NC}"
+    echo ""
+    echo "  ${CYAN}VS Code (recommended):${NC}"
+    echo "    Just open .ipynb files after connecting via Remote-SSH"
+    echo ""
+    echo "  ${CYAN}Browser:${NC}"
+    echo "    1. Local: ssh -L 8888:localhost:8888 ds01"
+    echo "    2. Container: jupyter lab --no-browser --port=8888"
+    echo "    3. Browser: http://localhost:8888"
+    echo ""
+    echo "Run 'jupyter-setup --port-forward' for quick command reference"
+    echo ""
+    exit 0
+fi
+
+# ============================================================================
+# DEFAULT MODE (VS Code focus)
+# ============================================================================
+
+echo ""
+echo -e "${BOLD}Jupyter Lab Setup${NC}"
+echo ""
+
+echo -e "${CYAN}Recommended: VS Code with Jupyter Extension${NC}"
+echo ""
+echo "  1. Install the 'Jupyter' extension in VS Code"
+echo "  2. Connect to DS01 via Remote-SSH"
+echo "  3. Open any .ipynb file - it just works!"
+echo ""
+
+echo -e "${CYAN}Alternative: Browser Access${NC}"
+echo ""
+echo "  For classic Jupyter Lab in your browser:"
+echo -e "  ${GREEN}jupyter-setup --guided${NC}"
+echo ""
+
+# Only show next steps if not orchestrated
+if [ "$IS_ORCHESTRATED" = false ]; then
+    echo -e "${BOLD}Next Steps:${NC}"
+    echo "  • Deploy a container: ${GREEN}container deploy my-project${NC}"
+    echo "  • Create a notebook in your project's notebooks/ directory"
+    echo ""
+fi

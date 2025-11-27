@@ -18,42 +18,42 @@ USERNAME=$(whoami)
 WORKSPACE_DIR="$HOME/workspace"
 
 usage() {
-    echo ""
+    echo -e ""
     echo -e "${BOLD}DS01 README Create${NC}"
-    echo ""
+    echo -e ""
     echo -e "${CYAN}Usage:${NC}"
-    echo "  readme-create <project-name> [options]"
-    echo ""
+    echo -e "  readme-create <project-name> [options]"
+    echo -e ""
     echo -e "${CYAN}Arguments:${NC}"
-    echo "  project-name       Project directory to create files in"
-    echo ""
+    echo -e "  project-name       Project directory to create files in"
+    echo -e ""
     echo -e "${CYAN}Options:${NC}"
-    echo "  --type=TYPE        Project type: ml, cv, nlp, rl (default: ml)"
-    echo "  --desc=\"TEXT\"      Project description"
-    echo "  --structure=TYPE   Structure: data-science, blank (default: data-science)"
-    echo "  --commit           Create initial Git commit (requires Git repo)"
-    echo "  --guided           Show detailed explanations for beginners"
-    echo "  -h, --help         Show this help message"
-    echo ""
+    echo -e "  --type=TYPE        Project type: ml, cv, nlp, rl (default: ml)"
+    echo -e "  --desc=\"TEXT\"      Project description"
+    echo -e "  --structure=TYPE   Structure: data-science, blank (default: data-science)"
+    echo -e "  --commit           Create initial Git commit (requires Git repo)"
+    echo -e "  --guided           Show detailed explanations for beginners"
+    echo -e "  -h, --help         Show this help message"
+    echo -e ""
     echo -e "${CYAN}Examples:${NC}"
     echo -e "  ${DIM}# Create README for ML project${NC}"
-    echo "  readme-create my-project"
-    echo ""
+    echo -e "  readme-create my-project"
+    echo -e ""
     echo -e "  ${DIM}# Computer vision project with description${NC}"
-    echo "  readme-create cv-project --type=cv --desc=\"Image classification\""
-    echo ""
+    echo -e "  readme-create cv-project --type=cv --desc=\"Image classification\""
+    echo -e ""
     echo -e "  ${DIM}# Create and commit${NC}"
-    echo "  readme-create my-project --commit"
-    echo ""
+    echo -e "  readme-create my-project --commit"
+    echo -e ""
     echo -e "  ${DIM}# With guided explanations${NC}"
-    echo "  readme-create my-project --guided"
-    echo ""
+    echo -e "  readme-create my-project --guided"
+    echo -e ""
     echo -e "${YELLOW}Project Types:${NC}"
-    echo "  ml  - General machine learning"
-    echo "  cv  - Computer vision (adds torch, opencv, timm)"
-    echo "  nlp - Natural language processing (adds transformers, datasets)"
-    echo "  rl  - Reinforcement learning (adds gymnasium, stable-baselines3)"
-    echo ""
+    echo -e "  ml  - General machine learning"
+    echo -e "  cv  - Computer vision (adds torch, opencv, timm)"
+    echo -e "  nlp - Natural language processing (adds transformers, datasets)"
+    echo -e "  rl  - Reinforcement learning (adds gymnasium, stable-baselines3)"
+    echo -e ""
 }
 
 # Parse arguments
@@ -120,10 +120,10 @@ PROJECT_DIR="$WORKSPACE_DIR/$PROJECT_NAME"
 # Validate project directory exists
 if [ ! -d "$PROJECT_DIR" ]; then
     echo -e "${RED}✗ Project directory does not exist: $PROJECT_DIR${NC}"
-    echo ""
-    echo "Create it first:"
+    echo -e ""
+    echo -e "Create it first:"
     echo -e "  ${GREEN}dir-create $PROJECT_NAME${NC}"
-    echo ""
+    echo -e ""
     exit 1
 fi
 
@@ -141,48 +141,48 @@ esac
 
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
-    echo ""
+    echo -e ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Creating Project Documentation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    echo -e ""
     echo -e "${BOLD}What We'll Create:${NC}"
-    echo ""
-    echo "  1. ${CYAN}README.md${NC} - Project documentation"
-    echo "     • Project overview and structure"
-    echo "     • Getting started guide"
-    echo "     • DS01 workflow explanation"
-    echo "     • Command reference"
-    echo ""
-    echo "  2. ${CYAN}requirements.txt${NC} - Python dependencies"
-    echo "     • Core packages (numpy, pandas, jupyter)"
-    echo "     • Type-specific packages for $PROJECT_TYPE"
-    echo "     • Install with: pip install -r requirements.txt"
-    echo ""
-    echo "  3. ${CYAN}configs/experiment.yaml${NC} - Example config"
-    echo "     • Training hyperparameters"
-    echo "     • Data settings"
-    echo "     • Logging configuration"
-    echo ""
+    echo -e ""
+    echo -e "  1. ${CYAN}README.md${NC} - Project documentation"
+    echo -e "     • Project overview and structure"
+    echo -e "     • Getting started guide"
+    echo -e "     • DS01 workflow explanation"
+    echo -e "     • Command reference"
+    echo -e ""
+    echo -e "  2. ${CYAN}requirements.txt${NC} - Python dependencies"
+    echo -e "     • Core packages (numpy, pandas, jupyter)"
+    echo -e "     • Type-specific packages for $PROJECT_TYPE"
+    echo -e "     • Install with: pip install -r requirements.txt"
+    echo -e ""
+    echo -e "  3. ${CYAN}configs/experiment.yaml${NC} - Example config"
+    echo -e "     • Training hyperparameters"
+    echo -e "     • Data settings"
+    echo -e "     • Logging configuration"
+    echo -e ""
     echo -e "${YELLOW}💡 Good Documentation:${NC}"
-    echo "   • Helps collaborators understand your work"
-    echo "   • Reminds you of setup steps after breaks"
-    echo "   • Makes your research reproducible"
-    echo ""
+    echo -e "   • Helps collaborators understand your work"
+    echo -e "   • Reminds you of setup steps after breaks"
+    echo -e "   • Makes your research reproducible"
+    echo -e ""
     read -p "Press Enter to create project files..." </dev/tty
-    echo ""
+    echo -e ""
 fi
 
-echo ""
+echo -e ""
 echo -e "${BOLD}Creating Project Files${NC}"
-echo ""
+echo -e ""
 
 # Create README based on structure type
 if [ "$STRUCTURE_TYPE" = "blank" ]; then
     cat > "$PROJECT_DIR/README.md" <<READMEEOF
 # $PROJECT_NAME
 
-$([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
+$([ -n "$PROJECT_DESC" ] && echo -e "$PROJECT_DESC")
 
 **Author:** $USERNAME
 **Created:** $(date +"%Y-%m-%d")
@@ -190,9 +190,9 @@ $([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
 
 ## Getting Started
 
-1. **Start your container:**
+1. **Deploy your container:**
    \`\`\`bash
-   container-run $PROJECT_NAME
+   container deploy $PROJECT_NAME
    \`\`\`
 
 2. **Navigate to your project:**
@@ -200,13 +200,29 @@ $([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
    cd /workspace/$PROJECT_NAME
    \`\`\`
 
-3. **Set up your project structure and start working!**
+3. **Start working!**
+
+4. **When done, retire the container:**
+   \`\`\`bash
+   container retire $PROJECT_NAME
+   \`\`\`
 
 ## Workflow
 
-- **Workspace (~/workspace):** Your files persist here - this is permanent storage
-- **Container:** Your computing environment with GPU access - can be restarted
+- **Workspace** (~/workspace): Your files persist here - this is permanent storage
+- **Container**: Your computing environment with GPU access - ephemeral (can be recreated anytime)
 - Edit code in VS Code, run in container, results save to workspace
+- Your workspace files are **always safe**, even when you retire the container
+
+## Key Commands
+
+\`\`\`bash
+container deploy <name>    # Create and start a container
+container attach <name>    # Enter a running container
+container retire <name>    # Stop + remove + free GPU
+container-list             # See all your containers
+check-limits               # View your resource quotas
+\`\`\`
 
 ## Notes
 
@@ -214,13 +230,15 @@ $([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
 - Save all your work here
 - Use Git for version control
 
+**Full documentation:** https://github.com/hertie-data-science-lab/ds01-user-docs
+
 READMEEOF
 else
     # Comprehensive README for data science structure
     cat > "$PROJECT_DIR/README.md" <<READMEEOF
 # $PROJECT_NAME
 
-$([ -n "$PROJECT_DESC" ] && echo "$PROJECT_DESC")
+$([ -n "$PROJECT_DESC" ] && echo -e "$PROJECT_DESC")
 
 **Author:** $USERNAME
 **Created:** $(date +"%Y-%m-%d")
@@ -249,54 +267,56 @@ $PROJECT_NAME/
 
 ### On the DS01 Server
 
-1. **Start your container:**
+1. **Deploy your container:**
    \`\`\`bash
-   container-run $PROJECT_NAME
+   container deploy $PROJECT_NAME
    \`\`\`
-   This launches your Docker container with GPU access and mounts your workspace.
+   This creates and starts your Docker container with GPU access.
 
 2. **Navigate to your project:**
    \`\`\`bash
    cd /workspace/$PROJECT_NAME
    \`\`\`
 
-3. **Install dependencies (if you have requirements.txt):**
-   \`\`\`bash
-   pip install -r requirements.txt
-   \`\`\`
-
-4. **Start working!**
+3. **Start working!**
    - Run Jupyter: \`jupyter lab\`
    - Train models: \`python scripts/train.py\`
    - Run experiments in notebooks/
+
+4. **When done, retire the container:**
+   \`\`\`bash
+   container retire $PROJECT_NAME
+   \`\`\`
+   This stops and removes the container, freeing up GPU resources.
 
 ### Understanding the Workflow
 
 **Containers vs. Workspace:**
 - Your **workspace** (~/workspace) persists - all files saved here are permanent
-- **Containers** are temporary environments - they can be stopped/restarted
-- Think of containers as "shells" you work in, workspace as your "files"
+- **Containers** are ephemeral environments - they can be created/retired anytime
+- Think of containers as your "computer" you turn on/off, workspace as your "hard drive"
 
 **Key Commands:**
 \`\`\`bash
-# Container management
+# Container management (Orchestration Interface)
+container deploy <name>     # Create and start container
+container attach <name>     # Enter a running container
+container retire <name>     # Stop + remove + free GPU
 container-list              # See all your containers
-container-run <name>        # Start and enter a container
-container-stop <name>       # Stop a running container
 container-stats             # Check resource usage
+
+# Resource management
+check-limits                # View your GPU/container quotas
 
 # Image management
 image-list                  # See available Docker images
 image-create                # Build a new custom image
-
-# System info
-alias-list                  # See all available commands
 \`\`\`
 
 **GPU Usage:**
 - Check GPU: \`nvidia-smi\`
 - Your container has access to assigned GPUs automatically
-- Be respectful of shared resources
+- View your limits: \`check-limits\`
 
 ## Working with Data
 
@@ -320,10 +340,11 @@ torch.save(model.state_dict(), 'models/checkpoints/model_epoch_10.pth')
 
 ## Next Steps
 
-- Install your dependencies: \`pip install -r requirements.txt\`
 - Start experimenting in notebooks/
 - Move production code to scripts/
 - Commit often with Git
+
+**Full documentation:** https://github.com/hertie-data-science-lab/ds01-user-docs
 
 READMEEOF
 fi
@@ -425,7 +446,7 @@ fi
 # Initial Git commit (optional)
 if [ "$DO_COMMIT" = true ]; then
     if [ -d "$PROJECT_DIR/.git" ]; then
-        echo ""
+        echo -e ""
         echo -e "${BLUE}Creating initial Git commit...${NC}"
         cd "$PROJECT_DIR"
         git add . 2>/dev/null
@@ -433,66 +454,65 @@ if [ "$DO_COMMIT" = true ]; then
 
 Created by readme-create
 Type: $PROJECT_TYPE
-$([ -n "$PROJECT_DESC" ] && echo "Description: $PROJECT_DESC")" 2>/dev/null || true
+$([ -n "$PROJECT_DESC" ] && echo -e "Description: $PROJECT_DESC")" 2>/dev/null || true
         echo -e "${GREEN}✓${NC} Initial commit created"
     else
-        echo ""
+        echo -e ""
         echo -e "${YELLOW}⚠${NC} Git not initialized, skipping commit"
         if [ "$GUIDED" = true ]; then
-            echo "  Initialize Git first:"
+            echo -e "  Initialize Git first:"
             echo -e "    ${GREEN}git-init $PROJECT_NAME${NC}"
         fi
     fi
 fi
 
-echo ""
+echo -e ""
 echo -e "${GREEN}✓ Project files created${NC}"
 
 # Summary
 if [ "$GUIDED" = true ]; then
-    echo ""
+    echo -e ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Project Documentation Ready${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    echo -e ""
     echo -e "${BOLD}What's Created:${NC}"
-    echo "  ✓ README.md - Project documentation"
-    echo "  ✓ requirements.txt - Python dependencies ($PROJECT_TYPE)"
+    echo -e "  ✓ README.md - Project documentation"
+    echo -e "  ✓ requirements.txt - Python dependencies ($PROJECT_TYPE)"
     if [ -d "$PROJECT_DIR/configs" ]; then
-        echo "  ✓ configs/experiment.yaml - Example configuration"
+        echo -e "  ✓ configs/experiment.yaml - Example configuration"
     fi
     if [ "$DO_COMMIT" = true ] && [ -d "$PROJECT_DIR/.git" ]; then
-        echo "  ✓ Initial Git commit"
+        echo -e "  ✓ Initial Git commit"
     fi
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Next Steps:${NC}"
-    echo ""
-    echo "  1) Review the README:"
+    echo -e ""
+    echo -e "  1) Review the README:"
     echo -e "     ${GREEN}cat $PROJECT_DIR/README.md${NC}"
-    echo ""
-    echo "  2) Install dependencies in your container:"
-    echo -e "     ${GREEN}container-run $PROJECT_NAME${NC}"
-    echo -e "     ${GREEN}pip install -r requirements.txt${NC}"
-    echo ""
-    echo "  3) Start working:"
-    echo "     • Open Jupyter: jupyter lab"
-    echo "     • Create notebooks in notebooks/"
-    echo "     • Write scripts in scripts/"
-    echo ""
+    echo -e ""
+    echo -e "  2) Deploy your container:"
+    echo -e "     ${GREEN}container deploy $PROJECT_NAME${NC}"
+    echo -e ""
+    echo -e "  3) Start working:"
+    echo -e "     • Open Jupyter: jupyter lab"
+    echo -e "     • Create notebooks in notebooks/"
+    echo -e "     • Write scripts in scripts/"
+    echo -e ""
     if [ ! -d "$PROJECT_DIR/.git" ]; then
-        echo "  4) Consider initializing Git:"
+        echo -e "  4) Consider initializing Git:"
         echo -e "     ${GREEN}git-init $PROJECT_NAME${NC}"
-        echo ""
+        echo -e ""
     fi
 else
     # Non-guided: brief output
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Files created in:${NC} ${BLUE}$PROJECT_DIR${NC}"
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Next:${NC}"
     echo -e "  ${DIM}Review:${NC}        ${GREEN}cat $PROJECT_DIR/README.md${NC}"
-    echo -e "  ${DIM}Install deps:${NC}  ${GREEN}container-run $PROJECT_NAME${NC} → ${GREEN}pip install -r requirements.txt${NC}"
-    echo ""
+    echo -e "  ${DIM}Deploy:${NC}        ${GREEN}container deploy $PROJECT_NAME${NC}"
+    echo -e ""
 fi
 
 exit 0
