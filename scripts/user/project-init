@@ -246,46 +246,16 @@ else
 fi
 
 if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
-    # Call Tier 2 module: git-init
+    # Call Tier 2 module: git-init (handles remote setup in guided mode)
     GUIDED_FLAG=""
     if [ "$GUIDED" = true ]; then
         GUIDED_FLAG="--guided"
     fi
 
     git-init "$PROJECT_NAME" $GUIDED_FLAG
-
-    # Git remote setup (optional)
-    if [ "$INTERACTIVE" = true ]; then
-        echo ""
-        if is_beginner "GIT"; then
-            echo -e "${DIM}A Git remote lets you backup your code to GitHub/GitLab${NC}"
-            echo -e "${DIM}and collaborate with others. You can add this later too.${NC}"
-            echo ""
-        fi
-        read -p "Add a Git remote (e.g., GitHub URL)? [y/N]: " ADD_REMOTE </dev/tty
-        if [[ "$ADD_REMOTE" =~ ^[Yy]$ ]]; then
-            echo ""
-            echo "Enter the remote URL (e.g., git@github.com:username/repo.git)"
-            read -p "Remote URL: " REMOTE_URL </dev/tty
-            if [ -n "$REMOTE_URL" ]; then
-                cd "$PROJECT_DIR"
-                if git remote add origin "$REMOTE_URL" 2>/dev/null; then
-                    echo -e "${GREEN}✓${NC} Remote 'origin' added: $REMOTE_URL"
-                    echo ""
-                    echo "Push your code later with:"
-                    echo -e "  ${GREEN}cd $PROJECT_DIR && git push -u origin main${NC}"
-                else
-                    echo -e "${YELLOW}⚠${NC} Could not add remote (may already exist)"
-                fi
-                cd - >/dev/null
-            fi
-        fi
-    fi
 else
     SKIP_GIT=true
 fi
-
-read -p "Press Enter to continue..." </dev/tty
 
 # Step 4: Create README and requirements.txt
 if [ "$EXISTING_PROJECT" = false ]; then
