@@ -531,6 +531,12 @@ if command -v log_container_operation &>/dev/null; then
 fi
 
 # Capture output to suppress verbose logging (only show errors)
+# Debug: Show command being executed (helps troubleshoot argument parsing issues)
+if [ -n "${DS01_DEBUG:-}" ]; then
+    log_info "DEBUG: Executing command:"
+    echo "  python3 $MLC_PATCHED $MLC_ARGS"
+fi
+
 MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
 MLC_EXIT_CODE=$?
 
@@ -560,6 +566,11 @@ if [ $MLC_EXIT_CODE -ne 0 ]; then
     # Show resource limits being applied
     echo -e "${BLUE}Resource Limits:${NC}"
     echo "$RESOURCE_LIMITS" | tr ' ' '\n' | sed 's/^/  /'
+    echo ""
+
+    # Show the command that was attempted
+    echo -e "${BLUE}Command Attempted:${NC}"
+    echo "  python3 $MLC_PATCHED $MLC_ARGS"
     echo ""
 
     # Show mlc-patched.py error output (full output, last 30 lines)

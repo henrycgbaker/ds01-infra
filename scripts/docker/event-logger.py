@@ -62,9 +62,12 @@ class EventLogger:
                 f.write(json.dumps(event) + '\n')
             return True
 
+        except PermissionError:
+            # Permission errors are expected if log file isn't group-writable
+            # Admin should run: sudo chown root:docker /var/log/ds01/events.jsonl && sudo chmod 664 /var/log/ds01/events.jsonl
+            return False
         except Exception as e:
-            # Event logging should NEVER break the system
-            # Log to stderr and continue
+            # Other errors - log to stderr for debugging but don't break the system
             print(f"Warning: Event logging failed: {e}", file=sys.stderr)
             return False
 
@@ -201,8 +204,9 @@ def main():
         if logger.log(event_type, **kwargs):
             print(f"Logged: {event_type}")
         else:
-            print("Warning: Event logging may have failed")
-            sys.exit(1)
+            # Event logging failed - likely permission issue
+            # Don't exit with error, but warn so admin can fix permissions
+            print("Warning: Event logging failed (check permissions on /var/log/ds01/events.jsonl)", file=sys.stderr)
 
     elif command == "tail":
         n = int(sys.argv[2]) if len(sys.argv) > 2 else 20

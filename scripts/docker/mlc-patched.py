@@ -48,6 +48,20 @@ import re            # Regular expressions
 
 from collections import defaultdict
 
+# DS01 PATCH: Import username sanitization from shared library
+sys.path.insert(0, '/opt/ds01-infra/scripts/lib')
+try:
+    from username_utils import sanitize_username_for_slice as sanitize_username_for_container
+except ImportError:
+    # Fallback if library not available
+    def sanitize_username_for_container(username: str) -> str:
+        if not username:
+            return username
+        sanitized = username.replace('@', '-at-').replace('.', '-')
+        sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', sanitized)
+        sanitized = re.sub(r'-+', '-', sanitized)
+        return sanitized.strip('-')
+
 # Set Default values  AIME mlc
 mlc_container_version = 4     # Version number of AIME MLC setup (mlc create). In version 4: data and models directories included
 mlc_version = "2.1.2"         # Version number of AIME MLC
@@ -61,7 +75,10 @@ try:
 except OSError:
     import pwd
     user_name = pwd.getpwuid(user_id).pw_name
-group_id = os.getgid()      
+group_id = os.getgid()
+
+# Sanitized username for use inside containers (LDAP usernames may contain @)
+container_user_name = sanitize_username_for_container(user_name)
 
 # Coloring the frontend (ANSI escape codes) and i/o 
 ERROR = "\033[91m"          # Red
@@ -1414,6 +1431,9 @@ def build_docker_run_command(
         '--shm-size', '8G'
     ]
 
+    # DS01 PATCH: Sanitize username for container use (LDAP usernames may contain @)
+    container_username = sanitize_username_for_container(user_name)
+
     # Shared bash command part
     bash_lines = [
         f'echo "export PATH=\\"{dir_to_be_added}:\\$PATH\\"" >> /etc/skel/.bashrc;'
@@ -1426,16 +1446,16 @@ def build_docker_run_command(
         f"if getent group {group_id} > /dev/null 2>&1; then "
         f"EXISTING_GROUP=$(getent group {group_id} | cut -d: -f1); "
         f"echo \"DS01 DEBUG Step 1: Found existing group: $EXISTING_GROUP\"; "
-        f"if [ \"$EXISTING_GROUP\" != \"{user_name}\" ]; then "
+        f"if [ \"$EXISTING_GROUP\" != \"{container_username}\" ]; then "
         f"echo \"DS01 DEBUG Step 1: Removing conflicting group $EXISTING_GROUP\"; "
         f"groupdel $EXISTING_GROUP 2>&1 || echo \"DS01 DEBUG Step 1: groupdel failed: $?\"; "
         f"else echo 'DS01 DEBUG Step 1: Group name matches, no removal needed'; fi; "
         f"else echo 'DS01 DEBUG Step 1: No existing group with GID {group_id}'; fi;",
         # Step 2: Create group with specific GID
-        f"echo 'DS01 DEBUG Step 2: Creating group {user_name} with gid={group_id}'; "
+        f"echo 'DS01 DEBUG Step 2: Creating group {container_username} with gid={group_id}'; "
         f"if ! getent group {group_id} > /dev/null 2>&1; then "
-        f"addgroup --gid {group_id} {user_name} 2>&1 && echo 'DS01 DEBUG Step 2: addgroup succeeded' || "
-        f"{{ groupadd -g {group_id} {user_name} 2>&1 && echo 'DS01 DEBUG Step 2: groupadd succeeded' || "
+        f"addgroup --gid {group_id} {container_username} 2>&1 && echo 'DS01 DEBUG Step 2: addgroup succeeded' || "
+        f"{{ groupadd -g {group_id} {container_username} 2>&1 && echo 'DS01 DEBUG Step 2: groupadd succeeded' || "
         f"echo 'DS01 DEBUG Step 2: Group creation FAILED'; }}; "
         f"else echo 'DS01 DEBUG Step 2: Group {group_id} already exists (skipping creation)'; fi;",
         # Step 3: Remove any existing user with same UID (prevents conflicts)
@@ -1443,29 +1463,29 @@ def build_docker_run_command(
         f"if getent passwd {user_id} > /dev/null 2>&1; then "
         f"EXISTING_USER=$(getent passwd {user_id} | cut -d: -f1); "
         f"echo \"DS01 DEBUG Step 3: Found existing user: $EXISTING_USER\"; "
-        f"if [ \"$EXISTING_USER\" != \"{user_name}\" ]; then "
+        f"if [ \"$EXISTING_USER\" != \"{container_username}\" ]; then "
         f"echo \"DS01 DEBUG Step 3: Removing conflicting user $EXISTING_USER\"; "
         f"userdel -r $EXISTING_USER 2>&1 || echo \"DS01 DEBUG Step 3: userdel failed: $?\"; "
         f"else echo 'DS01 DEBUG Step 3: User name matches, no removal needed'; fi; "
         f"else echo 'DS01 DEBUG Step 3: No existing user with UID {user_id}'; fi;",
         # Step 4: Create user with specific UID and GID
-        f"echo 'DS01 DEBUG Step 4: Creating user {user_name} (uid={user_id}, gid={group_id})'; "
+        f"echo 'DS01 DEBUG Step 4: Creating user {container_username} (uid={user_id}, gid={group_id})'; "
         f"if ! getent passwd {user_id} > /dev/null 2>&1; then "
-        f"adduser --uid {user_id} --gid {group_id} {user_name} --disabled-password --gecos aime 2>&1 && echo 'DS01 DEBUG Step 4: adduser succeeded' || "
-        f"{{ useradd -u {user_id} -g {group_id} -d /home/{user_name} -m -s /bin/bash {user_name} 2>&1 && echo 'DS01 DEBUG Step 4: useradd succeeded' || "
+        f"adduser --uid {user_id} --gid {group_id} {container_username} --disabled-password --gecos aime 2>&1 && echo 'DS01 DEBUG Step 4: adduser succeeded' || "
+        f"{{ useradd -u {user_id} -g {group_id} -d /home/{container_username} -m -s /bin/bash {container_username} 2>&1 && echo 'DS01 DEBUG Step 4: useradd succeeded' || "
         f"echo 'DS01 DEBUG Step 4: User creation FAILED'; }}; "
         f"else echo 'DS01 DEBUG Step 4: User {user_id} already exists (skipping creation)'; fi;",
         # Step 5: Verify and report with detailed debug info
-        f"echo 'DS01 DEBUG: Checking user {user_name} (uid={user_id}, gid={group_id})'; "
+        f"echo 'DS01 DEBUG: Checking user {container_username} (uid={user_id}, gid={group_id})'; "
         f"echo 'DS01 DEBUG: /etc/passwd entry:'; getent passwd {user_id} 2>&1 || echo 'NOT FOUND'; "
         f"echo 'DS01 DEBUG: /etc/group entry:'; getent group {group_id} 2>&1 || echo 'NOT FOUND'; "
         f"if getent passwd {user_id} > /dev/null 2>&1 && getent group {group_id} > /dev/null 2>&1; then "
         f"echo 'User setup: OK'; "
         f"else echo 'User setup: FAILED - uid={user_id} gid={group_id}'; fi;",
         # Step 6: Configure user
-        f"passwd -d {user_name} 2>/dev/null || true;",
-        f"usermod -aG sudo {user_name} 2>/dev/null || true;",
-        f"echo \"{user_name} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/{user_name}_no_password;",
+        f"passwd -d {container_username} 2>/dev/null || true;",
+        f"usermod -aG sudo {container_username} 2>/dev/null || true;",
+        f"echo \"{container_username} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/{container_username}_no_password;",
     ]
 
     # Add ROCm-specific line if needed
@@ -1473,7 +1493,7 @@ def build_docker_run_command(
         bash_lines.append(f"echo \"export ROCM_PATH=/opt/rocm\" >> ~/.bashrc;")
 
     bash_lines.extend([
-        f"chmod 440 /etc/sudoers.d/${user_name}_no_password;",
+        f"chmod 440 /etc/sudoers.d/{container_username}_no_password;",
         "exit"
     ])      
 

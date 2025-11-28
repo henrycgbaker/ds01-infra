@@ -306,8 +306,9 @@ case $START_MODE in
         fi
 
         # container-run will exec into the container (this script won't return until user exits)
-        "$CONTAINER_RUN" "$CONTAINER_NAME" "${RUN_ARGS[@]}"
-        EXIT_CODE=$?
+        # Capture exit code without letting set -e terminate the script
+        EXIT_CODE=0
+        "$CONTAINER_RUN" "$CONTAINER_NAME" "${RUN_ARGS[@]}" || EXIT_CODE=$?
 
         # Post-exit messaging with interactive prompt
         echo ""
