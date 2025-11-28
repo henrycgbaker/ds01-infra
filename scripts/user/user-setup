@@ -432,6 +432,7 @@ echo -e ""
 # JUPYTER ACCESS (brief mention)
 # ============================================================================
 
+echo ""
 echo -e "${CYAN}━━━ Jupyter Access ━━━${NC}"
 echo -e ""
 echo -e "For Jupyter notebooks in VS Code, the ${CYAN}Jupyter extension${NC} handles everything."
@@ -453,13 +454,6 @@ echo -e "    ${GREEN}project-init --guided${NC}"
 echo -e ""
 echo -e "  Or for quick setup (experienced users):"
 echo -e "    ${GREEN}project-init my-project${NC}"
-echo -e ""
-
-echo -e "${BOLD}Helpful Commands:${NC}"
-echo -e "   ${CYAN}project-init${NC}              Create a new project"
-echo -e "   ${CYAN}container deploy${NC}          Deploy a container"
-echo -e "   ${CYAN}container-list${NC}            See all your containers"
-echo -e "   ${CYAN}check-limits${NC}              View your resource quotas"
 echo -e ""
 
 echo -e "${GREEN}Welcome to DS01! Happy computing!${NC}"

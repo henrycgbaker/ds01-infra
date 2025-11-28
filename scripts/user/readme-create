@@ -141,36 +141,33 @@ esac
 
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
-    echo -e ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Creating Project Documentation${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e ""
-    echo -e "${BOLD}What We'll Create:${NC}"
+    echo -e "${BOLD}Next We'll Create:${NC}"
     echo -e ""
     echo -e "  1. ${CYAN}README.md${NC} - Project documentation"
-    echo -e "     • Project overview and structure"
-    echo -e "     • Getting started guide"
-    echo -e "     • DS01 workflow explanation"
-    echo -e "     • Command reference"
+    echo -e "     • GitHub will automatically display this file (public facing doc)"
+    echo -e "     • We have pre-populated with info for getting set up on DS01's workflow"
+    echo -e "     • You'll later develop this as you develop your project!"
     echo -e ""
     echo -e "  2. ${CYAN}requirements.txt${NC} - Python dependencies"
     echo -e "     • Core packages (numpy, pandas, jupyter)"
     echo -e "     • Type-specific packages for $PROJECT_TYPE"
     echo -e "     • Install with: pip install -r requirements.txt"
-    echo -e ""
-    echo -e "  3. ${CYAN}configs/experiment.yaml${NC} - Example config"
-    echo -e "     • Training hyperparameters"
-    echo -e "     • Data settings"
-    echo -e "     • Logging configuration"
-    echo -e ""
-    echo -e "${YELLOW}💡 Good Documentation:${NC}"
-    echo -e "   • Helps collaborators understand your work"
-    echo -e "   • Reminds you of setup steps after breaks"
-    echo -e "   • Makes your research reproducible"
+    #echo -e ""
+    #echo -e "  3. ${CYAN}configs/experiment.yaml${NC} - Example config"
+    #echo -e "     • Training hyperparameters"
+    #echo -e "     • Data settings"
+    #echo -e "     • Logging configuration"
+    #echo -e ""
+    #echo -e "${YELLOW}💡 Good Documentation:${NC}"
+    #echo -e "   • Helps collaborators understand your work"
+    #echo -e "   • Reminds you of setup steps after breaks"
+    #echo -e "   • Makes your research reproducible"
     echo -e ""
     read -p "Press Enter to create project files..." </dev/tty
-    echo -e ""
 fi
 
 echo -e ""
@@ -179,6 +176,7 @@ echo -e ""
 
 # Create README based on structure type
 if [ "$STRUCTURE_TYPE" = "blank" ]; then
+    echo -e "${BLUE}Creating README.md...${NC}"
     cat > "$PROJECT_DIR/README.md" <<READMEEOF
 # $PROJECT_NAME
 
@@ -475,43 +473,6 @@ if [ "$GUIDED" = true ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Project Documentation Ready${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e ""
-    echo -e "${BOLD}What's Created:${NC}"
-    echo -e "  ✓ README.md - Project documentation"
-    echo -e "  ✓ requirements.txt - Python dependencies ($PROJECT_TYPE)"
-    if [ -d "$PROJECT_DIR/configs" ]; then
-        echo -e "  ✓ configs/experiment.yaml - Example configuration"
-    fi
-    if [ "$DO_COMMIT" = true ] && [ -d "$PROJECT_DIR/.git" ]; then
-        echo -e "  ✓ Initial Git commit"
-    fi
-    echo -e ""
-    echo -e "${BOLD}Next Steps:${NC}"
-    echo -e ""
-    echo -e "  1) Review the README:"
-    echo -e "     ${GREEN}cat $PROJECT_DIR/README.md${NC}"
-    echo -e ""
-    echo -e "  2) Deploy your container:"
-    echo -e "     ${GREEN}container deploy $PROJECT_NAME${NC}"
-    echo -e ""
-    echo -e "  3) Start working:"
-    echo -e "     • Open Jupyter: jupyter lab"
-    echo -e "     • Create notebooks in notebooks/"
-    echo -e "     • Write scripts in scripts/"
-    echo -e ""
-    if [ ! -d "$PROJECT_DIR/.git" ]; then
-        echo -e "  4) Consider initializing Git:"
-        echo -e "     ${GREEN}git-init $PROJECT_NAME${NC}"
-        echo -e ""
-    fi
-else
-    # Non-guided: brief output
-    echo -e ""
-    echo -e "${BOLD}Files created in:${NC} ${BLUE}$PROJECT_DIR${NC}"
-    echo -e ""
-    echo -e "${BOLD}Next:${NC}"
-    echo -e "  ${DIM}Review:${NC}        ${GREEN}cat $PROJECT_DIR/README.md${NC}"
-    echo -e "  ${DIM}Deploy:${NC}        ${GREEN}container deploy $PROJECT_NAME${NC}"
     echo -e ""
 fi
 

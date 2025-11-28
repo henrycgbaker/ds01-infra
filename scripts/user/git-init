@@ -349,17 +349,12 @@ elif [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${BOLD}Remote Repository (Optional)${NC}"
     echo ""
-    echo "A remote repository (like GitHub or GitLab) lets you:"
-    echo "  • Back up your code to the cloud"
-    echo "  • Share and collaborate with others"
-    echo "  • Access your code from anywhere"
-    echo ""
     echo -n "Add remote repository? [y/N]: "
     read -r ADD_REMOTE </dev/tty
 
     if [[ "$ADD_REMOTE" =~ ^[Yy] ]]; then
         echo ""
-        echo "Examples:"
+        echo "Enter the URL of your remote Git repository. E.g.:"
         echo "  • GitHub: git@github.com:username/repo.git"
         echo "  • GitLab: git@gitlab.com:username/repo.git"
         echo "  • HTTPS: https://github.com/username/repo.git"
@@ -370,11 +365,6 @@ elif [ "$GUIDED" = true ]; then
         if [ -n "$GIT_REMOTE" ]; then
             if git remote add origin "$GIT_REMOTE" 2>/dev/null; then
                 echo -e "${GREEN}✓${NC} Remote added: $GIT_REMOTE"
-                echo ""
-                echo "To push your code later:"
-                echo -e "  ${GREEN}git add .${NC}"
-                echo -e "  ${GREEN}git commit -m \"Initial commit\"${NC}"
-                echo -e "  ${GREEN}git push -u origin main${NC}"
             else
                 echo -e "${YELLOW}⚠${NC} Failed to add remote"
             fi
@@ -392,41 +382,16 @@ if [ "$GUIDED" = true ]; then
     echo -e "${BOLD}Git Repository Ready${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${BOLD}What's Set Up:${NC}"
-    echo "  ✓ Git repository initialized"
-    echo "  ✓ ML/DS .gitignore created"
-    if command -v git-lfs &> /dev/null && [ "$SETUP_LFS" = true ]; then
-        echo "  ✓ Git LFS configured for large files"
-    fi
-    if [ -n "$GIT_NAME" ]; then
-        echo "  ✓ User config: $GIT_NAME <$GIT_EMAIL>"
-    fi
-    if git remote get-url origin &>/dev/null; then
-        REMOTE_URL=$(git remote get-url origin)
-        echo "  ✓ Remote: $REMOTE_URL"
-    fi
-    echo ""
-    echo -e "${BOLD}Basic Git Commands:${NC}"
-    echo ""
-    echo -e "  ${GREEN}git status${NC}              Check what's changed"
-    echo -e "  ${GREEN}git add <file>${NC}          Stage file for commit"
-    echo -e "  ${GREEN}git add .${NC}               Stage all changes"
-    echo -e "  ${GREEN}git commit -m \"msg\"${NC}    Save changes with message"
-    echo -e "  ${GREEN}git push${NC}                Upload to remote (GitHub/GitLab)"
-    echo -e "  ${GREEN}git pull${NC}                Download changes from remote"
-    echo -e "  ${GREEN}git log${NC}                 View commit history"
-    echo ""
     echo -e "${BOLD}Next Steps:${NC}"
     echo ""
-    echo "  1) Create your first commit:"
+    echo "  Create your first commit:"
     echo -e "     ${GREEN}cd $PROJECT_DIR${NC}"
     echo -e "     ${GREEN}git add .${NC}"
     echo -e "     ${GREEN}git commit -m \"Initial commit\"${NC}"
-    echo ""
     if git remote get-url origin &>/dev/null; then
+        echo ""
         echo "  2) Push to remote:"
         echo -e "     ${GREEN}git push -u origin main${NC}"
-        echo ""
     fi
 else
     # Non-guided: brief output

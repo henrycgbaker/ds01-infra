@@ -44,23 +44,23 @@ for arg in "$@"; do
             shift
             ;;
         -h|--help)
-            echo ""
+            echo -e ""
             echo -e "${BOLD}DS01 Project Init${NC}"
-            echo ""
+            echo -e ""
             echo -e "${CYAN}Usage:${NC}"
-            echo "  project-init [project-name] [--guided]"
-            echo "  project init [project-name] [--guided]"
-            echo ""
+            echo -e "  project-init [project-name] [--guided]"
+            echo -e "  project init [project-name] [--guided]"
+            echo -e ""
             echo -e "${CYAN}Options:${NC}"
-            echo "  --guided    Include detailed explanations for beginners"
-            echo "  -h, --help  Show this help message"
-            echo ""
+            echo -e "  --guided    Include detailed explanations for beginners"
+            echo -e "  -h, --help  Show this help message"
+            echo -e ""
             echo -e "${CYAN}Examples:${NC}"
-            echo "  project-init                    # Quick interactive setup"
-            echo "  project-init --guided           # Beginner-friendly with explanations"
-            echo "  project-init my-thesis          # Create 'my-thesis' project"
-            echo "  project init                    # Same as project-init"
-            echo ""
+            echo -e "  project-init                    # Quick interactive setup"
+            echo -e "  project-init --guided           # Beginner-friendly with explanations"
+            echo -e "  project-init my-thesis          # Create 'my-thesis' project"
+            echo -e "  project init                    # Same as project-init"
+            echo -e ""
             exit 0
             ;;
         *)
@@ -95,12 +95,12 @@ if ! type is_beginner &>/dev/null; then
 fi
 
 # Header
-echo ""
+echo -e ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 if [ "$GUIDED" = true ]; then
     echo -e "  ${BOLD}DS01 Project Init (Guided Mode)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    echo -e ""
     echo -e "${GREEN}${BOLD}Welcome to DS01!${NC}"
     echo -e "  This wizard will walk you through creating a complete ML project."
     echo -e "  ${DIM}For experienced users: run without --guided flag${NC}"
@@ -108,12 +108,12 @@ else
     echo -e "  ${BOLD}DS01 Project Init${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 fi
-echo ""
+echo -e ""
 
 if [ "$INTERACTIVE" = true ] && [ "$GUIDED" = false ]; then
     echo -e "${BOLD}Project Setup${NC}"
     echo -e "${DIM}Tip: Add --guided flag for detailed explanations${NC}"
-    echo ""
+    echo -e ""
 fi
 
 # Step 1: Project Name and Type
@@ -123,25 +123,27 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "A project is your workspace directory containing:"
     echo -e "  • Your code ${DIM}(scripts, notebooks)${NC}"
-    echo -e "  • Your data ${DIM}(datasets, outputs)${NC}"
+    echo -e "  • Your data ${DIM}(datasets, trained models)${NC}"
     echo -e "  • Configuration files"
-    echo -e "  • Everything persists across container restarts"
+    echo -e "  • Research outpits ${DIM}(visualisations, outputs)${NC}"
+    echo ""
+    echo -e "${YELLOW} Everything persists across container restarts${NC}"
 fi
-echo ""
+echo -e ""
 
 if [ -n "$PROJECT_NAME_ARG" ]; then
     PROJECT_NAME="$PROJECT_NAME_ARG"
-    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+    PROJECT_NAME=$(echo -e "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     echo -e "Project name: ${CYAN}$PROJECT_NAME${NC}"
 else
     # Loop until valid project name is provided
     while true; do
         read -p "Project name (e.g., thesis, cv-experiments, nlp-project): " PROJECT_NAME </dev/tty
-        PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+        PROJECT_NAME=$(echo -e "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
 
         if [ -z "$PROJECT_NAME" ]; then
             echo -e "${RED}✗ Project name cannot be empty${NC}"
-            echo ""
+            echo -e ""
             continue
         fi
         break
@@ -164,14 +166,14 @@ fi
 
 # Project type selection
 if [ "$INTERACTIVE" = true ]; then
-    echo ""
-    echo "Select project type:"
+    echo -e ""
+    echo -e "Select project type:"
     echo -e "  ${BOLD}1)${NC} General ML ${DIM}(just the basics) ${GREEN}(Default)${NC}"
     echo -e "  ${BOLD}2)${NC} Computer Vision ${DIM}(timm, albumentations, opencv)${NC}"
     echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, datasets, tokenizers)${NC}"
     echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
     echo -e "  ${BOLD}5)${NC} Custom ${DIM}(specify packages manually)${NC}"
-    echo ""
+    echo -e ""
     read -p "Choice [1-5, default: 1]: " TYPE_CHOICE
 
     case $TYPE_CHOICE in
@@ -187,7 +189,7 @@ fi
 
 # Project description
 if [ "$INTERACTIVE" = true ]; then
-    echo ""
+    echo -e ""
     read -p "Project description (optional, press Enter to skip): " PROJECT_DESC
 else
     PROJECT_DESC=""
@@ -195,9 +197,23 @@ fi
 
 # Step 2: Create Project Directory Structure
 if [ "$EXISTING_PROJECT" = false ]; then
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Step 2: Creating Project Structure${NC}"
+    echo -e ""
+
+# Show guided introduction
+if [ "$GUIDED" = true ]; then
+    echo -e "Why use a standardised DS/ML template structure?"
+    echo "  • Collaborate with others easily"
+    echo "  • Follow ML/DS best practices"
+    echo "  • Keep raw data separate from processed data"
+    echo "  • Track experiments and results"
     echo ""
+
+    read -p "Press Enter to create the directory structure..." </dev/tty
+    echo ""
+fi
+
 
     if [ "$INTERACTIVE" = true ]; then
         # Directory structure choice
@@ -206,6 +222,7 @@ if [ "$EXISTING_PROJECT" = false ]; then
         echo -e "     ${DIM}Organized folders: data/, models/, notebooks/, scripts/, outputs/${NC}"
         echo -e "  ${BOLD}2)${NC} Blank directory"
         echo -e "     ${DIM}Empty project folder - set up your own structure${NC}"
+        echo -e ""
         read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE
     else
         STRUCTURE_CHOICE="1"
@@ -225,16 +242,16 @@ if [ "$EXISTING_PROJECT" = false ]; then
 
     dir-create "$PROJECT_NAME" --type="$STRUCTURE_TYPE" $GUIDED_FLAG
 else
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Step 2: Using Existing Project${NC}"
     echo -e "${GREEN}✓ Using existing directory${NC}"
     STRUCTURE_TYPE="existing"
 fi
 
 # Step 3: Git Setup
-echo ""
+echo -e ""
 echo -e "${BOLD}Step 3: Git Version Control${NC}"
-echo ""
+echo -e ""
 
 SKIP_GIT=false
 
@@ -259,9 +276,9 @@ fi
 
 # Step 4: Create README and requirements.txt
 if [ "$EXISTING_PROJECT" = false ]; then
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Step 4: Creating Project Files${NC}"
-    echo ""
+    echo -e ""
 
     # Call Tier 2 module: readme-create
     GUIDED_FLAG=""
@@ -280,7 +297,7 @@ if [ "$EXISTING_PROJECT" = false ]; then
         $COMMIT_FLAG \
         $GUIDED_FLAG
 else
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Step 4: File Creation${NC}"
     echo -e "${GREEN}Using existing project files${NC}"
 fi
@@ -288,32 +305,19 @@ fi
 
 if [ -f "$PROJECT_DIR/README.md" ]; then
     echo -e "${YELLOW}📖 Read your project README:${NC} ${CYAN}cat $PROJECT_DIR/README.md${NC}"
-    echo ""
 fi
 
 # ============================================================================
 # FINAL SUMMARY
 # ============================================================================
 
-echo ""
+echo -e ""
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}${BOLD}✓ Project Setup Complete!${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-
-echo -e "${BOLD}What we created:${NC}"
-echo ""
-echo -e "  ${GREEN}✓${NC} Project directory: ~/workspace/$PROJECT_NAME"
-if [ "$SKIP_GIT" = false ]; then
-    echo -e "  ${GREEN}✓${NC} Git repository initialized"
-fi
-if [ -f "$PROJECT_DIR/README.md" ]; then
-    echo -e "  ${GREEN}✓${NC} README.md with project template"
-fi
-echo ""
+echo -e ""
 
 echo -e "${BOLD}Next Steps:${NC}"
-echo -e "  1. Create a Docker image:        ${GREEN}image-create${NC}"
-echo -e "  2. Deploy a container:           ${GREEN}container-deploy${NC}"
-echo -e "  3. For guided setup:             ${GREEN}container-deploy --guided${NC}"
-echo ""
+echo -e "  1. Create a Docker image:        ${GREEN}image-create --guided${NC}"
+echo -e "  2. Deploy a container:           ${GREEN}container-deploy --guided${NC}"
+echo -e ""

@@ -124,32 +124,12 @@ PROJECT_DIR="$WORKSPACE_DIR/$PROJECT_NAME"
 
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
-    echo ""
-    echo -e "${BOLD}What is a Project Directory?${NC}"
-    echo ""
-    echo "  Your project directory is where all your work lives:"
-    echo "  • Code, notebooks, and scripts"
-    echo "  • Data and trained models"
-    echo "  • Configuration files"
-    echo "  • Research outputs and visualizations"
-    echo ""
-    echo -e "${BOLD}Why Use a Standard Structure?${NC}"
-    echo ""
-    echo "  A well-organized structure helps you:"
-    echo "  • Find files quickly"
-    echo "  • Collaborate with others easily"
-    echo "  • Follow ML/DS best practices"
-    echo "  • Keep raw data separate from processed data"
-    echo "  • Track experiments and results"
-    echo ""
-
     if [ "$STRUCTURE_TYPE" = "data-science" ]; then
-        echo -e "${BOLD}Data Science Structure:${NC}"
+        echo -e "${BOLD}Template DS/ML Project Dir Structure:${NC}"
         echo ""
         echo -e "  ${CYAN}data/${NC}"
         echo "    ├── raw/          Original, immutable data"
-        echo "    ├── processed/    Cleaned, transformed data"
-        echo "    └── external/     Third-party data sources"
+        echo "    └── processed/    Cleaned, transformed data"
         echo ""
         echo -e "  ${CYAN}models/${NC}"
         echo "    └── checkpoints/  Trained model weights"
@@ -221,8 +201,7 @@ elif [ "$STRUCTURE_TYPE" = "data-science" ]; then
     touch "$PROJECT_DIR/outputs/logs/.gitkeep"
     touch "$PROJECT_DIR/outputs/figures/.gitkeep"
 
-    echo -e "${GREEN}✓ Data science structure created${NC}"
-    echo -e "  Location: ${BLUE}$PROJECT_DIR${NC}"
+    echo -e "${GREEN}✓ Project directory created at: ${BLUE}$PROJECT_DIR ${NC}"
 fi
 
 echo ""
@@ -233,15 +212,12 @@ if [ "$GUIDED" = true ]; then
     echo -e "${BOLD}Directory Structure Created${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${BOLD}What Just Happened?${NC}"
-    echo ""
-    echo "  ✓ Created project directory: $PROJECT_NAME"
+    echo -e "  ${GREEN}✓${NC} Created project directory: $PROJECT_NAME"
 
     if [ "$STRUCTURE_TYPE" = "data-science" ]; then
-        echo "  ✓ Set up organized folder structure"
-        echo "  ✓ Added .gitkeep files for Git tracking"
+        echo -e "  ${GREEN}✓${NC} Set up organized folder structure"
     else
-        echo "  ✓ Created blank directory for custom structure"
+        echo -e "  ${GREEN}✓${NC} Created blank directory for custom structure"
     fi
 
     # Only show next steps if NOT called from an orchestrator

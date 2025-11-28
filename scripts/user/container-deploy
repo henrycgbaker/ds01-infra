@@ -269,7 +269,7 @@ case $START_MODE in
                 echo "  2. Navigate: cd /workspace"
                 echo "  3. Start coding!"
                 echo ""
-                echo -e "${BOLD}Option B: Using Dev Containers (Recommended)${NC}"
+                echo -e "${BOLD}Option B: Using Dev Containers ${GREEN}(Recommended)${NC}"
                 echo "  1. Command Palette → \"Dev Containers: Attach to Running Container\""
                 echo "  2. Select your container"
                 echo "  3. VS Code reopens inside the container"
