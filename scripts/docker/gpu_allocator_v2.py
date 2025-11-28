@@ -29,6 +29,22 @@ INTERFACE_OTHER = "other"
 
 # Import our helper modules (handle hyphenated filenames)
 SCRIPT_DIR = Path(__file__).parent
+LIB_DIR = SCRIPT_DIR.parent / "lib"
+
+# Import username sanitization utility
+sys.path.insert(0, str(LIB_DIR))
+try:
+    from username_utils import sanitize_username_for_slice
+except ImportError:
+    # Fallback if library not available
+    import re as _re
+    def sanitize_username_for_slice(username: str) -> str:
+        if not username:
+            return username
+        sanitized = username.replace('@', '-at-').replace('.', '-')
+        sanitized = _re.sub(r'[^a-zA-Z0-9_:-]', '-', sanitized)
+        sanitized = _re.sub(r'-+', '-', sanitized).strip('-')
+        return sanitized
 
 # Dynamic import for gpu-state-reader.py
 spec = importlib.util.spec_from_file_location('gpu_state_reader', str(SCRIPT_DIR / 'gpu-state-reader.py'))
@@ -79,26 +95,39 @@ class GPUAllocatorSmart:
             return yaml.safe_load(f)
 
     def _get_user_limits(self, username: str) -> Dict:
-        """Get user's resource limits from config (merges defaults + group/override)"""
+        """Get user's resource limits from config (merges defaults + group/override).
+
+        Supports both original and sanitized usernames in config lookups.
+        Tries original username first, then sanitized form.
+        """
         defaults = self.config.get('defaults', {}) or {}
         groups = self.config.get('groups', {}) or {}
+        sanitized = sanitize_username_for_slice(username)
 
-        # Check user_overrides first (highest priority)
+        # Check user_overrides first (highest priority) - try original, then sanitized
         user_overrides = self.config.get('user_overrides', {}) or {}
+        override_key = None
         if username in user_overrides:
+            override_key = username
+        elif sanitized != username and sanitized in user_overrides:
+            override_key = sanitized
+
+        if override_key:
             base_limits = defaults.copy()
-            base_limits.update(user_overrides[username])
+            base_limits.update(user_overrides[override_key])
             base_limits['_group'] = 'override'
             return base_limits
 
-        # Check groups
+        # Check groups - try original, then sanitized
         for group_name, group_config in groups.items():
-            if group_config and username in group_config.get('members', []):
-                base_limits = defaults.copy()
-                group_limits = {k: v for k, v in group_config.items() if k != 'members'}
-                base_limits.update(group_limits)
-                base_limits['_group'] = group_name
-                return base_limits
+            if group_config:
+                members = group_config.get('members', [])
+                if username in members or (sanitized != username and sanitized in members):
+                    base_limits = defaults.copy()
+                    group_limits = {k: v for k, v in group_config.items() if k != 'members'}
+                    base_limits.update(group_limits)
+                    base_limits['_group'] = group_name
+                    return base_limits
 
         # Default group
         default_group = self.config.get('default_group', 'student')

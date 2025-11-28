@@ -532,6 +532,163 @@ sudo chmod 644 /etc/skel/.bashrc
 
 **Maintenance:** When Ubuntu updates `/etc/skel/.bashrc`, merge DS01 additions
 
+### sudoers.d - Privileged Operations
+
+**File:** `/opt/ds01-infra/config/etc-mirrors/sudoers.d/ds01-user-management`
+**Deploy to:** `/etc/sudoers.d/ds01-user-management`
+
+**Purpose:** Allow docker group members to:
+- Create their own systemd user slices (for container cgroups)
+- Add users to the docker group (for first-time setup)
+
+**Deployment:**
+```bash
+sudo cp /opt/ds01-infra/config/etc-mirrors/sudoers.d/ds01-user-management /etc/sudoers.d/ds01-user-management
+sudo chmod 440 /etc/sudoers.d/ds01-user-management
+```
+
+### pam.d - First-Login Docker Group
+
+**File:** `/opt/ds01-infra/config/etc-mirrors/pam.d/ds01-docker-group`
+**Deploy to:** Append to `/etc/pam.d/common-session`
+
+**Purpose:** Auto-add users to docker group on first login
+
+**Deployment:**
+```bash
+# Add this line to /etc/pam.d/common-session:
+session optional pam_exec.so /opt/ds01-infra/scripts/system/pam-add-docker-group.sh
+```
+
+### cron.d - Scheduled Tasks
+
+**File:** `/opt/ds01-infra/config/etc-mirrors/cron.d/ds01-docker-group`
+**Deploy to:** `/etc/cron.d/ds01-docker-group`
+
+**Purpose:** Hourly scan to add new users to docker group
+
+**Deployment:**
+```bash
+sudo cp /opt/ds01-infra/config/etc-mirrors/cron.d/ds01-docker-group /etc/cron.d/ds01-docker-group
+sudo chmod 644 /etc/cron.d/ds01-docker-group
+```
+
+## Permissions & Security
+
+### Directory Structure Permissions
+
+DS01 infrastructure uses restrictive permissions to limit user access:
+
+```
+/opt/ds01-infra/                    # 751 (owner rwx, docker group r-x, others --x)
+├── scripts/                         # 751
+│   ├── *.sh, *.py                  # 750 (owner rwx, docker group r-x, others ---)
+│   └── lib/                        # 751
+│       ├── username-utils.sh       # 640 (owner rw, docker group r, others ---)
+│       └── username_utils.py       # 640
+├── config/                          # 751
+│   └── resource-limits.yaml        # 640
+└── aime-ml-containers/             # 751
+    └── *.py, *.repo                # 640
+```
+
+**Key Principles:**
+- **Directories:** `751` = owner can do anything, docker group can read/traverse, others can only traverse (no listing)
+- **Scripts:** `750` = owner can execute, docker group can read (needed to run), others cannot access
+- **Config files:** `640` = owner read/write, docker group read-only, others no access
+
+**Group Ownership:** All DS01 files owned by `datasciencelab:docker`
+
+### User Access Model
+
+Users must be in the `docker` group to:
+- Read/execute DS01 scripts
+- Run Docker commands
+- Deploy containers
+
+**Docker Group Auto-Assignment:**
+
+| Method | When | Description |
+|--------|------|-------------|
+| PAM session | Every login | Auto-adds on first login |
+| Cron job | Hourly | Scans /home for missing users |
+| user-setup | On demand | Wizard requests access |
+
+### Systemd Slice Permissions
+
+Users can create their own cgroup slices via sudo:
+
+```bash
+# Allowed by /etc/sudoers.d/ds01-user-management
+sudo /opt/ds01-infra/scripts/system/create-user-slice.sh <group> <username>
+```
+
+**Security:** Script only creates slices under `ds01-*.slice` hierarchy
+
+### Log File Permissions
+
+```
+/var/log/ds01/
+├── gpu-allocator.lock              # 666 (all users can acquire lock)
+├── gpu-allocations.log             # 644 (root writes, all read)
+├── docker-group-additions.log      # 644
+└── events.jsonl                    # 644
+```
+
+## LDAP/SSSD Username Support
+
+DS01 supports LDAP/SSSD usernames containing special characters (e.g., `h.baker@hertie-school.lan`).
+
+### Username Sanitization
+
+Usernames are sanitized for systemd slice compatibility:
+
+| Original | Sanitized |
+|----------|-----------|
+| `h.baker@hertie-school.lan` | `h-baker-at-hertie-school-lan` |
+| `john.doe` | `john-doe` |
+| `alice` | `alice` (unchanged) |
+
+**Sanitization rules:**
+- `@` → `-at-`
+- `.` → `-`
+- Other special chars → `-`
+- Multiple hyphens collapsed
+- Leading/trailing hyphens trimmed
+
+### Config Lookup Behavior
+
+YAML config supports **both** original and sanitized usernames:
+
+```yaml
+user_overrides:
+  # Either format works:
+  h.baker@hertie-school.lan:    # Original format (recommended)
+    max_mig_instances: 2
+
+  # OR
+  h-baker-at-hertie-school-lan: # Sanitized format (also works)
+    max_mig_instances: 2
+```
+
+The system tries original username first, then falls back to sanitized form.
+
+### Sanitization Library
+
+**Bash:** `/opt/ds01-infra/scripts/lib/username-utils.sh`
+```bash
+source /opt/ds01-infra/scripts/lib/username-utils.sh
+sanitize_username_for_slice "h.baker@hertie-school.lan"
+# Output: h-baker-at-hertie-school-lan
+```
+
+**Python:** `/opt/ds01-infra/scripts/lib/username_utils.py`
+```python
+from username_utils import sanitize_username_for_slice
+sanitize_username_for_slice("h.baker@hertie-school.lan")
+# Output: 'h-baker-at-hertie-school-lan'
+```
+
 ## Related Documentation
 
 - [Root README](../README.md) - System overview

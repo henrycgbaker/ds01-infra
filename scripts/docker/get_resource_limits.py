@@ -9,6 +9,24 @@ import sys
 import os
 from pathlib import Path
 
+# Import username sanitization utility
+script_dir = Path(__file__).resolve().parent
+lib_dir = script_dir.parent / "lib"
+sys.path.insert(0, str(lib_dir))
+
+try:
+    from username_utils import sanitize_username_for_slice
+except ImportError:
+    # Fallback if library not available
+    import re
+    def sanitize_username_for_slice(username: str) -> str:
+        if not username:
+            return username
+        sanitized = username.replace('@', '-at-').replace('.', '-')
+        sanitized = re.sub(r'[^a-zA-Z0-9_:-]', '-', sanitized)
+        sanitized = re.sub(r'-+', '-', sanitized).strip('-')
+        return sanitized
+
 class ResourceLimitParser:
     def __init__(self, config_path=None):
         if config_path is None:
@@ -39,52 +57,79 @@ class ResourceLimitParser:
             return yaml.safe_load(f)
     
     def get_user_group(self, username):
-        """Get the group name for a user"""
+        """Get the group name for a user.
+
+        Supports both original and sanitized usernames in config lookups.
+        Tries original username first, then sanitized form.
+        """
         user_overrides = self.config.get('user_overrides') or {}
+        sanitized = sanitize_username_for_slice(username)
+
+        # Check user_overrides with original username first
         if username in user_overrides:
             return 'override'
-        
+        # Fallback to sanitized form
+        if sanitized != username and sanitized in user_overrides:
+            return 'override'
+
         groups = self.config.get('groups') or {}
         for group_name, group_config in groups.items():
-            if username in group_config.get('members', []):
+            members = group_config.get('members', [])
+            # Check original username first
+            if username in members:
                 return group_name
-        
+            # Fallback to sanitized form
+            if sanitized != username and sanitized in members:
+                return group_name
+
         return self.config.get('default_group', 'student')
     
     def get_user_limits(self, username):
-        """Get resource limits for a specific user"""
+        """Get resource limits for a specific user.
+
+        Supports both original and sanitized usernames in config lookups.
+        Tries original username first, then sanitized form.
+        """
         if not self.config:
             raise ValueError("Configuration is empty or invalid")
-        
+
         defaults = self.config.get('defaults', {})
-        
-        # Check for user-specific override first
+        sanitized = sanitize_username_for_slice(username)
+
+        # Check for user-specific override first (try original, then sanitized)
         user_overrides = self.config.get('user_overrides') or {}
+        override_key = None
         if username in user_overrides:
+            override_key = username
+        elif sanitized != username and sanitized in user_overrides:
+            override_key = sanitized
+
+        if override_key:
             base_limits = defaults.copy()
-            base_limits.update(user_overrides[username])
+            base_limits.update(user_overrides[override_key])
             base_limits['_group'] = 'override'
             return base_limits
-        
-        # Check which group the user belongs to
+
+        # Check which group the user belongs to (try original, then sanitized)
         groups = self.config.get('groups') or {}
         for group_name, group_config in groups.items():
-            if username in group_config.get('members', []):
+            members = group_config.get('members', [])
+            if username in members or (sanitized != username and sanitized in members):
                 base_limits = defaults.copy()
                 group_limits = {k: v for k, v in group_config.items() if k != 'members'}
                 base_limits.update(group_limits)
                 base_limits['_group'] = group_name
                 return base_limits
-        
+
         # Default limits if user not in any group
         default_group = self.config.get('default_group', 'student')
         group_config = groups.get(default_group, {})
-        
+
         base_limits = defaults.copy()
         group_limits = {k: v for k, v in group_config.items() if k != 'members'}
         base_limits.update(group_limits)
         base_limits['_group'] = default_group
-        
+
         return base_limits
     
     def get_docker_args(self, username):
@@ -111,9 +156,11 @@ class ResourceLimitParser:
             args.append(f'--tmpfs=/tmp:size={limits["storage_tmp"]}')
 
         # Cgroup parent (per-user slice for granular monitoring)
-        # Hierarchy: ds01.slice → ds01-{group}.slice → ds01-{group}-{username}.slice
+        # Hierarchy: ds01.slice → ds01-{group}.slice → ds01-{group}-{sanitized_username}.slice
+        # Username is sanitized for systemd compatibility (LDAP users may have @ and . chars)
         group = limits.get('_group', 'student')
-        args.append(f'--cgroup-parent=ds01-{group}-{username}.slice')
+        sanitized = sanitize_username_for_slice(username)
+        args.append(f'--cgroup-parent=ds01-{group}-{sanitized}.slice')
 
         return args
     
@@ -150,7 +197,10 @@ class ResourceLimitParser:
         output += f"    Container hold (stopped): {limits.get('container_hold_after_stop', 'N/A')}\n"
         output += f"    Max runtime:              {limits.get('max_runtime', 'unlimited')}\n"
         output += f"\n  Enforcement:\n"
-        output += f"    Systemd slice:            ds01-{group}-{username}.slice\n"
+        sanitized = sanitize_username_for_slice(username)
+        output += f"    Systemd slice:            ds01-{group}-{sanitized}.slice\n"
+        if sanitized != username:
+            output += f"    (sanitized from: {username})\n"
 
         return output
 

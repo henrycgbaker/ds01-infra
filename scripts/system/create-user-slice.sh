@@ -9,6 +9,10 @@
 
 set -euo pipefail
 
+# Source username sanitization library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../lib/username-utils.sh"
+
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
     echo "Error: This script must be run as root (use sudo)"
@@ -26,7 +30,8 @@ fi
 
 GROUP="$1"
 USERNAME="$2"
-SLICE_NAME="ds01-${GROUP}-${USERNAME}.slice"
+SANITIZED_USERNAME=$(sanitize_username_for_slice "$USERNAME")
+SLICE_NAME="ds01-${GROUP}-${SANITIZED_USERNAME}.slice"
 PARENT_SLICE="ds01-${GROUP}.slice"
 SLICE_FILE="/etc/systemd/system/${SLICE_NAME}"
 
@@ -45,9 +50,10 @@ if [ -f "$SLICE_FILE" ]; then
 fi
 
 # Create user slice
+# Note: Description includes original username for identification
 cat > "$SLICE_FILE" << EOF
 [Unit]
-Description=DS01 ${GROUP^} - ${USERNAME}
+Description=DS01 ${GROUP^} - ${USERNAME} (${SANITIZED_USERNAME})
 Before=slices.target
 
 [Slice]

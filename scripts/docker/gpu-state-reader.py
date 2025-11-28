@@ -147,16 +147,21 @@ class GPUStateReader:
 
     def _extract_user_from_cgroup(self, cgroup_parent: str) -> Optional[str]:
         """
-        Extract username from cgroup path.
+        Extract (sanitized) username from cgroup path.
         Example: ds01-student-alice.slice -> alice
+        Example: ds01-student-h-baker-at-hertie-school-lan.slice -> h-baker-at-hertie-school-lan
+
+        Note: Returns the sanitized form of the username. For original username,
+        use Docker labels (ds01.user or aime.mlc.USER) which preserve the original.
         """
         if not cgroup_parent:
             return None
 
-        # Pattern: ds01-{group}-{username}.slice
-        match = re.match(r'ds01-\w+-(\w+)\.slice', cgroup_parent)
+        # Pattern: ds01-{group}-{sanitized_username}.slice
+        # Sanitized usernames can contain hyphens, so use .+ for the username part
+        match = re.match(r'ds01-(\w+)-(.+)\.slice', cgroup_parent)
         if match:
-            return match.group(1)
+            return match.group(2)  # Return sanitized username
         return None
 
     def _extract_gpu_from_container(self, container_data: Dict) -> Optional[Dict]:

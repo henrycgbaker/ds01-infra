@@ -24,7 +24,18 @@ INFRA_ROOT="/opt/ds01-infra"
 CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 CREATE_SLICE="$INFRA_ROOT/scripts/system/create-user-slice.sh"
+USERNAME_UTILS="$INFRA_ROOT/scripts/lib/username-utils.sh"
 LOG_FILE="/var/log/ds01/docker-wrapper.log"
+
+# Source username sanitization library (fail silently if not available)
+if [ -f "$USERNAME_UTILS" ]; then
+    source "$USERNAME_UTILS"
+else
+    # Fallback: simple sanitization if library not available
+    sanitize_username_for_slice() {
+        echo "$1" | sed 's/@/-at-/g; s/\./-/g; s/[^a-zA-Z0-9_:-]/-/g; s/--*/-/g; s/^-//; s/-$//'
+    }
+fi
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")" 2>/dev/null || true
@@ -100,8 +111,10 @@ main() {
         USER_GROUP=$(get_user_group "$CURRENT_USER")
         log_debug "User group: $USER_GROUP"
 
-        # Build the cgroup-parent path
-        SLICE_NAME="ds01-${USER_GROUP}-${CURRENT_USER}.slice"
+        # Build the cgroup-parent path (with sanitized username for systemd compatibility)
+        SANITIZED_USER=$(sanitize_username_for_slice "$CURRENT_USER")
+        SLICE_NAME="ds01-${USER_GROUP}-${SANITIZED_USER}.slice"
+        log_debug "Sanitized user: $SANITIZED_USER"
 
         # Ensure the slice exists
         ensure_user_slice "$USER_GROUP" "$CURRENT_USER"

@@ -20,6 +20,9 @@ RESOURCE_PARSER="$SCRIPT_DIR/get_resource_limits.py"
 MLC_PATCHED="$SCRIPT_DIR/mlc-patched.py"  # DS01-enhanced AIME v2
 ORIGINAL_MLC="$INFRA_ROOT/aime-ml-containers/mlc-create"  # Fallback for v1
 
+# Source username sanitization library for LDAP/SSSD support
+source "$INFRA_ROOT/scripts/lib/username-utils.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -321,20 +324,22 @@ else
 fi
 
 # Ensure user-specific cgroup slice exists
+# Username is sanitized for systemd compatibility (LDAP users may have @ and . chars)
 USER_SLICE_SCRIPT="$SCRIPT_DIR/../system/create-user-slice.sh"
+SANITIZED_USER=$(sanitize_username_for_slice "$CURRENT_USER")
 if [ -f "$USER_SLICE_SCRIPT" ]; then
-    log_info "Ensuring user slice exists: ds01-${USER_GROUP}-${CURRENT_USER}.slice"
+    log_info "Ensuring user slice exists: ds01-${USER_GROUP}-${SANITIZED_USER}.slice"
     if sudo "$USER_SLICE_SCRIPT" "$USER_GROUP" "$CURRENT_USER" 2>/dev/null; then
         log_info "User slice ready"
     else
         log_warning "Could not create user slice (will use group slice instead)"
         # Fall back to group slice if user slice creation fails
-        RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${CURRENT_USER}.slice/ds01-${USER_GROUP}.slice/")
+        RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${SANITIZED_USER}.slice/ds01-${USER_GROUP}.slice/")
     fi
 else
     log_warning "User slice script not found, using group slice"
     # Fall back to group slice
-    RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${CURRENT_USER}.slice/ds01-${USER_GROUP}.slice/")
+    RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${SANITIZED_USER}.slice/ds01-${USER_GROUP}.slice/")
 fi
 
 # GPU allocation via gpu_allocator_v2.py (DS01 priority-based, stateless)
@@ -382,6 +387,9 @@ else
 
                     # Check soft limits (warn at 80%+)
                     CURRENT_GPU_COUNT=$(python3 "$SCRIPT_DIR/gpu-state-reader.py" user "$CURRENT_USER" 2>/dev/null | grep -c "gpu_slot" || echo "0")
+                    # Ensure CURRENT_GPU_COUNT is a valid integer
+                    CURRENT_GPU_COUNT="${CURRENT_GPU_COUNT//[^0-9]/}"
+                    CURRENT_GPU_COUNT="${CURRENT_GPU_COUNT:-0}"
                     if [ "$MAX_GPUS" != "999" ] && [ "$MAX_GPUS" -gt 0 ] 2>/dev/null; then
                         GPU_PERCENT=$((CURRENT_GPU_COUNT * 100 / MAX_GPUS))
                         if [ "$GPU_PERCENT" -ge 100 ]; then
@@ -479,6 +487,7 @@ fi
 ALLOCATED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 MLC_ARGS="$MLC_ARGS --ds01-label ds01.managed=true"
 MLC_ARGS="$MLC_ARGS --ds01-label ds01.user=$CURRENT_USER"
+MLC_ARGS="$MLC_ARGS --ds01-label ds01.user.sanitized=$SANITIZED_USER"
 MLC_ARGS="$MLC_ARGS --ds01-label ds01.created_at=$ALLOCATED_AT"
 
 if [ -n "$ALLOCATED_GPU" ]; then

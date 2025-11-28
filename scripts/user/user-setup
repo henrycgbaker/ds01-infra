@@ -222,23 +222,45 @@ else
     echo -e "${GREEN}✓${NC} Workspace exists: ~/workspace ($PROJECT_COUNT project(s))"
 fi
 
-# Check Docker access
-if timeout 2 docker info &>/dev/null; then
-    HAS_DOCKER_ACCESS=true
-    USER_IMAGES=$(docker images --format "{{.Repository}}" 2>/dev/null | grep -c "^ds01-${USER_ID}/" 2>/dev/null || true)
-    USER_IMAGES=${USER_IMAGES:-0}
-    # Ensure it's a valid integer
-    if ! [[ "$USER_IMAGES" =~ ^[0-9]+$ ]]; then
-        USER_IMAGES=0
-    fi
-    if [ "$USER_IMAGES" -eq 0 ]; then
-        echo -e "${YELLOW}○${NC} No custom images yet (will create one)"
+# Check Docker group membership and access
+if groups | grep -q '\bdocker\b'; then
+    IN_DOCKER_GROUP=true
+    if timeout 2 docker info &>/dev/null; then
+        HAS_DOCKER_ACCESS=true
+        USER_IMAGES=$(docker images --format "{{.Repository}}" 2>/dev/null | grep -c "^ds01-${USER_ID}/" 2>/dev/null || true)
+        USER_IMAGES=${USER_IMAGES:-0}
+        # Ensure it's a valid integer
+        if ! [[ "$USER_IMAGES" =~ ^[0-9]+$ ]]; then
+            USER_IMAGES=0
+        fi
+        if [ "$USER_IMAGES" -eq 0 ]; then
+            echo -e "${GREEN}✓${NC} Docker access configured"
+            echo -e "${YELLOW}○${NC} No custom images yet (will create one)"
+        else
+            echo -e "${GREEN}✓${NC} Docker access configured ($USER_IMAGES custom image(s))"
+        fi
     else
-        echo -e "${GREEN}✓${NC} $USER_IMAGES custom image(s) found"
+        HAS_DOCKER_ACCESS=false
+        echo -e "${GREEN}✓${NC} Docker group membership OK"
+        echo -e "${YELLOW}○${NC} Docker access pending (re-login required)"
     fi
 else
+    IN_DOCKER_GROUP=false
     HAS_DOCKER_ACCESS=false
-    echo -e "${YELLOW}○${NC} Docker access (will be configured)"
+    echo -e "${RED}○${NC} Not in docker group - requesting access..."
+
+    # Auto-request docker group membership
+    if [ -x /opt/ds01-infra/scripts/system/auto-add-docker-group.sh ]; then
+        if /opt/ds01-infra/scripts/system/auto-add-docker-group.sh "$USERNAME" 2>/dev/null; then
+            echo -e "${GREEN}✓${NC} Docker group access granted"
+            echo -e "${YELLOW}!${NC} You must ${BOLD}log out and log back in${NC} for this to take effect"
+            NEEDS_RELOGIN=true
+        else
+            echo -e "${YELLOW}○${NC} Docker access request submitted - admin will process"
+        fi
+    else
+        echo -e "${YELLOW}○${NC} Docker access (contact admin: datasciencelab)"
+    fi
 fi
 
 echo -e ""
