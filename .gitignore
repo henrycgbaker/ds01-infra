@@ -33,3 +33,7 @@ htmlcov/
 *.err
 *.out
 logs/*
+
+# Claude AI files
+.claude/
+CLAUDE.md
