@@ -570,14 +570,7 @@ DS01 uses `docker exec` (not `docker attach`) to enter containers. With docker e
    - Provides helpful command examples organized by tier
    - Covers: 2 base wrappers, 16 Tier 2 commands, 5 Tier 3 commands, 1 Tier 4 command, 2 admin commands, 2 legacy aliases
 
-2. ✅ Updated `CLAUDE.md` with complete architecture documentation
-   - Changed from "Three-Layer Design" to "Four-Tier Hierarchical Design"
-   - Documented all 9 mlc-* commands and DS01 integration status
-   - Added detailed Tier 1 integration section
-   - Updated "Recent Changes" with comprehensive refactoring summary (Phases 1-6)
-   - Total results: >1,100 lines eliminated, zero duplication
-
-3. ✅ Updated `README.md` with new command structure
+2. ✅ Updated `README.md` with new command structure
    - Updated "User Onboarding Workflows" section with modular architecture
    - Changed "Three-Layer Design" to "Four-Tier Hierarchical Design"
    - Comprehensive command reference organized by tier

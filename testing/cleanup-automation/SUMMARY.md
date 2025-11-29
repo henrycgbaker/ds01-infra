@@ -83,11 +83,6 @@ Accessing `config['user_overrides'].keys()` raises `AttributeError: 'NoneType' o
    - Lines: 33-71
    - Status: ✅ FIXED
 
-3. **`CLAUDE.md`**
-   - Updated mlc command usage documentation
-   - Changed "Used (3 commands)" → "Used (7 commands)"
-   - Status: ✅ FIXED
-
 ## Testing Results
 
 ### Unit Tests (Functions Only)
@@ -165,7 +160,7 @@ All unit tests passing ✅
 1. Add automated tests for all bash+Python heredoc scripts
 2. Consider refactoring to pure Python (avoid heredoc issues)
 3. Add linting for common heredoc pitfalls
-4. Document heredoc best practices in CLAUDE.md
+4. Document heredoc best practices in README.md
 
 ## Files Created
 

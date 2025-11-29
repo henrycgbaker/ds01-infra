@@ -68,7 +68,6 @@ If needed, these scripts can be restored from this archive. However, the new mod
 
 For complete details, see:
 - `/opt/ds01-infra/docs/REFACTORING_PLAN.md` - Complete refactoring plan with phase details
-- `/opt/ds01-infra/CLAUDE.md` - Architecture documentation
 - `/opt/ds01-infra/README.md` - User-facing documentation
 
 ---

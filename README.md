@@ -96,7 +96,6 @@ DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically ra
 ```
 ds01-infra/
 ├── README.md                    # This file (overview + quick start)
-├── CLAUDE.md                    # AI assistant reference
 │
 ├── config/                      # Configuration
 │   ├── README.md                # Configuration guide
@@ -413,10 +412,9 @@ sudo scripts/system/deploy-commands.sh
 When making changes:
 
 1. Read relevant module README for implementation details
-2. Update CLAUDE.md if changing architecture
-3. Update module README if changing implementation
-4. Test with multiple user types
-5. Deploy commands if adding commands: `sudo scripts/system/deploy-commands.sh`
+2. Update module README if changing implementation
+3. Test with multiple user types
+4. Deploy commands if adding commands: `sudo scripts/system/deploy-commands.sh`
 
 ## License
 

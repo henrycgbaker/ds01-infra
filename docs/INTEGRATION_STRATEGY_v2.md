@@ -511,7 +511,6 @@ User: container-create my-project
 
 ⚠️ **Task 3.3:** Update documentation
 - Update README.md with v2 details
-- Update CLAUDE.md
 - Note v2 features available
 
 **Deliverable:** Polish and documentation
@@ -698,7 +697,6 @@ If integration fails:
 
 7. **Documentation updated**
    - README reflects new workflow
-   - CLAUDE.md updated
 
 8. **All tests pass**
    - Test matrix completed

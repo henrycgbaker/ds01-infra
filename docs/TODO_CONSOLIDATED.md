@@ -202,7 +202,7 @@ For context, here are major items completed in the past month:
 
 ## Reference Documents
 
-- Architecture: `CLAUDE.md`, `README.md`
+- Architecture: `README.md`
 - Audits: `docs/DS01_LAYER_AUDIT.md`, `docs/AIME_FRAMEWORK_AUDIT_v2.md`
 - Strategy: `docs/INTEGRATION_STRATEGY_v2.md`, `docs/MLC_PATCH_STRATEGY.md`
 - Refactoring: `docs/REFACTORING_PLAN.md`

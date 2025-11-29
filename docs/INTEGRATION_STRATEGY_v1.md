@@ -577,7 +577,6 @@ fi
 
 ✅ **Task 3.2:** Update documentation
 - README.md
-- CLAUDE.md
 - Command help text
 
 ✅ **Task 3.3:** Test matrix
@@ -848,7 +847,6 @@ If integration fails:
 
 7. **Documentation updated**
    - README reflects new workflow
-   - CLAUDE.md updated
 
 8. **All tests pass**
    - Test matrix completed

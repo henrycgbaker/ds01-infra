@@ -106,7 +106,6 @@
 - [ ] Update monitoring scripts
 
 ### Documentation
-- [ ] Update CLAUDE.md with integration details
 - [ ] Update README.md
 - [ ] Add usage examples
 

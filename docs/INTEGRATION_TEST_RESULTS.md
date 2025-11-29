@@ -289,12 +289,10 @@ Result: --image flag documented correctly ✅
 1. **Run E2E test** with actual container creation
 2. **Verify resource limits** applied correctly
 3. **Test GPU allocation** works as expected
-4. **Update CLAUDE.md** with integration details
 
 ### Documentation
-1. Update `CLAUDE.md` - Add integration architecture
-2. Update `README.md` - Add AIME v2 details
-3. Create user guide - Document new workflow
+1. Update `README.md` - Add AIME v2 details
+2. Create user guide - Document new workflow
 
 ### Optional Enhancements
 1. Add more architecture support (ROCM, BLACKWELL)
