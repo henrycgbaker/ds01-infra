@@ -46,8 +46,10 @@ def sanitize_username_for_slice(username: str) -> str:
 
     sanitized = username
 
-    # Replace @ with -at- (readable and reversible)
-    sanitized = sanitized.replace('@', '-at-')
+    # Strip domain part (everything after @) for cleaner container usernames
+    # e.g., "c.fusarbassini@hertie-school.lan" -> "c.fusarbassini"
+    if '@' in sanitized:
+        sanitized = sanitized.split('@')[0]
 
     # Replace dots with hyphens
     sanitized = sanitized.replace('.', '-')
@@ -62,7 +64,22 @@ def sanitize_username_for_slice(username: str) -> str:
     # Trim leading and trailing hyphens
     sanitized = sanitized.strip('-')
 
+    # Truncate to 32 characters (Linux username/groupname limit)
+    # groupadd/useradd fail with names > 32 chars
+    # Use hash suffix to avoid collisions when truncating
+    if len(sanitized) > 32:
+        import hashlib
+        # Generate 4-char hash from original username to avoid collisions
+        hash_suffix = hashlib.md5(username.encode()).hexdigest()[:4]
+        # Truncate to 27 chars + hyphen + 4-char hash = 32 chars
+        sanitized = sanitized[:27].rstrip('-') + '-' + hash_suffix
+
     return sanitized
+
+
+# Alias for container username sanitization (same logic as slice names)
+# Used by mlc-patched.py for container user paths
+sanitize_username_for_container = sanitize_username_for_slice
 
 
 def get_user_slice_name(group: str, username: str) -> str:

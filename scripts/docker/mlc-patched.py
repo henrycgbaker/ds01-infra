@@ -57,10 +57,19 @@ except ImportError:
     def sanitize_username_for_container(username: str) -> str:
         if not username:
             return username
-        sanitized = username.replace('@', '-at-').replace('.', '-')
+        # Strip domain part (everything after @)
+        sanitized = username.split('@')[0] if '@' in username else username
+        sanitized = sanitized.replace('.', '-')
         sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', sanitized)
         sanitized = re.sub(r'-+', '-', sanitized)
-        return sanitized.strip('-')
+        sanitized = sanitized.strip('-')
+        # Truncate to 32 characters (Linux username/groupname limit)
+        # Use hash suffix to avoid collisions when truncating
+        if len(sanitized) > 32:
+            import hashlib
+            hash_suffix = hashlib.md5(username.encode()).hexdigest()[:4]
+            sanitized = sanitized[:27].rstrip('-') + '-' + hash_suffix
+        return sanitized
 
 # Set Default values  AIME mlc
 mlc_container_version = 4     # Version number of AIME MLC setup (mlc create). In version 4: data and models directories included
@@ -1435,7 +1444,9 @@ def build_docker_run_command(
     container_username = sanitize_username_for_container(user_name)
 
     # Shared bash command part
+    # DS01 FIX: Add HOME export to ensure correct home directory path
     bash_lines = [
+        f'echo "export HOME=/home/{container_username}" >> /etc/skel/.bashrc;',
         f'echo "export PATH=\\"{dir_to_be_added}:\\$PATH\\"" >> /etc/skel/.bashrc;'
         f"echo \"export PS1='[{validated_container_name}] \\$(whoami)@\\$(hostname):\\${{PWD#*}}$ '\" >> /etc/skel/.bashrc;",
         "apt-get update -y > /dev/null 2>&1;",
@@ -1486,11 +1497,25 @@ def build_docker_run_command(
         f"passwd -d {container_username} 2>/dev/null || true;",
         f"usermod -aG sudo {container_username} 2>/dev/null || true;",
         f"echo \"{container_username} ALL=(ALL) NOPASSWD: ALL\" > /etc/sudoers.d/{container_username}_no_password;",
+        # DS01 FIX: Create .local directory and copy bashrc to user's home
+        # This fixes "Permission denied: '/.local'" error when pip install --user
+        f"mkdir -p /home/{container_username}/.local/bin;",
+        f"chown -R {user_id}:{group_id} /home/{container_username}/.local;",
+        f"cp /etc/skel/.bashrc /home/{container_username}/.bashrc 2>/dev/null || true;",
+        f"chown {user_id}:{group_id} /home/{container_username}/.bashrc 2>/dev/null || true;",
     ]
 
     # Add ROCm-specific line if needed
     if 'ROCM' in architecture:
         bash_lines.append(f"echo \"export ROCM_PATH=/opt/rocm\" >> ~/.bashrc;")
+
+    # CRITICAL: Truncate lastlog/faillog to prevent huge sparse files
+    # High UIDs (e.g., 1722830498) cause these files to grow to 300GB+
+    # which breaks Docker overlay2 layer export during docker commit
+    bash_lines.extend([
+        ": > /var/log/lastlog;",
+        ": > /var/log/faillog;",
+    ])
 
     bash_lines.extend([
         f"chmod 440 /etc/sudoers.d/{container_username}_no_password;",
@@ -1534,7 +1559,8 @@ def build_docker_create_command(
         volumes,
         shm_size=None,           # DS01 PATCH: Resource limits
         cgroup_parent=None,      # DS01 PATCH: Resource limits
-        ds01_labels=None         # DS01 PATCH: GPU tracking labels
+        ds01_labels=None,        # DS01 PATCH: GPU tracking labels
+        skip_user_setup=False    # DS01 PATCH: Use original image if user pre-configured
     ):
     """Constructs a 'docker create' command customized for a machine learning container environment.
 
@@ -1654,14 +1680,21 @@ def build_docker_create_command(
     bash_command = ' '.join(bash_lines)
 
     # Assemble full command
-    # DS01 PATCH: Handle custom images that already have tags (e.g., ds01-1001/test:latest)
-    # Don't append container_tag if image already has a tag (contains ':')
-    if ':' in selected_docker_image:
-        # Custom image with explicit tag - use as-is
+    # DS01 FIX: Determine which image to use based on skip_user_setup flag
+    if skip_user_setup:
+        # User was pre-configured in the image at build time (via image-create)
+        # Use the original image directly - no docker commit was performed
         image_with_tag = selected_docker_image
     else:
-        # AIME base image - append container_tag
-        image_with_tag = f'{selected_docker_image}:{container_tag}'
+        # User was set up at runtime via docker run + docker commit
+        # The committed image is {base_image_name}:{container_tag}
+        if ':' in selected_docker_image:
+            # Custom image with explicit tag - strip existing tag, use container_tag
+            base_image_name = selected_docker_image.split(':')[0]
+            image_with_tag = f'{base_image_name}:{container_tag}'
+        else:
+            # AIME base image - append container_tag
+            image_with_tag = f'{selected_docker_image}:{container_tag}'
 
     if 'CUDA' in architecture:
         docker_cmd = base_docker_cmd + cuda_extras + [
@@ -2066,6 +2099,8 @@ def main():
 
             # Pull the required image from aime-hub (or verify custom image exists locally)
             # DS01 PATCH: For custom images (--image flag), check local first
+            # DS01 OPTIMIZATION: Check if custom image already has user setup
+            skip_user_setup = False
             if args.image:
                 # Custom image - verify it exists locally before attempting pull
                 result = subprocess.run(['docker', 'images', '-q', selected_docker_image],
@@ -2074,6 +2109,33 @@ def main():
                     # Image exists locally, use it
                     print(f"\n{NEUTRAL}Using local custom image:{RESET} {INPUT}{selected_docker_image}{RESET}")
                     print(f"{HINT}(Custom images are built FROM AIME base images){RESET}\n")
+
+                    # DS01 OPTIMIZATION: Check for DS01_HAS_USER_SETUP label
+                    try:
+                        inspect_cmd = subprocess.run(
+                            ['docker', 'inspect', '--format',
+                             '{{index .Config.Labels "aime.mlc.DS01_HAS_USER_SETUP"}}|'
+                             '{{index .Config.Labels "aime.mlc.DS01_USER_ID"}}|'
+                             '{{index .Config.Labels "aime.mlc.DS01_GROUP_ID"}}',
+                             selected_docker_image],
+                            capture_output=True, text=True
+                        )
+                        if inspect_cmd.returncode == 0:
+                            parts = inspect_cmd.stdout.strip().split('|')
+                            if len(parts) == 3:
+                                has_setup, img_uid, img_gid = parts
+                                # Only skip if user setup exists AND UID/GID match current user
+                                if (has_setup == 'true' and
+                                    img_uid == str(user_id) and
+                                    img_gid == str(group_id)):
+                                    skip_user_setup = True
+                                    print(f"{NEUTRAL}Image has pre-configured user (UID={user_id}, GID={group_id}), skipping setup...{RESET}")
+                                elif has_setup == 'true':
+                                    print(f"{WARNING}Image has user setup but UID/GID mismatch (image: {img_uid}/{img_gid}, current: {user_id}/{group_id}){RESET}")
+                                    print(f"{WARNING}Will run full user setup...{RESET}")
+                    except Exception as e:
+                        print(f"{HINT}Could not check image labels: {e}{RESET}")
+                        pass  # Fall back to normal flow
                 else:
                     # Image doesn't exist locally, try to pull (might be on Docker Hub)
                     print(f"\n{NEUTRAL}Custom image not found locally, attempting to pull...{RESET}\n")
@@ -2091,58 +2153,91 @@ def main():
             workspace = "/workspace"
             data = "/data"
             models = "/models"
-            dir_to_be_added = f'/home/{user_name}/.local/bin'
+            # DS01 FIX: Use sanitized username for home directory path
+            # LDAP usernames like "h.baker@hertie-school.lan" get sanitized to "h-baker-at-hertie-school-lan"
+            # The home directory inside container uses the sanitized name
+            container_username_for_path = sanitize_username_for_container(user_name)
+            dir_to_be_added = f'/home/{container_username_for_path}/.local/bin'
 
-            # Generating the Docker command for running
-            docker_prepare_container = build_docker_run_command(
-                architecture,
-                workspace_dir,
-                workspace,
-                container_tag,
-                args.num_gpus,
-                selected_docker_image,
-                validated_container_name,
-                user_name,
-                user_id,
-                group_id,
-                dir_to_be_added
-            )
-            
-            # ToDo: compare subprocess.Popen with subprocess.run
-            result_run_cmd = subprocess.run(docker_prepare_container, capture_output=True, text=True )
+            # DS01 OPTIMIZATION: Skip user setup if image already has it configured
+            if not skip_user_setup:
+                # Generating the Docker command for running
+                docker_prepare_container = build_docker_run_command(
+                    architecture,
+                    workspace_dir,
+                    workspace,
+                    container_tag,
+                    args.num_gpus,
+                    selected_docker_image,
+                    validated_container_name,
+                    user_name,
+                    user_id,
+                    group_id,
+                    dir_to_be_added
+                )
 
-            # DS01: Print user setup result for debugging
-            if 'User setup: FAILED' in result_run_cmd.stdout:
-                print(f"{WARNING}Warning: User/group setup may have failed{RESET}")
-                # Extract and print debug lines
-                for line in result_run_cmd.stdout.split('\n'):
-                    if 'DS01 DEBUG' in line or 'User setup' in line or 'NOT FOUND' in line:
-                        print(f"{HINT}  {line}{RESET}")
-            elif 'User setup: OK' in result_run_cmd.stdout:
-                pass  # Silently succeed
+                # ToDo: compare subprocess.Popen with subprocess.run
+                result_run_cmd = subprocess.run(docker_prepare_container, capture_output=True, text=True )
+
+                # DS01: Print user setup result for debugging
+                if 'User setup: FAILED' in result_run_cmd.stdout:
+                    print(f"{WARNING}Warning: User/group setup may have failed{RESET}")
+                    # Extract and print debug lines
+                    for line in result_run_cmd.stdout.split('\n'):
+                        if 'DS01 DEBUG' in line or 'User setup' in line or 'NOT FOUND' in line:
+                            print(f"{HINT}  {line}{RESET}")
+                elif 'User setup: OK' in result_run_cmd.stdout:
+                    pass  # Silently succeed
+                else:
+                    print(f"{WARNING}Warning: Could not verify user setup - no confirmation in output{RESET}")
+                    # Print any relevant lines for debugging
+                    for line in result_run_cmd.stdout.split('\n'):
+                        if 'DS01 DEBUG' in line or 'error' in line.lower():
+                            print(f"{HINT}  {line}{RESET}")
+
+                if result_run_cmd.returncode != 0:
+                    print(f"{WARNING}Warning: Container prep returned code {result_run_cmd.returncode}{RESET}")
+                    if result_run_cmd.stderr:
+                        print(f"{HINT}stderr: {result_run_cmd.stderr[-300:]}{RESET}")
+
+            # DS01 OPTIMIZATION: Skip commit if user is already configured in image
+            if not skip_user_setup:
+                # Commit the container: saves the current state of the container as a new image.
+                # DS01 FIX: Handle custom images that already have tags (e.g., ds01-1001/test:latest)
+                # Strip existing tag before appending container_tag
+                if ':' in selected_docker_image:
+                    base_image_name = selected_docker_image.split(':')[0]
+                else:
+                    base_image_name = selected_docker_image
+                committed_image = f'{base_image_name}:{container_tag}'
+
+                bash_command_commit = [
+                    'docker', 'commit', container_tag, committed_image
+                ]
+                result_commit = subprocess.run(bash_command_commit, capture_output=True, text=True)
+
+                # DS01 FIX: Check if commit succeeded
+                if result_commit.returncode != 0:
+                    print(f"{ERROR}Error committing container to image:{RESET}")
+                    print(f"  Command: docker commit {container_tag} {committed_image}")
+                    if result_commit.stderr:
+                        print(f"  Error: {result_commit.stderr}")
+                    sys.exit(1)
+                else:
+                    # Verify the committed image exists
+                    verify_result = subprocess.run(['docker', 'image', 'inspect', committed_image],
+                                                  capture_output=True, text=True)
+                    if verify_result.returncode != 0:
+                        print(f"{ERROR}Committed image not found: {committed_image}{RESET}")
+                        sys.exit(1)
+
+                # Remove the container: cleans up the initial container to free up ressources.
+                # ToDo: compare subprocess.Popen with subprocess.run
+                result_remove = subprocess.run(['docker', 'rm', container_tag], capture_output=True, text=True)
             else:
-                print(f"{WARNING}Warning: Could not verify user setup - no confirmation in output{RESET}")
-                # Print any relevant lines for debugging
-                for line in result_run_cmd.stdout.split('\n'):
-                    if 'DS01 DEBUG' in line or 'error' in line.lower():
-                        print(f"{HINT}  {line}{RESET}")
-
-            if result_run_cmd.returncode != 0:
-                print(f"{WARNING}Warning: Container prep returned code {result_run_cmd.returncode}{RESET}")
-                if result_run_cmd.stderr:
-                    print(f"{HINT}stderr: {result_run_cmd.stderr[-300:]}{RESET}")
-
-            # Commit the container: saves the current state of the container as a new image.
-            # ToDo: compare subprocess.Popen with subprocess.run  
-            bash_command_commit = [
-                'docker', 'commit', container_tag, f'{selected_docker_image}:{container_tag}'
-            ]
-            # ToDo: capture possible errors and treat them  
-            result_commit = subprocess.run(bash_command_commit, capture_output=True, text=True)
-            
-            # Remove the container: cleans up the initial container to free up ressources.
-            # ToDo: compare subprocess.Popen with subprocess.run  
-            result_remove = subprocess.run(['docker', 'rm', container_tag], capture_output=True, text=True)
+                # DS01 OPTIMIZATION: For pre-configured images, use the original image directly
+                committed_image = selected_docker_image
+                print(f"{NEUTRAL}Skipping docker commit (user pre-configured in image){RESET}")
             
             # Add the workspace volume
             volumes = ['-v', f'{workspace_dir}:{workspace}'] 
@@ -2176,7 +2271,8 @@ def main():
                 volumes,
                 shm_size=getattr(args, 'shm_size', None),           # DS01 PATCH
                 cgroup_parent=getattr(args, 'cgroup_parent', None), # DS01 PATCH
-                ds01_labels=getattr(args, 'ds01_labels', [])        # DS01 PATCH
+                ds01_labels=getattr(args, 'ds01_labels', []),       # DS01 PATCH
+                skip_user_setup=skip_user_setup                     # DS01 PATCH: Use original image if pre-configured
             )
             
             # ToDo: compare subprocess.Popen with subprocess.run

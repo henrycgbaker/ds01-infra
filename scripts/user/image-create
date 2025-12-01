@@ -13,8 +13,13 @@ NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
+GROUP_ID=$(id -g)
 DOCKERFILES_DIR="$HOME/dockerfiles"
 PROJECT_DOCKERFILE=false
+
+# Source username utilities for sanitization
+source "/opt/ds01-infra/scripts/lib/username-utils.sh"
+SANITIZED_USERNAME=$(sanitize_username_for_slice "$USERNAME")
 
 usage() {
     echo ""
@@ -115,8 +120,9 @@ get_base_image() {
         # Capitalize framework name (AIME uses Pytorch, Tensorflow)
         local framework_capital=$(echo "$framework" | sed 's/tf/tensorflow/; s/\b\(.\)/\u\1/g')
 
-        # Determine GPU architecture (default: CUDA_ADA for A100s)
-        local arch="${MLC_ARCH:-CUDA_ADA}"
+        # Determine GPU architecture (default: CUDA_AMPERE for A100s)
+        # A100 = Ampere (compute 8.0), RTX 4090 = Ada (compute 8.9)
+        local arch="${MLC_ARCH:-CUDA_AMPERE}"
 
         # Look up specific version or latest
         local image=""
@@ -941,6 +947,76 @@ RUN python -m ipykernel install --user \\
 DOCKERFILEEOF
     fi
 
+    # User/Group Setup (DS01 optimization - avoids slow docker commit at container creation)
+    # These ARGs are passed at build time via --build-arg
+    cat >> "$dockerfile" << 'DOCKERFILEEOF'
+# User/Group Setup (DS01 - baked into image to avoid docker commit at container creation)
+ARG DS01_USER_ID
+ARG DS01_GROUP_ID
+ARG DS01_USERNAME
+
+# Create user/group with specific UID:GID matching host user
+RUN set -e && \
+    if [ -n "$DS01_USER_ID" ] && [ -n "$DS01_GROUP_ID" ] && [ -n "$DS01_USERNAME" ]; then \
+        echo "DS01: Setting up user $DS01_USERNAME (UID=$DS01_USER_ID, GID=$DS01_GROUP_ID)" && \
+        # Step 1: Remove conflicting group if exists with different name
+        EXISTING_GROUP=$(getent group $DS01_GROUP_ID 2>/dev/null | cut -d: -f1 || true) && \
+        if [ -n "$EXISTING_GROUP" ] && [ "$EXISTING_GROUP" != "$DS01_USERNAME" ]; then \
+            echo "DS01: Removing conflicting group $EXISTING_GROUP (has GID $DS01_GROUP_ID)" && \
+            groupdel "$EXISTING_GROUP" 2>/dev/null || true; \
+        fi && \
+        # Step 2: Create group with specific GID
+        if ! getent group $DS01_USERNAME >/dev/null 2>&1; then \
+            addgroup --gid $DS01_GROUP_ID $DS01_USERNAME; \
+        fi && \
+        # Step 3: Remove conflicting user if exists with different name
+        EXISTING_USER=$(getent passwd $DS01_USER_ID 2>/dev/null | cut -d: -f1 || true) && \
+        if [ -n "$EXISTING_USER" ] && [ "$EXISTING_USER" != "$DS01_USERNAME" ]; then \
+            echo "DS01: Removing conflicting user $EXISTING_USER (has UID $DS01_USER_ID)" && \
+            userdel -r "$EXISTING_USER" 2>/dev/null || true; \
+        fi && \
+        # Step 4: Create user with specific UID and GID
+        if ! getent passwd $DS01_USERNAME >/dev/null 2>&1; then \
+            adduser --disabled-password --gecos "" --uid $DS01_USER_ID --gid $DS01_GROUP_ID $DS01_USERNAME; \
+        fi && \
+        # Step 4b: CRITICAL - Truncate lastlog/faillog to prevent huge sparse files
+        # High UIDs (e.g., 1722830498) cause these files to grow to 300GB+
+        # which breaks Docker overlay2 layer export
+        : > /var/log/lastlog && \
+        : > /var/log/faillog && \
+        # Step 5: Configure sudo access (NOPASSWD)
+        usermod -aG sudo $DS01_USERNAME && \
+        echo "$DS01_USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
+        # Step 6: Create .local/bin directory for pip --user installs
+        mkdir -p /home/$DS01_USERNAME/.local/bin && \
+        chown -R $DS01_USER_ID:$DS01_GROUP_ID /home/$DS01_USERNAME && \
+        # Step 7: Configure PATH in bashrc (matches AIME docker run setup)
+        # Add ~/.local/bin to PATH for pip install --user packages
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> /home/$DS01_USERNAME/.bashrc && \
+        # Step 8: Configure HOME export (fixes LDAP username issues)
+        echo "export HOME=/home/$DS01_USERNAME" >> /home/$DS01_USERNAME/.bashrc && \
+        # Step 9: Configure PS1 prompt (matches AIME docker run setup)
+        # Uses container hostname which Docker sets from --name or container ID
+        # Format: [container-name] user@host:path$
+        echo 'export PS1='"'"'[\h] \u@ds01:\w\$ '"'"'' >> /home/$DS01_USERNAME/.bashrc && \
+        chown $DS01_USER_ID:$DS01_GROUP_ID /home/$DS01_USERNAME/.bashrc && \
+        echo "DS01: User setup complete"; \
+    else \
+        echo "DS01: Skipping user setup (build args not provided)"; \
+    fi
+
+DOCKERFILEEOF
+
+    # Store user info in labels for mlc-patched.py to verify and skip commit
+    cat >> "$dockerfile" << DOCKERFILEEOF
+# DS01 Labels for container creation optimization
+LABEL aime.mlc.DS01_HAS_USER_SETUP="true"
+LABEL aime.mlc.DS01_USER_ID="$USER_ID"
+LABEL aime.mlc.DS01_GROUP_ID="$GROUP_ID"
+LABEL aime.mlc.DS01_USERNAME="$SANITIZED_USERNAME"
+
+DOCKERFILEEOF
+
     # Final environment variables and CMD
     cat >> "$dockerfile" << DOCKERFILEEOF
 # Environment variables
@@ -1104,9 +1180,10 @@ fi
 if [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
     interactive_mode
 else
-    # Non-interactive: sanitize image name
+    # Non-interactive: sanitize image name and use USER_ID (not USERNAME which may contain @)
     IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
-    FULL_IMAGE_NAME="${IMAGE_NAME}-${USERNAME}"
+    # Use same naming convention as interactive mode: ds01-{user-id}/{project-name}
+    FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
 fi
 
 # Check user's resource limits and provide helpful info
@@ -1157,7 +1234,7 @@ if [ "$NO_BUILD" = true ]; then
     echo ""
     build_context=$(dirname "$DOCKERFILE")
     echo "Build later with:"
-    echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME:latest -f $DOCKERFILE $build_context/${NC}"
+    echo -e "  ${GREEN}docker build --build-arg DS01_USER_ID=$USER_ID --build-arg DS01_GROUP_ID=$GROUP_ID --build-arg DS01_USERNAME=$SANITIZED_USERNAME -t $FULL_IMAGE_NAME:latest -f $DOCKERFILE $build_context/${NC}"
     echo ""
 else
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1184,7 +1261,7 @@ else
         echo ""
         build_context=$(dirname "$DOCKERFILE")
         echo "Build later with:"
-        echo -e "  ${GREEN}docker build -t $FULL_IMAGE_NAME:latest -f $DOCKERFILE $build_context/${NC}"
+        echo -e "  ${GREEN}docker build --build-arg DS01_USER_ID=$USER_ID --build-arg DS01_GROUP_ID=$GROUP_ID --build-arg DS01_USERNAME=$SANITIZED_USERNAME -t $FULL_IMAGE_NAME:latest -f $DOCKERFILE $build_context/${NC}"
         echo ""
     fi
 fi
@@ -1196,7 +1273,14 @@ if [ "$BUILD_IMAGE" = true ]; then
 
     # Use the directory containing the Dockerfile as build context
     build_context=$(dirname "$DOCKERFILE")
-    if docker build -t "$FULL_IMAGE_NAME:latest" -f "$DOCKERFILE" "$build_context/"; then
+    # Pass user info as build args for user/group setup inside image
+    if docker build \
+        --build-arg DS01_USER_ID="$USER_ID" \
+        --build-arg DS01_GROUP_ID="$GROUP_ID" \
+        --build-arg DS01_USERNAME="$SANITIZED_USERNAME" \
+        -t "$FULL_IMAGE_NAME:latest" \
+        -f "$DOCKERFILE" \
+        "$build_context/"; then
         IMAGE_BUILT=true
 
         # Save metadata (sanitize filename - replace / with _)

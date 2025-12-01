@@ -24,8 +24,9 @@ sanitize_username_for_slice() {
 
     local sanitized="$username"
 
-    # Replace @ with -at- (readable and reversible)
-    sanitized="${sanitized//@/-at-}"
+    # Strip domain part (everything after @) for cleaner container usernames
+    # e.g., "c.fusarbassini@hertie-school.lan" -> "c.fusarbassini"
+    sanitized="${sanitized%%@*}"
 
     # Replace dots with hyphens
     sanitized="${sanitized//./-}"
@@ -39,6 +40,19 @@ sanitize_username_for_slice() {
 
     # Trim leading and trailing hyphens
     sanitized=$(echo "$sanitized" | sed 's/^-//; s/-$//')
+
+    # Truncate to 32 characters (Linux username/groupname limit)
+    # groupadd/useradd fail with names > 32 chars
+    # Use hash suffix to avoid collisions when truncating
+    if [[ ${#sanitized} -gt 32 ]]; then
+        # Generate 4-char hash from original username to avoid collisions
+        local hash=$(echo -n "$username" | md5sum | cut -c1-4)
+        # Truncate to 27 chars + hyphen + 4-char hash = 32 chars
+        sanitized="${sanitized:0:27}"
+        # Remove trailing hyphen if truncation created one
+        sanitized="${sanitized%-}"
+        sanitized="${sanitized}-${hash}"
+    fi
 
     echo "$sanitized"
 }

@@ -748,8 +748,12 @@ if [ -n "$IMAGE_OR_FRAMEWORK" ]; then
 
             # Check if image exists locally
             if docker image inspect "$check_name" &>/dev/null; then
-                # Use full image name with :latest tag (matches ds01 naming convention)
-                IMAGE_NAME="$check_name:latest"
+                # Use full image name, add :latest only if no tag present
+                if [[ "$check_name" == *:* ]]; then
+                    IMAGE_NAME="$check_name"
+                else
+                    IMAGE_NAME="$check_name:latest"
+                fi
                 # Try to detect framework from image labels
                 FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "aime.mlc.DS01_FRAMEWORK"}}' "$check_name" 2>/dev/null || echo "Pytorch")
                 if [ -z "$FRAMEWORK" ]; then
@@ -768,6 +772,25 @@ if [ -n "$IMAGE_OR_FRAMEWORK" ]; then
             fi
             ;;
     esac
+fi
+
+# DS01 FIX: Auto-detect matching custom image by container name
+# If no image was explicitly specified, check if ds01-{userid}/{container-name} exists
+if [ -z "$IMAGE_NAME" ] && [ -n "$CONTAINER_NAME" ]; then
+    USER_ID_CHECK=$(id -u)
+    AUTO_IMAGE="ds01-${USER_ID_CHECK}/${CONTAINER_NAME}"
+    if docker image inspect "$AUTO_IMAGE" &>/dev/null; then
+        IMAGE_NAME="${AUTO_IMAGE}:latest"
+        echo -e "${GREEN}✓${NC} Found matching image: ${CYAN}$IMAGE_NAME${NC}"
+        # Try to detect framework from image (for proper mlc handling)
+        DETECTED_FRAMEWORK=$(docker inspect --format '{{index .Config.Labels "aime.mlc.DS01_FRAMEWORK"}}' "$AUTO_IMAGE" 2>/dev/null || echo "")
+        if [ -n "$DETECTED_FRAMEWORK" ]; then
+            case "${DETECTED_FRAMEWORK,,}" in
+                pytorch|torch) FRAMEWORK="Pytorch" ;;
+                tensorflow|tf) FRAMEWORK="Tensorflow" ;;
+            esac
+        fi
+    fi
 fi
 
 # Create workspace directory if it doesn't exist

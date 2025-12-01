@@ -977,6 +977,11 @@ fi
 
 # Check if image exists
 USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+# Source username utilities and sanitize (handles @, ., and 32-char limit)
+source "/opt/ds01-infra/scripts/lib/username-utils.sh"
+SANITIZED_USERNAME=$(sanitize_username_for_slice "$USERNAME")
+
 if docker images --format "{{.Repository}}" | grep -q "^${IMAGE_NAME}$"; then
     # Image exists as-is (full path like ds01-1001/my-project)
     :
@@ -1135,8 +1140,12 @@ if [[ ! "$REBUILD_CONFIRM" =~ ^[Yy]$ ]]; then
     exit 0
 fi
 
-# Build command
-BUILD_CMD="docker build -t $IMAGE_NAME:latest -f $DOCKERFILE"
+# Build command with user setup build args (required for DS01 user/group creation)
+BUILD_CMD="docker build"
+BUILD_CMD="$BUILD_CMD --build-arg DS01_USER_ID=$USER_ID"
+BUILD_CMD="$BUILD_CMD --build-arg DS01_GROUP_ID=$GROUP_ID"
+BUILD_CMD="$BUILD_CMD --build-arg DS01_USERNAME=$SANITIZED_USERNAME"
+BUILD_CMD="$BUILD_CMD -t $IMAGE_NAME:latest -f $DOCKERFILE"
 if [ "$NO_CACHE" = true ]; then
     BUILD_CMD="$BUILD_CMD --no-cache"
 fi
