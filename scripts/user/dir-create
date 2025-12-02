@@ -178,9 +178,11 @@ if [ -d "$PROJECT_DIR" ]; then
 fi
 
 # Create directory structure
-echo ""
-echo -e "${BOLD}Creating Directory Structure${NC}"
-echo ""
+if [ "$IS_ORCHESTRATED" = false ]; then
+    echo -e ""
+    echo -e "${BOLD}Creating Directory Structure${NC}"
+    echo -e ""
+fi
 
 mkdir -p "$PROJECT_DIR"
 
@@ -208,10 +210,13 @@ echo ""
 
 # Show created structure
 if [ "$GUIDED" = true ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Directory Structure Created${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Directory Structure Created${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e ""
+    fi
     echo -e "  ${GREEN}✓${NC} Created project directory: $PROJECT_NAME"
 
     if [ "$STRUCTURE_TYPE" = "data-science" ]; then

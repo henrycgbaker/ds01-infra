@@ -59,6 +59,22 @@ get_interface_label() {
     echo "${DS01_INTERFACE:-${DS01_CONTEXT:-atomic}}"
 }
 
+# Show banner only in atomic context (not when called from orchestrator)
+# Usage: show_atomic_banner "Container Create"
+# Returns: 0 if banner shown, 1 if suppressed (for conditional logic)
+show_atomic_banner() {
+    local title="$1"
+    if is_atomic_context && [[ -z "$DS01_ORCHESTRATOR" ]]; then
+        echo -e ""
+        echo -e "\033[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+        echo -e "\033[1m${title}\033[0m"
+        echo -e "\033[0;36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m"
+        echo -e ""
+        return 0
+    fi
+    return 1
+}
+
 # Show next steps message - only in atomic context
 # Usage: show_atomic_next_steps "container-start $name" "container-remove $name"
 show_atomic_next_steps() {
@@ -138,5 +154,5 @@ run_quiet() {
 # Export functions for subshells
 export -f get_ds01_context is_orchestration_context is_atomic_context
 export -f set_orchestration_context set_atomic_context get_interface_label
-export -f show_atomic_next_steps show_success show_warning show_error show_info show_debug
+export -f show_atomic_banner show_atomic_next_steps show_success show_warning show_error show_info show_debug
 export -f suppress_in_orchestration run_quiet

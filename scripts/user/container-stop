@@ -331,9 +331,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${CYAN}${BOLD}    Stopping Container${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+# Show banner only in atomic context (not when called from orchestrator)
+if is_atomic_context && [[ -z "$DS01_ORCHESTRATOR" ]]; then
+    echo -e ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}${BOLD}    Stopping Container${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e ""
+fi
 
 # Stop all containers
 if [ "$STOP_ALL" = true ]; then

@@ -17,6 +17,12 @@ NC='\033[0m'
 USERNAME=$(whoami)
 WORKSPACE_DIR="$HOME/workspace"
 
+# Check if we're in orchestration context (called by project-init/user-setup)
+IS_ORCHESTRATED=false
+if [[ "${DS01_CONTEXT:-}" == "orchestration" ]]; then
+    IS_ORCHESTRATED=true
+fi
+
 usage() {
     echo -e ""
     echo -e "${BOLD}DS01 README Create${NC}"
@@ -141,11 +147,14 @@ esac
 
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Creating Project Documentation${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e ""
-    echo -e "${BOLD}Next We'll Create:${NC}"
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Creating Project Documentation${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e ""
+    fi
+    echo -e "${BOLD}What We'll Create:${NC}"
     echo -e ""
     echo -e "  1. ${CYAN}README.md${NC} - Project documentation"
     echo -e "     • GitHub will automatically display this file (public facing doc)"
@@ -170,9 +179,12 @@ if [ "$GUIDED" = true ]; then
     read -p "Press Enter to create project files..." </dev/tty
 fi
 
-echo -e ""
-echo -e "${BOLD}Creating Project Files${NC}"
-echo -e ""
+# Show header only in atomic context
+if [ "$IS_ORCHESTRATED" = false ]; then
+    echo -e ""
+    echo -e "${BOLD}Creating Project Files${NC}"
+    echo -e ""
+fi
 
 # Create README based on structure type
 if [ "$STRUCTURE_TYPE" = "blank" ]; then
@@ -467,8 +479,8 @@ fi
 echo -e ""
 echo -e "${GREEN}✓ Project files created${NC}"
 
-# Summary
-if [ "$GUIDED" = true ]; then
+# Summary - only show in atomic context
+if [ "$GUIDED" = true ] && [ "$IS_ORCHESTRATED" = false ]; then
     echo -e ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Project Documentation Ready${NC}"

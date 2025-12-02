@@ -97,10 +97,13 @@ AUTHORIZED_KEYS="$SSH_DIR/authorized_keys"
 
 # Show both keys with explanation of what we did
 show_keys_generated() {
-    echo -e ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✓ SSH Keys Generated!${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}${BOLD}✓ SSH Keys Generated!${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
     echo -e ""
     echo -e "${BOLD}What we just did:${NC}"
     echo -e "  We generated a pair of cryptographic keys for you:"
@@ -121,10 +124,13 @@ show_keys_generated() {
 
 # Show existing keys (when reviewing)
 show_existing_keys() {
-    echo -e ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Your SSH Keys${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Your SSH Keys${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
     echo -e ""
     echo -e "${BOLD}Your Private Key:${NC}"
     echo ""
@@ -140,10 +146,13 @@ show_existing_keys() {
 
 # Step 1: Private key save instructions
 show_step1_private_key() {
-    echo -e ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Step 1: Save Private Key to LOCAL Machine${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Step 1: Save Private Key to LOCAL Machine${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
     echo -e ""
     echo -e "The private key needs to be on your ${BOLD}LOCAL${NC} computer."
     echo -e ""
@@ -162,10 +171,13 @@ show_step1_private_key() {
 
 # Step 2: Public key explanation
 show_step2_public_key() {
-    echo -e ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Step 2: Public Key (Already Configured!)${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Step 2: Public Key (Already Configured!)${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
     echo -e ""
     echo -e "${BOLD}What we did automatically:${NC}"
     echo -e "  ${GREEN}✓${NC} Added your public key to ~/.ssh/authorized_keys on the server"
@@ -178,10 +190,13 @@ show_step2_public_key() {
 
 # Final summary (minimal - VS Code config happens in user-setup)
 show_summary() {
-    echo -e ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✓ SSH Keys Ready!${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e ""
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}${BOLD}✓ SSH Keys Ready!${NC}"
+        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    fi
     echo -e ""
     echo -e "${BOLD}What we accomplished:${NC}"
     echo -e "  ${GREEN}✓${NC} Generated private/public key pair on the server"
