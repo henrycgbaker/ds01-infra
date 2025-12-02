@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 Container List - Lists containers via mlc-list with DS01 UX
-# Tier 2 Command - Wraps AIME mlc-list with interactive GUI and formatting
+# L2 Atomic Command - Wraps AIME mlc-list with interactive GUI and formatting
 
 set -e
 

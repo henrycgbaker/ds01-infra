@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 Shell Setup - Configure shell PATH for DS01 commands
-# Tier 2 Command - Can be used standalone or called by orchestrators
+# L2 Atomic Command - Can be used standalone or called by orchestrators
 # File: /opt/ds01-infra/scripts/user/shell-setup
 
 set -e

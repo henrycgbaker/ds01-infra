@@ -189,7 +189,7 @@ stop_container() {
         fi
     fi
 
-    # Stop container via mlc-stop (AIME Tier 1)
+    # Stop container via mlc-stop (L1 AIME)
     if [ "$force" = true ]; then
         echo -e "${YELLOW}Force stopping...${NC}"
         if [ "$GUIDED" = true ]; then

@@ -1,33 +1,35 @@
 # User Scripts - Commands & Workflows
 
-User-facing commands organized in a 4-tier modular architecture.
+User-facing commands organised in a 5-layer modular architecture.
 
 ## Overview
 
-This directory contains all user-facing DS01 commands, organized into **4 tiers** that build from simple, reusable modules into complete workflow wizards.
+This directory contains all user-facing DS01 commands, organised into **5 layers** that build from foundational Docker commands into complete workflow wizards.
 
-## Tier System
+## Layer System
 
 ### Design Philosophy
 
-- **Single source of truth**: No code duplication between tiers
-- **Modular and reusable**: Each tier builds on the previous
-- **Educational mode**: All Tier 2+ commands support `--guided` flag
+- **Single source of truth**: No code duplication between layers
+- **Modular and reusable**: Each layer builds on the previous
+- **Educational mode**: All L2+ commands support `--guided` flag
 - **Flexible syntax**: Dispatchers enable `command subcommand` and `command-subcommand`
 
-### Tier Breakdown
+### Layer Breakdown
 
 ```
-TIER 4 (Wizards)          user-setup
+L4: WIZARDS              user-setup (complete onboarding)
                               ↓
-TIER 3 (Orchestrators)    project-init, dispatchers
+L3: ORCHESTRATORS        container-deploy, container-retire, project-init
                               ↓
-TIER 2 (Modules)          container-*, image-*, setup modules
+L2: ATOMIC               container-*, image-*, setup modules
                               ↓
-TIER 1 (Base)             mlc commands (AIME MLC v2)
+L1: MLC (HIDDEN)         mlc commands (AIME MLC v2)
+                              ↓
+L0: DOCKER               docker run, build, etc.
 ```
 
-## TIER 4: Workflow Wizards
+## L4: Workflow Wizards
 
 Complete onboarding experiences for first-time users.
 
@@ -67,9 +69,9 @@ new-user         # Legacy alias
 
 **Code:** `user-setup` (285 lines, orchestrates 3 workflows)
 
-## TIER 3: Workflow Orchestrators
+## L3: Workflow Orchestrators
 
-Multi-step workflows that compose Tier 2 modules.
+Multi-step workflows that compose L2 atomic modules.
 
 ### project-init
 
@@ -107,7 +109,7 @@ new-project           # Legacy alias
 - Docker image: `ds01-<username>/<project>:latest`
 - Container: `<project>._.username`
 
-**Code:** `project-init` (397 lines, 58.5% reduction vs monolithic)
+**Code:** `project-init` (397 lines)
 
 ### Command Dispatchers
 
@@ -138,7 +140,7 @@ project init --guided
 user setup          # → user-setup
 ```
 
-## TIER 2: Modular Unit Commands
+## L2: Atomic Commands
 
 Single-purpose, reusable commands that work standalone or orchestrated.
 
@@ -333,7 +335,7 @@ shell-setup --force        # Reconfigure even if already correct
 ```
 
 **Purpose:** Configure shell PATH for DS01 commands
-**Category:** Tier 2 - Setup Module
+**Category:** L2 Atomic - Setup Module
 
 **Problem:** Domain users may not have `/usr/local/bin` in PATH
 
@@ -349,7 +351,7 @@ shell-setup --force        # Reconfigure even if already correct
 - `-h`, `--help` - Show command usage
 - `--info` - Show detailed information about command
 
-### Tier 2+ Commands
+### L2+ Commands
 
 - `--guided` - Educational mode with detailed explanations
 

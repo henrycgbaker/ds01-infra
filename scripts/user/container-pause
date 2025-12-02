@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 Container Pause - Pauses running containers temporarily
-# Tier 2 Command - Freezes container processes while keeping GPU allocated
+# L2 Atomic Command - Freezes container processes while keeping GPU allocated
 
 set -e
 

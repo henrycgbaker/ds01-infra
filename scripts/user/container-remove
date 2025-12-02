@@ -354,7 +354,7 @@ cleanup_container() {
 
     # Check if mlc-remove exists
     if [ -f "$MLC_REMOVE" ]; then
-        # Remove via mlc-remove (AIME Tier 1)
+        # Remove via mlc-remove (L1 AIME)
         if bash "$MLC_REMOVE" "$container_name" -f -s > /dev/null 2>&1; then
             echo -e "${GREEN}✓${NC} Removed container: $container_name"
 
