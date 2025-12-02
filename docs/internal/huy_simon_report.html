@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>huy_simon_report.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="ds01-infrastructure-update">DS01 Infrastructure Update</h1>
+<ul>
+<li>29/112025</li>
+<li>local repo path <code>/opt/ds01-infra</code></li>
+<li>remote repo url <code>https://github.com/hertie-data-science-lab/ds01-infra</code></li>
+</ul>
+<hr>
+<h2 id="exec-summary">Exec Summary</h2>
+<p>New infra layer(s) wrap original AIME ML Containers with:</p>
+<ul>
+<li><strong>Resource management</strong>: per-user GPU/CPU/mem/PID limits (auto enforced via mix of cron/systemd/cgroups); GPU allocation system w/ MIG-partititons; dynamically-configurable YAML for resource limits, single-source of truth for logging &amp; monitorings, etc</li>
+<li><strong>Educational/easy-to-use workflows</strong>: progressive complexity - from beginner CLI wizards that maximally abstract complexity away for new users, to more granular internal commands, to base Docker access =&gt; 3 'interfaces' for users of diff skill levels. <code>--guided</code> mode -&gt; full explanation for new users.</li>
+<li><strong>Env Customisation</strong>: at image layer; prev setup was for a 'dev -&gt; production' pipeline, now more interactive (students inject additional pkgs into containers pre-deployment; important as students not likely to know all pkg requirements in adv)</li>
+<li><strong>Cleanup</strong>: idle resource detection, runtime limits, and auto cleanup, etc</li>
+<li><strong>Security &amp; Login</strong>: SSH keys generation &amp; configuration auto-handled at user setup, user permissions configured so can only view own workspaces etc.</li>
+<li><strong>Documentation</strong>: currently admin-facing modular README.md files throughout dir (also on DSL Github); user documentation embedded in CLIs -&gt; interactive documentation at point of use.</li>
+<li><strong>Up-to-date</strong>: updated CUDA &amp; NVML drivers (not for host only for containerised envs), synced internal clock, updated AIME images sub-repo to v2.</li>
+</ul>
+<p><strong>Current Status:</strong> &quot;v1&quot; (MVP) usable for students - robustly tested, but not at scale (yet)</p>
+<ul>
+<li>Students can now go from never accessing server before, to deploying a running container and attaching IDE to it for interactive development in &lt;30 mins (fully guided walkthrough in class took 40 mins)</li>
+</ul>
+<hr>
+<h2 id="design-philosophy-abstract-away-initial-complexity-while-allowing-advanced-users-more-control">Design Philosophy: abstract away initial complexity, while allowing advanced users more control</h2>
+<ul>
+<li>Advnanced / existing users still have their workflows unbroken, but now are included within logging system (w/ resource limits applied)</li>
+<li>Bare metal access still allowed (so far only Sebastian still needs this -&gt; will be migrating over to containerised-only, with bare-metal access restricted). <em>NB: By enfocing containerisation -&gt; future proofing as can integrate with cloud registries if needed to push workloads off server if that is future intention (Simon mentioned)</em></li>
+<li>dev'd a rich eco-system of CLI tools for students that handle full docker workflow w/o them needing to know more than their existing knowledge (i.e only prerequisite is basic knowledge of local-machine Python-based pkg dev as taught in DSA class).</li>
+</ul>
+<h3 id="layered-abstraction-3-different-user-interaces">Layered Abstraction: 3 different user-interaces</h3>
+<p>no one-size-fits-all -&gt; <strong>3 user interfaces</strong> at diff abstraction levels:</p>
+<pre class="hljs"><code><div>USER SKILL LEVEL          INTERFACE              WHAT THEY SEE
+====================================================================================
+
+Beginner (Day 1)     --&gt;  ORCHESTRATION     --&gt;  `user-setup` walks through full local-remote credential setup
+                          (Default)              One command, follow the prompts. No decisions needed, one path
+                                                 -&gt; `project init` sets up dirs &amp; git etc
+
+Beginner              --&gt;  ORCHESTRATION     --&gt; customisable image building &amp; container deployment 
+                                                 binary state: running or removed (avoids zombie allocation prob)
+                                                 ephemeral workflow (create, use, retire)
+
+Intermediate          --&gt;  ATOMIC COMMANDS   --&gt; greater control/closer to docker workflow, still heavily abstracted
+                           (more control)        full state model, but much complexity removed
+                                                 manual lifecycle control
+
+Advanced              --&gt;  DOCKER DIRECT     --&gt;  docker run, docker exec
+                                                 still subject to resource enforcement
+                                                 visible in monitoring as &quot;Other&quot;
+</div></code></pre>
+<h3 id="implementation-5-layer-hierarchy">Implementation: 5-Layer Hierarchy</h3>
+<p>Under hood, all interfaces built on same foundation:</p>
+<pre class="hljs"><code><div>+-------------------------------------------------------------------------+
+|                    LAYER HIERARCHY (Implementation)                      |
++-------------------------------------------------------------------------+
+|   L4: WIZARDS (Complete Guided Workflows)                               |
+|   |-- user-setup           # SSH --&gt; project-init --&gt; vscode            |
+|   +-- project-init         # dir --&gt; git --&gt; readme --&gt; image --&gt; deploy|
+|                                                                         |
+|   L3: ORCHESTRATORS (Multi-Step Container Sequences)                    |
+|   |-- container deploy     # create + start in one command              |
+|   +-- container retire     # stop + remove + free GPU immediately       |
+|                                                                         |
+|   L2: ATOMIC (Single-Purpose Commands)                                  |
+|   |-- Container: create, start, attach, run, stop, remove, list, stats  |
+|   +-- Image: create, list, update, delete                               |
+|                                                                         |
+|   L1: MLC (AIME ML Containers) -------------------------------- HIDDEN  |
+|   +-- mlc-create, mlc-open, mlc-stop, mlc-remove, mlc-list  (&lt;- patched)|
+|                                                                         |
+|   L0: DOCKER (Foundational Container Runtime)                           |
+|   +-- docker run, exec, stop, rm, build, images, ps, stats              |
++-------------------------------------------------------------------------+
+</div></code></pre>
+<h3 id="key-design-principles">Key Design Principles</h3>
+<h4 id="1-instant-setup-for-beginners-plug--play">1. instant setup for beginners (plug &amp; play)</h4>
+<pre class="hljs"><code><div>$ user-setup
+<span class="hljs-comment"># One command handles:</span>
+<span class="hljs-comment"># - SSH key configuration</span>
+<span class="hljs-comment"># - Project directory creation (following DS/ML best practices)</span>
+<span class="hljs-comment"># - git setup &amp; README/requirements.txt creation</span>
+<span class="hljs-comment"># - First Docker image build</span>
+<span class="hljs-comment"># - Container deployment</span>
+<span class="hljs-comment"># - VS Code integration setup</span>
+</div></code></pre>
+<h4 id="2---guided-mode">2. <code>--guided</code> mode</h4>
+<p>every command supports a <code>--guided</code> flag that adds educational explanations:</p>
+<p>e.g.</p>
+<pre class="hljs"><code><div>$ container-run --guided
+<span class="hljs-comment"># Explains what is a container? What happens when you exit?</span>
+<span class="hljs-comment"># Shows sser's own resource limits, allocated GPU, workspace location</span>
+<span class="hljs-comment"># + suggests next steps based on your current state</span>
+</div></code></pre>
+<h4 id="3-no-wrong-door">3. No Wrong Door</h4>
+<p>all interfaces eventually hit the same enforcement layer:</p>
+<pre class="hljs"><code><div>Any Entry Point  --&gt;  Docker Wrapper  --&gt;  Cgroup Enforcement  --&gt;  Container
+     |                     |                      |
+     |                     v                      v
+     |              OPA Authorization      Resource Limits
+     |                     |                      |
+     +---------------------+----------------------+
+                           |
+                  = enforced safety
+</div></code></pre>
+<p><strong>Idea:</strong> even if using ds01 CLI wizards, docker commands, or IDE Containers extension:</p>
+<ul>
+<li>same resource limits</li>
+<li>same GPU allocation tracking</li>
+<li>same idle timeout enforcement</li>
+<li>same audit logging</li>
+</ul>
+<p><strong>Implementation:</strong> 3 layers ensure all containers follow same system:</p>
+<ol>
+<li>
+<p><strong>Docker Wrapper</strong> (<code>/usr/local/bin/docker</code>)</p>
+<ul>
+<li>intercepts all Docker commands</li>
+<li>injects per-user cgroup parent</li>
+<li>adds DS01 labels for tracking</li>
+</ul>
+</li>
+<li>
+<p><strong>Systemd Cgroups</strong> (<code>ds01.slice</code> hierarchy)</p>
+<ul>
+<li>hierarchical resource accounting</li>
+<li>per-group and per-user slices</li>
+<li>CPU, memory, PIDs limits enforced</li>
+</ul>
+</li>
+<li>
+<p><strong>OPA Authorization Plugin</strong></p>
+<ul>
+<li>policy-based container authorisation</li>
+</ul>
+</li>
+</ol>
+<h4 id="4-ephemeral-by-default-cloud-native-approach">4. Ephemeral by default (Cloud-Native approach)</h4>
+<ul>
+<li>teaches the &quot;ephemeral-container persistent-images (&amp; workspace)&quot; philosophy</li>
+<li>prepares students for AWS, Kubernetes etc + future-proofing if DSL wants to move to more of a cloud-based system moving forwards.</li>
+</ul>
+<pre class="hljs"><code><div>container deploy my-project   <span class="hljs-comment"># Create and start</span>
+<span class="hljs-comment"># ... work, train models, experiment ...</span>
+container retire my-project   <span class="hljs-comment"># Stop, remove, free GPU immediately</span>
+</div></code></pre>
+<h4 id="5easily-configurable-resourcee-limits-yaml-file-read-by-crontab---allows-user-group-specific-overides-if-more-resoruces-needed-etc">5.Easily configurable resourcee limits YAML file read by crontab -&gt; allows user-/group-specific overides if more resoruces needed etc.</h4>
+<pre class="hljs"><code><div><span class="hljs-comment"># config/resource-limits.yaml</span>
+<span class="hljs-attr">groups:</span>
+  <span class="hljs-attr">student:</span>
+    <span class="hljs-attr">max_mig_instances:</span> <span class="hljs-number">2</span>        <span class="hljs-comment"># Can use 2 GPU partitions</span>
+    <span class="hljs-attr">max_containers_per_user:</span> <span class="hljs-number">2</span>  <span class="hljs-comment"># Can run 2 containers</span>
+    <span class="hljs-attr">max_cpus:</span> <span class="hljs-number">64</span>                <span class="hljs-comment"># Per container</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">128g</span>                <span class="hljs-comment"># Per container</span>
+    <span class="hljs-attr">idle_timeout:</span> <span class="hljs-string">2h</span>           <span class="hljs-comment"># Auto-stop after idle</span>
+    <span class="hljs-attr">max_runtime:</span> <span class="hljs-string">48h</span>            <span class="hljs-comment"># Hard limit on runtime</span>
+
+  <span class="hljs-attr">researcher:</span>
+    <span class="hljs-attr">max_mig_instances:</span> <span class="hljs-number">4</span>        <span class="hljs-comment"># More GPU access</span>
+    <span class="hljs-attr">allow_full_gpu:</span> <span class="hljs-literal">true</span>        <span class="hljs-comment"># Can use entire GPU (not just MIG)</span>
+    <span class="hljs-attr">max_runtime:</span> <span class="hljs-string">168h</span>           <span class="hljs-comment"># Week-long experiments allowed</span>
+
+
+</div></code></pre>
+<hr>
+<h2 id="architecture-overview">Architecture Overview</h2>
+<h3 id="system-components">System Components</h3>
+<pre class="hljs"><code><div>+------------------+     +------------------+     +------------------+
+|   User Commands  |     |   Enforcement    |     |   Monitoring     |
+|------------------|     |------------------|     |------------------|
+| L4 Wizards       |     | Docker Wrapper   |     | Dashboard        |
+| L3 Orchestrators |----&gt;| Systemd Cgroups  |----&gt;| Event Logger     |
+| L2 Atomic        |     | OPA Plugin       |     | Health Checks    |
+| (Docker direct)  |     | GPU Allocator    |     | Resource Alerts  |
++------------------+     +------------------+     +------------------+
+         |                       |                       |
+         v                       v                       v
++------------------+     +------------------+     +------------------+
+|  AIME ML Cont.   |     |   Configuration  |     |     State        |
+|------------------|     |------------------|     |------------------|
+| mlc-patched.py   |     | resource-limits  |     | gpu-state.json   |
+| 150+ GPU images  |     | .yaml            |     | events.jsonl     |
+| NVIDIA toolkit   |     | OPA policies     |     | container meta   |
++------------------+     +------------------+     +------------------+
+</div></code></pre>
+<h3 id="gpu-allocation-system">GPU Allocation System</h3>
+<p><strong>MIG-Aware Allocation:</strong></p>
+<ul>
+<li>GPUs partitioned into 3 MIG instances (13GB each)</li>
+<li>tracked as <code>physical_gpu:instance</code> (mapped to indexes: <code>0:0</code>, <code>0:1</code>, <code>0:2</code>)</li>
+<li>stateless allocator with file locking (race-safe)</li>
+<li>least-allocated strategy balances load</li>
+</ul>
+<p><strong>Lifecycle:</strong></p>
+<ol>
+<li>container created --&gt; GPU allocated and labeled</li>
+<li>container stopped --&gt; GPU marked with timestamp</li>
+<li>after <code>gpu_hold_after_stop</code> --&gt; GPU released to pool</li>
+<li>container restart --&gt; Validates GPU still available</li>
+</ol>
+<hr>
+<h2 id="aime-v2-integration">AIME v2 Integration</h2>
+<p>= min patching, max reuse</p>
+<pre class="hljs"><code><div>Original AIME Code:  mlc.py (2,100 lines)
+DS01 Patch:          mlc-patched.py (+50 lines, 2.5% change)
+Code Reuse:          97.5%
+</div></code></pre>
+<p>Main patch: <code>--image</code> flag for custom images, also built on top: allocation system, clean up, CLIs.. but still uses AIME's GPU detection, networking, mount handling + easy to upgrade when AIME releases new versions</p>
+<h2 id="monitoring--safety">Monitoring &amp; Safety</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dashboard</code></td>
+<td>real-time GPU/container visualization</td>
+</tr>
+<tr>
+<td><code>ds01-events</code></td>
+<td>query centralized event log</td>
+</tr>
+<tr>
+<td><code>check-limits</code></td>
+<td>user's personal resource dashboard</td>
+</tr>
+<tr>
+<td><code>ds01-health-check</code></td>
+<td>system integrity validation</td>
+</tr>
+<tr>
+<td><code>resource-alert-checker</code></td>
+<td>warnings at 80% of limits</td>
+</tr>
+</tbody>
+</table>
+<h3 id="automation-cron-jobs">Automation (Cron Jobs)</h3>
+<table>
+<thead>
+<tr>
+<th>Schedule</th>
+<th>Job</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>:30/hour</code></td>
+<td>idle detection</td>
+<td>stop containers idle &gt; user's <code>idle_timeout</code></td>
+</tr>
+<tr>
+<td><code>:45/hour</code></td>
+<td>runtime enforcement</td>
+<td>stop containers &gt; user's <code>max_runtime</code></td>
+</tr>
+<tr>
+<td><code>:15/hour</code></td>
+<td>GPU release</td>
+<td>free GPUs from stopped containers</td>
+</tr>
+<tr>
+<td><code>:30/hour</code></td>
+<td>container cleanup</td>
+<td>remove old stopped containers</td>
+</tr>
+</tbody>
+</table>
+<p>/+ also logging/monitoring crontab jobs</p>
+<h2 id="technical-metrics">Technical Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>-</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Git commits</td>
+<td>140</td>
+</tr>
+<tr>
+<td>Automated tests</td>
+<td>149 (unit, component, integration, e2e)</td>
+</tr>
+<tr>
+<td>Documentation files (admin-facing)</td>
+<td>(?) markdown files</td>
+</tr>
+<tr>
+<td>Documentation files (user-facing)</td>
+<td>(?) markdown files</td>
+</tr>
+<tr>
+<td>User-facing commands</td>
+<td>30+</td>
+</tr>
+</tbody>
+</table>
+
+</body>
+</html>
