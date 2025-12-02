@@ -1,7 +1,7 @@
 #!/bin/bash
-# alias-list - List available DS01 commands based on context
-# Context-aware: Shows different commands inside vs outside containers
-# Aliases: alias-list, aliases, alias, commands, help
+# help - DS01 Command Reference
+# Aliases: help, commands
+# Usage: help [--admin] [--atomic] [--inside] [--full]
 
 set -e
 
@@ -11,13 +11,14 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m'
 
 # Parse flags
 SHOW_FULL=false
 SHOW_INSIDE=false
 SHOW_ADMIN=false
-SHOW_SYMLINKS=false
+SHOW_ATOMIC=false
 
 for arg in "$@"; do
     case "$arg" in
@@ -30,28 +31,20 @@ for arg in "$@"; do
         --admin)
             SHOW_ADMIN=true
             ;;
-        --symlinks)
-            SHOW_SYMLINKS=true
+        --atomic)
+            SHOW_ATOMIC=true
             ;;
         -h|--help|--info)
-            echo "Usage: alias-list [OPTIONS]"
+            echo "Usage: help [OPTIONS]"
             echo ""
-            echo "Show available DS01 commands. Context-aware (inside vs outside containers)."
+            echo "Show available DS01 commands."
             echo ""
             echo "Options:"
-            echo "  --full               Show all sections (user + inside + admin + symlinks)"
-            echo "  --inside-container   Show inside-container commands (auto-detected when in container)"
-            echo "  --admin              Show admin commands"
-            echo "  --symlinks           Show active symlinks in /usr/local/bin"
-            echo "  -h, --help, --info   Show this help message"
-            echo ""
-            echo "Aliases: aliases, alias, commands, help"
-            echo ""
-            echo "Examples:"
-            echo "  alias-list                    # Default: user commands + custom aliases"
-            echo "  alias-list --admin            # Include admin commands"
-            echo "  alias-list --full             # Show everything"
-            echo "  alias-list --admin --symlinks # Show admin + symlinks sections"
+            echo "  --atomic             Show atomic container commands (advanced)"
+            echo "  --admin              Show admin commands (ds01-* prefix)"
+            echo "  --inside             Show inside-container commands"
+            echo "  --full               Show everything"
+            echo "  -h, --help           Show this message"
             echo ""
             exit 0
             ;;
@@ -69,92 +62,123 @@ if [ -f /.dockerenv ] || grep -q docker /proc/1/cgroup 2>/dev/null; then
     IN_CONTAINER=true
 fi
 
-# If inside container and no explicit flags, automatically show inside-container commands
-if [ "$IN_CONTAINER" = true ] && [ "$SHOW_FULL" = false ] && [ "$SHOW_ADMIN" = false ] && [ "$SHOW_SYMLINKS" = false ]; then
+# If inside container and no explicit flags, show inside-container commands
+if [ "$IN_CONTAINER" = true ] && [ "$SHOW_FULL" = false ] && [ "$SHOW_ADMIN" = false ] && [ "$SHOW_ATOMIC" = false ]; then
     SHOW_INSIDE=true
 fi
 
-# Function to show user commands section
+# ═══════════════════════════════════════════════════════════════════════════════
+# USER COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 show_user_commands() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}              DS01 COMMAND REFERENCE${NC}"
+    echo -e "${BOLD}                    DS01 COMMAND REFERENCE${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
+    echo -e "${DIM}Workflow: user-setup → project-init → image-create → container-deploy → container-retire${NC}"
+    echo ""
 
-    echo -e "${BOLD}USER COMMANDS${NC}"
+    # --- First-Time Setup ---
+    echo -e "${BOLD}FIRST-TIME SETUP${NC} ${DIM}(run once)${NC}"
     echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}user-setup${NC}           Complete onboarding wizard"
+    echo -e "                       ${DIM}(includes shell, ssh, vscode setup)${NC}"
     echo ""
 
-    echo -e "${BOLD}Setup & Configuration:${NC}"
-    echo -e "  ${GREEN}user-setup${NC}             Complete onboarding wizard (skill-adaptive)"
-    echo -e "       ${GREEN}also: user setup, user new${NC}"
-    echo -e "  ${GREEN}project-init${NC}           Create new project with Git + Docker"
-    echo -e "       ${GREEN}also: project init${NC}"
-    echo -e "  ${GREEN}ssh-setup${NC}              Configure SSH keys for remote access"
-    echo -e "  ${GREEN}vscode-setup${NC}           VS Code Remote-SSH setup guide"
-    echo -e "  ${GREEN}jupyter-setup${NC}          Jupyter Lab access configuration"
-    echo -e "  ${GREEN}check-limits${NC}           Show resource limits with soft-limit warnings"
-    echo -e "       ${GREEN}also: user get-limits, get-limits${NC}"
+    # --- Per-Project Setup ---
+    echo -e "${BOLD}NEW PROJECT${NC} ${DIM}(run once per project)${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}project-init${NC}         Create new project"
+    echo -e "                       ${DIM}(sets up directory, git, dockerfile)${NC}"
     echo ""
 
-    echo -e "${BOLD}GPU Queue (when GPUs unavailable):${NC}"
-    echo -e "  ${GREEN}gpu-queue position \$USER${NC}  Check your position in queue"
-    echo -e "  ${GREEN}gpu-queue add${NC}          Join GPU waiting queue"
+    # --- Image Commands ---
+    echo -e "${BOLD}IMAGE COMMANDS${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}image-create${NC}         Build custom Docker image"
+    echo -e "  ${GREEN}image-update${NC}         Rebuild/update image (edit Dockerfile)"
+    echo -e "  ${GREEN}image-install${NC}        Quick: pip install packages + commit"
+    echo -e "  ${GREEN}image-list${NC}           List available images"
+    echo -e "  ${GREEN}image-delete${NC}         Remove an image"
     echo ""
 
-    echo -e "${BOLD}Container Orchestrators (Recommended):${NC}"
-    echo -e "  ${GREEN}container deploy${NC}     Create + start container in one step"
-    echo -e "  ${GREEN}container retire${NC}     Stop + remove container, free GPU"
-    echo ""
-
-    echo -e "${BOLD}Container Operations (Atomic):${NC}"
-    echo -e "  ${GREEN}container-create${NC}     Create a new container"
-    echo -e "  ${GREEN}container-start${NC}      Start container (background)"
-    echo -e "  ${GREEN}container-run${NC}        Start + attach to container"
-    echo -e "  ${GREEN}container-attach${NC}     Attach to running container"
-    echo -e "       ${GREEN}also: container open${NC}"
-    echo -e "  ${GREEN}container-stop${NC}       Stop a running container"
-    echo -e "  ${GREEN}container-remove${NC}     Remove a container"
+    # --- Container Commands ---
+    echo -e "${BOLD}CONTAINER COMMANDS${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}container-deploy${NC}     Create + start container ${DIM}(begin working)${NC}"
+    echo -e "  ${GREEN}container-retire${NC}     Stop + remove + free GPU ${DIM}(done for the day)${NC}"
     echo -e "  ${GREEN}container-list${NC}       List your containers"
-    echo -e "  ${GREEN}container-stats${NC}      Resource usage statistics"
+    echo ""
+    echo -e "  ${DIM}💡 For granular control: help --atomic (advanced users)${NC}"
     echo ""
 
-    echo -e "${BOLD}Image Management:${NC}"
-    echo -e "  ${GREEN}image create${NC}         Create custom Docker image"
-    echo -e "  ${GREEN}image list${NC}           List available images"
-    echo -e "  ${GREEN}image update${NC}         Rebuild/update an image"
-    echo -e "  ${GREEN}image delete${NC}         Remove unused images"
+    # --- Dashboard ---
+    echo -e "${BOLD}DASHBOARD${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}dashboard${NC}            System overview (GPUs, containers, usage)"
+    echo -e "  ${GREEN}dashboard gpu${NC}        GPU allocation + utilization + MIG"
+    echo -e "  ${GREEN}dashboard containers${NC} All containers with stats"
+    echo -e "  ${GREEN}dashboard queue${NC}      GPU queue status"
+    echo ""
+
+    # --- Resource Info ---
+    echo -e "${BOLD}RESOURCE INFO${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}check-limits${NC}         Show your quotas and usage"
+    echo -e "  ${GREEN}gpu-queue status${NC}     Check your queue position"
+    echo -e "  ${GREEN}gpu-queue join${NC}       Join queue when GPUs unavailable"
+    echo ""
+
+    # --- Help ---
+    echo -e "${BOLD}HELP${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo -e "  ${GREEN}help${NC}                 Show this reference"
+    echo -e "  ${GREEN}help --atomic${NC}        Show atomic container commands"
+    echo -e "  ${GREEN}help --admin${NC}         Show admin commands"
+    echo -e "  ${GREEN}version${NC}              DS01 version"
     echo ""
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e " ${YELLOW}Hyphenated forms also work:${NC} container-create, container-list, etc."
-    echo ""
-    echo ""
-    echo -e " ${YELLOW}Command Flag Conventions:${NC}"
-    echo ""
-    echo -e "  ${BOLD}All commands support:${NC}"
-    echo -e "    ${CYAN}-h, --help, --info${NC}       Show help/usage information"
-    echo -e "    ${CYAN}--guided${NC}                 Beginner mode with detailed explanations"
-    echo ""
-    echo ""
-    echo -e "${BOLD}Tips:${NC}"
-    echo -e "  • All container/image commands work in both forms"
-    echo -e "  • Use ${CYAN}--guided${NC} flag on any Tier 2 command for explanations"
-    echo -e "  • Use ${CYAN}--info${NC} on dispatchers for subcommand list"
-    echo -e "  • Admin commands require appropriate permissions"
+    echo -e "${YELLOW}💡 Run 'help' or 'commands' anytime to see this list${NC}"
     echo ""
 }
 
-# Function to show inside-container commands
+# ═══════════════════════════════════════════════════════════════════════════════
+# ATOMIC CONTAINER COMMANDS (advanced)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+show_atomic_commands() {
+    echo -e "${BOLD}ATOMIC CONTAINER COMMANDS${NC} ${DIM}(advanced - granular control)${NC}"
+    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "  ${GREEN}container-create${NC}     Create container (without starting)"
+    echo -e "  ${GREEN}container-start${NC}      Start container in background"
+    echo -e "  ${GREEN}container-run${NC}        Start + attach to container"
+    echo -e "  ${GREEN}container-attach${NC}     Attach to running container"
+    echo -e "  ${GREEN}container-stop${NC}       Stop a running container"
+    echo -e "  ${GREEN}container-remove${NC}     Remove a stopped container"
+    echo -e "  ${GREEN}container-pause${NC}      Pause a container"
+    echo -e "  ${GREEN}container-stats${NC}      Show resource usage"
+    echo -e "  ${GREEN}container-exit${NC}       Exit/detach from container"
+    echo ""
+    echo -e "  ${DIM}These commands give you fine-grained control over the container${NC}"
+    echo -e "  ${DIM}lifecycle. Most users should use container-deploy/retire instead.${NC}"
+    echo ""
+}
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# INSIDE-CONTAINER COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
 show_inside_container_commands() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}         COMMANDS INSIDE CONTAINER${NC}"
+    echo -e "${BOLD}              INSIDE CONTAINER COMMANDS${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
     echo -e "${BOLD}Exit & Navigation:${NC}"
-    echo -e "  ${GREEN}exit${NC}                 Exit container (docker exec sessions exit immediately)"
-    echo -e "  ${GREEN}exit-help${NC}            Show all exit options"
+    echo -e "  ${GREEN}exit${NC}                 Exit container"
     echo -e "  ${GREEN}ws${NC} / ${GREEN}cdw${NC}             Go to /workspace"
     echo -e "  ${GREEN}ll${NC}                   List files (ls -lah)"
     echo ""
@@ -175,176 +199,79 @@ show_inside_container_commands() {
     echo -e "  ${GREEN}gl${NC}                   git log (last 10)"
     echo -e "  ${GREEN}gd${NC}                   git diff"
     echo ""
-
-    echo -e "${BOLD}Customization:${NC}"
-    echo -e "  ${GREEN}alias${NC}                List all active aliases"
-    echo -e "  Edit: ${CYAN}/workspace/.ds01_bashrc_custom${NC} for personal aliases"
-    echo ""
 }
 
-# Function to show admin commands
+# ═══════════════════════════════════════════════════════════════════════════════
+# ADMIN COMMANDS (ds01-* prefix)
+# ═══════════════════════════════════════════════════════════════════════════════
+
 show_admin_commands() {
-    echo -e "${BOLD}ADMIN COMMANDS${NC}"
+    echo -e "${BOLD}ADMIN COMMANDS${NC} ${YELLOW}(ds01-* prefix)${NC}"
     echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
     echo ""
 
-    echo -e "${BOLD}System Dashboard:${NC}"
-    echo -e "  ${GREEN}dashboard${NC}            Main dashboard with subcommands (use ${CYAN}--help${NC} for all)"
-    echo -e "    ${CYAN}dashboard${NC}           Quick summary (GPU/MIG, system resources, allocations)"
-    echo -e "    ${CYAN}dashboard --full${NC}    Complete system overview with all sections"
-    echo -e "    ${CYAN}dashboard --watch${NC}   Watch mode (2s refresh)"
-    echo -e "    ${CYAN}dashboard --json${NC}    JSON output for scripting"
-    echo -e "    ${CYAN}dashboard gpu${NC}       GPU/MIG utilization with containers"
-    echo -e "    ${CYAN}dashboard mig-config${NC}   MIG partition configuration"
-    echo -e "    ${CYAN}dashboard system${NC}    CPU, Memory, Disk utilization"
-    echo -e "    ${CYAN}dashboard containers${NC} All containers with stats"
-    echo -e "    ${CYAN}dashboard users${NC}     Per-user resource breakdown"
-    echo -e "    ${CYAN}dashboard allocations [N]${NC}  Recent GPU allocations"
-    echo -e "    ${CYAN}dashboard temp${NC}      GPU temperatures"
-    echo -e "    ${CYAN}dashboard alerts${NC}    Active alerts and warnings"
+    echo -e "${BOLD}Deployment:${NC}"
+    echo -e "  ${GREEN}sudo deploy${NC}          Redeploy all commands + fix permissions"
     echo ""
 
-    echo -e "${BOLD}Specialized Dashboards:${NC}"
-    echo -e "  ${GREEN}gpu-dashboard${NC}        Detailed GPU allocation status with MIG instances"
-    echo -e "  ${GREEN}container-dashboard${NC}  Container resource usage and statistics"
-    echo -e "  ${GREEN}ds01-status${NC}          User-facing status (containers, GPUs, limits)"
-    echo -e "  ${GREEN}ds01-who${NC}             Show which users own which containers"
+    echo -e "${BOLD}Dashboards:${NC}"
+    echo -e "  ${GREEN}ds01-dashboard${NC}       Admin dashboard (superset of user)"
+    echo -e "  ${GREEN}ds01-gpu${NC}             GPU allocation details"
+    echo -e "  ${GREEN}ds01-containers${NC}      Container statistics"
+    echo -e "  ${GREEN}ds01-gpu-util${NC}        Real-time GPU utilization"
+    echo -e "  ${GREEN}ds01-mig-util${NC}        MIG instance utilization"
     echo ""
 
-    echo -e "${BOLD}GPU Management:${NC}"
-    echo -e "  ${GREEN}ds01-mig-partition${NC}   Configure MIG partitioning from YAML"
+    echo -e "${BOLD}System:${NC}"
+    echo -e "  ${GREEN}ds01-users${NC}           User management"
+    echo -e "  ${GREEN}ds01-logs${NC}            Infrastructure logs"
+    echo -e "  ${GREEN}ds01-events${NC}          Centralized event log"
+    echo -e "  ${GREEN}ds01-mig-partition${NC}   Configure MIG partitioning"
+    echo -e "  ${GREEN}ds01-who${NC}             Who owns which containers"
+    echo -e "  ${GREEN}ds01-health${NC}          System health check"
     echo ""
 
-    echo -e "${BOLD}Monitoring & Audit:${NC}"
-    echo -e "  ${GREEN}gpu-utilization-monitor${NC}   Real-time GPU utilization (not just allocation)"
-    echo -e "  ${GREEN}mig-utilization-monitor${NC}   MIG instance utilization per GPU"
-    echo -e "  ${GREEN}ds01-events${NC}          View centralized event log"
-    echo -e "  ${GREEN}audit-system${NC}         System-wide audit report"
-    echo -e "  ${GREEN}audit-docker${NC}         Docker-specific audit"
-    echo -e "  ${GREEN}audit-container${NC}      Container-specific audit"
-    echo -e "  ${GREEN}ds01-logs${NC}            View infrastructure logs"
+    echo -e "${BOLD}Auditing:${NC}"
+    echo -e "  ${GREEN}ds01-audit${NC}           System-wide audit"
+    echo -e "  ${GREEN}ds01-audit-docker${NC}    Docker audit"
+    echo -e "  ${GREEN}ds01-audit-container${NC} Container audit"
     echo ""
 
-    echo -e "${BOLD}Resource Alerts & Queue:${NC}"
-    echo -e "  ${GREEN}resource-alert-checker${NC}   Generate alerts for users at 80%+ limits"
-    echo -e "  ${GREEN}gpu-queue list${NC}       Show GPU request queue"
-    echo -e "  ${GREEN}gpu-queue process${NC}    Process queue and notify users"
-    echo -e "  ${GREEN}check-idle-containers${NC}   Check for idle containers (cron)"
+    echo -e "${BOLD}Resources:${NC}"
+    echo -e "  ${GREEN}ds01-gpu-queue${NC}       GPU queue management (admin)"
+    echo -e "  ${GREEN}ds01-alerts${NC}          Resource alerts"
+    echo -e "  ${GREEN}ds01-idle${NC}            Check idle containers"
     echo ""
 
     echo -e "${BOLD}Maintenance:${NC}"
-    echo -e "  ${GREEN}backup-logs${NC}          Archive and manage log retention"
-    echo ""
-
-    echo -e "${BOLD}Utilities:${NC}"
-    echo -e "  ${GREEN}alias-list${NC}           List all commands (this screen)"
-    echo -e "  ${GREEN}alias-create${NC}         Create custom command alias"
+    echo -e "  ${GREEN}ds01-backup${NC}          Archive logs"
     echo ""
 }
 
-# Function to show custom aliases
-show_custom_aliases() {
-    echo -e "${BOLD}CUSTOM USER ALIASES${NC}"
-    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN LOGIC
+# ═══════════════════════════════════════════════════════════════════════════════
 
-    if [ -f ~/.bash_aliases ] && grep -q "ds01\|container\|image\|project" ~/.bash_aliases 2>/dev/null; then
-        echo ""
-        grep "ds01\|container\|image\|project" ~/.bash_aliases | while read -r line; do
-            echo -e "  $line"
-        done
-    else
-        echo -e "${YELLOW}  No custom aliases found${NC}"
-        echo -e "  Create one with: ${CYAN}alias-create${NC}"
-    fi
-    echo ""
-}
-
-# Function to show symlinks
-show_symlinks() {
-    echo -e "${BOLD}ACTIVE SYMLINKS IN /usr/local/bin${NC}"
-    echo -e "${CYAN}─────────────────────────────────────────────────────────────${NC}"
-
-    if [ -d /usr/local/bin ]; then
-        DS01_LINKS=$(ls -la /usr/local/bin/ 2>/dev/null | grep "ds01-infra" | wc -l)
-        if [ "$DS01_LINKS" -gt 0 ]; then
-            echo ""
-            ls -la /usr/local/bin/ | grep "ds01-infra" | while read -r line; do
-                link_name=$(echo "$line" | awk '{print $9}')
-                link_target=$(echo "$line" | awk '{print $11}')
-                echo -e "  ${GREEN}$link_name${NC} → $link_target"
-            done
-        else
-            echo -e "${YELLOW}  No DS01 symlinks found in /usr/local/bin${NC}"
-            echo -e "  Run: ${CYAN}sudo /opt/ds01-infra/scripts/system/update-symlinks.sh${NC}"
-        fi
-    else
-        echo -e "${YELLOW}  /usr/local/bin not accessible${NC}"
-    fi
-    echo ""
-}
-
-# Main logic: Show sections based on flags and context
 if [ "$SHOW_FULL" = true ]; then
-    # Show everything
     show_user_commands
+    show_atomic_commands
     show_inside_container_commands
     show_admin_commands
-    show_custom_aliases
-    show_symlinks
-elif [ "$SHOW_INSIDE" = true ] && [ "$SHOW_ADMIN" = false ] && [ "$SHOW_SYMLINKS" = false ]; then
-    # Only inside-container commands
+elif [ "$SHOW_INSIDE" = true ] && [ "$SHOW_ADMIN" = false ] && [ "$SHOW_ATOMIC" = false ]; then
     show_inside_container_commands
 else
-    # Default or custom combination
-    SHOWED_SOMETHING=false
-
-    # If no specific flags, show user commands
-    if [ "$SHOW_ADMIN" = false ] && [ "$SHOW_SYMLINKS" = false ]; then
+    # Default: show user commands
+    if [ "$SHOW_ADMIN" = false ] && [ "$SHOW_ATOMIC" = false ]; then
         show_user_commands
-        SHOWED_SOMETHING=true
     fi
 
-    # Show inside-container if requested
-    if [ "$SHOW_INSIDE" = true ]; then
-        show_inside_container_commands
-        SHOWED_SOMETHING=true
+    # Show atomic if requested
+    if [ "$SHOW_ATOMIC" = true ]; then
+        show_atomic_commands
     fi
 
     # Show admin if requested
     if [ "$SHOW_ADMIN" = true ]; then
         show_admin_commands
-        SHOWED_SOMETHING=true
     fi
-
-    # Show custom aliases if showing user commands (default)
-    if [ "$SHOW_ADMIN" = false ] && [ "$SHOW_SYMLINKS" = false ] && [ "$SHOW_INSIDE" = false ]; then
-        show_custom_aliases
-    fi
-
-    # Show symlinks if requested
-    if [ "$SHOW_SYMLINKS" = true ]; then
-        show_symlinks
-        SHOWED_SOMETHING=true
-    fi
-
-    # If nothing was shown, show default
-    if [ "$SHOWED_SOMETHING" = false ]; then
-        show_user_commands
-        show_custom_aliases
-    fi
-fi
-
-# Show available flags at bottom (only if not showing everything and not inside container auto-mode)
-if [ "$SHOW_FULL" = false ] && ! ([ "$IN_CONTAINER" = true ] && [ "$#" -eq 0 ]); then
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Available Options:${NC}"
-    echo ""
-    echo -e "  ${CYAN}--full${NC}               Show all sections"
-    echo -e "  ${CYAN}--inside-container${NC}   Show inside-container commands"
-    echo -e "  ${CYAN}--admin${NC}              Show admin commands"
-    echo -e "  ${CYAN}--symlinks${NC}           Show active symlinks"
-    echo -e "  ${CYAN}--help${NC}               Show detailed help"
-    echo ""
-    echo -e "${YELLOW}💡 Flags can be combined:${NC} alias-list --admin --symlinks"
-    echo ""
 fi
