@@ -81,10 +81,13 @@ usage() {
     echo -e "  ${DIM}# Guided mode for beginners${NC}"
     echo "  container-deploy --guided"
     echo ""
-    echo -e "${CYAN}Alternative (L2 Atomic commands):${NC}"
-    echo "  If you prefer step-by-step control:"
+    echo -e "${CYAN}Advanced (L2 Atomic commands):${NC}"
+    echo "  For granular control over container lifecycle:"
     echo -e "  1. ${GREEN}container-create <name>${NC}   # Create container"
     echo -e "  2. ${GREEN}container-run <name>${NC}      # Start and enter"
+    echo -e "  ${DIM}See: help --atomic${NC}"
+    echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
     echo ""
 }
 

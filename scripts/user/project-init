@@ -46,10 +46,10 @@ for arg in "$@"; do
         -h|--help)
             echo -e ""
             echo -e "${BOLD}DS01 Project Init${NC}"
+            echo -e "${DIM}Part of workflow: user-setup → project-init → image-create → container-deploy${NC}"
             echo -e ""
             echo -e "${CYAN}Usage:${NC}"
             echo -e "  project-init [project-name] [--guided]"
-            echo -e "  project init [project-name] [--guided]"
             echo -e ""
             echo -e "${CYAN}Options:${NC}"
             echo -e "  --guided    Include detailed explanations for beginners"
@@ -59,7 +59,8 @@ for arg in "$@"; do
             echo -e "  project-init                    # Quick interactive setup"
             echo -e "  project-init --guided           # Beginner-friendly with explanations"
             echo -e "  project-init my-thesis          # Create 'my-thesis' project"
-            echo -e "  project init                    # Same as project-init"
+            echo -e ""
+            echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
             echo -e ""
             exit 0
             ;;

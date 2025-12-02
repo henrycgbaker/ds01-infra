@@ -43,6 +43,8 @@ usage() {
     echo ""
     echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-list for container discovery"
     echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
 }
 
 format_status() {

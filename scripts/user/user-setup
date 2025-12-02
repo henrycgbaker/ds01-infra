@@ -480,3 +480,5 @@ echo -e ""
 
 echo -e "${GREEN}Welcome to DS01! Happy computing!${NC}"
 echo -e ""
+echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+echo -e ""
