@@ -57,6 +57,7 @@ get_user_lifecycle_limits() {
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Remove${NC}"
+    echo -e "${DIM}L2 Atomic Command - For granular control. Most users should use: container-retire${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-remove [name] [options]"
@@ -105,7 +106,9 @@ usage() {
     echo ""
     echo -e "${RED}⚠ Important:${NC}"
     echo "  Container removal is permanent. GPU released immediately."
-    echo -e "  Recreate anytime with: ${GREEN}container-create <name>${NC}"
+    echo -e "  Recreate anytime with: ${GREEN}container-deploy <name>${NC}"
+    echo ""
+    echo -e "${DIM}Run 'help --atomic' to see all atomic container commands.${NC}"
     echo ""
 }
 
@@ -351,7 +354,7 @@ cleanup_container() {
 
     # Check if mlc-remove exists
     if [ -f "$MLC_REMOVE" ]; then
-        # Remove via mlc-remove (AIME Tier 1)
+        # Remove via mlc-remove (L1 AIME)
         if bash "$MLC_REMOVE" "$container_name" -f -s > /dev/null 2>&1; then
             echo -e "${GREEN}✓${NC} Removed container: $container_name"
 

@@ -60,9 +60,11 @@ usage() {
     echo ""
     echo -e "${CYAN}Quick Start:${NC}"
     echo -e "  1. Run: ${GREEN}image-create my-project${NC}"
-    echo "  2. Answer prompts to customize"
+    echo "  2. Answer prompts to customise"
     echo "  3. Wait a few minutes for build"
-    echo -e "  4. Then run: ${GREEN}container-create my-project${NC}"
+    echo -e "  4. Then run: ${GREEN}container-deploy my-project${NC}"
+    echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
     echo ""
 }
 

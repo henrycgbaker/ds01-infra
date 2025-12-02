@@ -49,6 +49,8 @@ usage() {
     echo ""
     echo -e "${YELLOW}⚠ Warning:${NC} This action cannot be undone!"
     echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
 }
 
 # Parse arguments

@@ -46,10 +46,10 @@ for arg in "$@"; do
         -h|--help)
             echo -e ""
             echo -e "${BOLD}DS01 Project Init${NC}"
+            echo -e "${DIM}Part of workflow: user-setup → project-init → image-create → container-deploy${NC}"
             echo -e ""
             echo -e "${CYAN}Usage:${NC}"
             echo -e "  project-init [project-name] [--guided]"
-            echo -e "  project init [project-name] [--guided]"
             echo -e ""
             echo -e "${CYAN}Options:${NC}"
             echo -e "  --guided    Include detailed explanations for beginners"
@@ -59,7 +59,8 @@ for arg in "$@"; do
             echo -e "  project-init                    # Quick interactive setup"
             echo -e "  project-init --guided           # Beginner-friendly with explanations"
             echo -e "  project-init my-thesis          # Create 'my-thesis' project"
-            echo -e "  project init                    # Same as project-init"
+            echo -e ""
+            echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
             echo -e ""
             exit 0
             ;;
@@ -234,7 +235,7 @@ fi
         STRUCTURE_TYPE="data-science"
     fi
 
-    # Call Tier 2 module: dir-create
+    # Call L2 atomic module: dir-create
     GUIDED_FLAG=""
     if [ "$GUIDED" = true ]; then
         GUIDED_FLAG="--guided"
@@ -263,7 +264,7 @@ else
 fi
 
 if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
-    # Call Tier 2 module: git-init (handles remote setup in guided mode)
+    # Call L2 atomic module: git-init (handles remote setup in guided mode)
     GUIDED_FLAG=""
     if [ "$GUIDED" = true ]; then
         GUIDED_FLAG="--guided"
@@ -280,7 +281,7 @@ if [ "$EXISTING_PROJECT" = false ]; then
     echo -e "${BOLD}Step 4: Creating Project Files${NC}"
     echo -e ""
 
-    # Call Tier 2 module: readme-create
+    # Call L2 atomic module: readme-create
     GUIDED_FLAG=""
     COMMIT_FLAG=""
     if [ "$GUIDED" = true ]; then

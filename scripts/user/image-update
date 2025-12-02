@@ -203,6 +203,8 @@ usage() {
     echo -e "   ${GREEN}container-retire my-project${NC}  ${DIM}# Stop + remove${NC}"
     echo -e "   ${GREEN}container-deploy my-project${NC}  ${DIM}# Create + start${NC}"
     echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
 }
 
 # Parse Dockerfile to extract Python packages (simple list)

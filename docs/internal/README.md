@@ -8,7 +8,7 @@ These documents cover internal architecture, audits, and planning - not needed f
 
 ### Architecture
 System design and integration documentation:
-- [COMMAND_LAYERS.md](architecture/COMMAND_LAYERS.md) - Command tier system design
+- [COMMAND_LAYERS.md](architecture/COMMAND_LAYERS.md) - Command layer system design (L0-L4)
 - [INTEGRATION_STRATEGY_v1.md](architecture/INTEGRATION_STRATEGY_v1.md) - Initial integration approach
 - [INTEGRATION_STRATEGY_v2.md](architecture/INTEGRATION_STRATEGY_v2.md) - Current integration approach
 - [MLC_PATCH_STRATEGY.md](architecture/MLC_PATCH_STRATEGY.md) - AIME MLC patching approach

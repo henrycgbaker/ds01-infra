@@ -44,6 +44,8 @@ usage() {
     echo "  • PIDs (processes)"
     echo "  • GPU usage (with --gpu flag)"
     echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
 }
 
 get_color_for_percentage() {

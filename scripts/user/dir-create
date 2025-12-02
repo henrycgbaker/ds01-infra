@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 Directory Create - Creates standardized project directory structures
-# Tier 2 Command - Can be used standalone or called by orchestrators
+# L2 Atomic Command - Can be used standalone or called by orchestrators
 
 set -e
 

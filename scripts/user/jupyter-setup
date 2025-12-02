@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 Jupyter Setup - Configure Jupyter Lab access
-# Tier 2 Command - Can be used standalone or called by orchestrators
+# L2 Atomic Command - Can be used standalone or called by orchestrators
 # File: /opt/ds01-infra/scripts/user/jupyter-setup
 
 set -e

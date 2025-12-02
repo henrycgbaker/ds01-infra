@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 Container List - Lists containers via mlc-list with DS01 UX
-# Tier 2 Command - Wraps AIME mlc-list with interactive GUI and formatting
+# L2 Atomic Command - Wraps AIME mlc-list with interactive GUI and formatting
 
 set -e
 
@@ -42,6 +42,8 @@ usage() {
     echo "  container-list --detailed    # Show detailed info"
     echo ""
     echo -e "${YELLOW}💡 Tip:${NC} This command uses AIME's mlc-list for container discovery"
+    echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
     echo ""
 }
 

@@ -57,6 +57,7 @@ get_user_lifecycle_limits() {
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Stop${NC}"
+    echo -e "${DIM}L2 Atomic Command - For granular control. Most users should use: container-retire${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-stop [name] [options]"
@@ -96,6 +97,8 @@ usage() {
     echo -e "  • Restart: ${GREEN}container-run <name>${NC}"
     echo -e "  • Remove:  ${GREEN}container-remove <name>${NC}"
     echo -e "  • Status:  ${GREEN}container-list${NC}"
+    echo ""
+    echo -e "${DIM}Run 'help --atomic' to see all atomic container commands.${NC}"
     echo ""
 }
 
@@ -186,7 +189,7 @@ stop_container() {
         fi
     fi
 
-    # Stop container via mlc-stop (AIME Tier 1)
+    # Stop container via mlc-stop (L1 AIME)
     if [ "$force" = true ]; then
         echo -e "${YELLOW}Force stopping...${NC}"
         if [ "$GUIDED" = true ]; then

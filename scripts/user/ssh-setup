@@ -1,6 +1,6 @@
 #!/bin/bash
 # DS01 SSH Setup - Configure SSH keys for remote access
-# Tier 2 Command - Can be used standalone or called by orchestrators
+# L2 Atomic Command - Can be used standalone or called by orchestrators
 # File: /opt/ds01-infra/scripts/user/ssh-setup
 
 set -e

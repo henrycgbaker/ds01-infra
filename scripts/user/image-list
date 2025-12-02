@@ -29,6 +29,8 @@ usage() {
     echo "  image-list --all        # List all images on server"
     echo "  image-list --detailed   # Show detailed info with Dockerfile locations"
     echo ""
+    echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
 }
 
 show_detailed() {
