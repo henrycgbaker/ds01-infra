@@ -340,23 +340,26 @@ case $START_MODE in
                 max_runtime="None"
             fi
 
+            # Flush any leftover stdin from container session
+            read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+
             echo -e "${BOLD}What would you like to do?${NC}"
             echo ""
             echo -e "${CYAN}1)${NC} ${BOLD}Keep running${NC} (exit session, container stays active)"
             echo "   • You can reconnect anytime"
             echo "   • GPU remains allocated to this container"
             if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
-                echo "   • Will auto-stop after ${CYAN}$idle_timeout${NC} of GPU inactivity"
+                echo -e "   • Will auto-stop after ${CYAN}$idle_timeout${NC} of GPU inactivity"
             fi
             if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
-                echo "   • Max runtime: ${CYAN}$max_runtime${NC}"
+                echo -e "   • Max runtime: ${CYAN}$max_runtime${NC}"
             fi
             echo ""
             echo -e "${CYAN}2)${NC} ${BOLD}Retire container${NC} (stop + remove, free GPU immediately)"
             echo "   • Removes container instance"
             echo "   • GPU freed immediately for others"
             echo "   • Workspace files remain safe"
-            echo "   • Can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
+            echo -e "   • Can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
             echo ""
 
             # Show guided explanation before prompt (if guided mode)
@@ -431,13 +434,15 @@ case $START_MODE in
                     # Clean up keep-alive before retiring
                     docker exec "$CONTAINER_TAG" pkill -f "\[ds01-keep-alive\]" 2>/dev/null || true
 
-                    # Call container-retire
+                    # Call container-retire with --skip-initial-confirm
+                    # (user already confirmed by choosing option 2, but they should still
+                    # get the save-packages and image-deletion prompts)
                     CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
                     if [ -f "$CONTAINER_RETIRE" ]; then
-                        bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --force
+                        bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --skip-initial-confirm
                     else
                         echo -e "${RED}✗${NC} container-retire not found"
-                        echo "Manual cleanup: ${GREEN}container-retire $CONTAINER_NAME${NC}"
+                        echo -e "Manual cleanup: ${GREEN}container-retire $CONTAINER_NAME${NC}"
                     fi
                     ;;
                 *)
@@ -449,15 +454,16 @@ case $START_MODE in
             esac
         else
             # Container stopped (shouldn't happen with keep-alive)
-            echo -e "${YELLOW}⚠${NC} Container was stopped"
+            echo -e "${YELLOW}⚠${NC} Container was stopped unexpectedly"
             echo ""
             echo -e "${BOLD}Retiring container to avoid ambiguous stopped state...${NC}"
             echo ""
 
             # Auto-retire to follow "running or removed" principle
+            # Use --skip-initial-confirm for consistent prompts (save packages, image deletion)
             CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
             if [ -f "$CONTAINER_RETIRE" ]; then
-                bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --force
+                bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --skip-initial-confirm
             fi
         fi
 

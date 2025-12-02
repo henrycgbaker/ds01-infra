@@ -118,6 +118,7 @@ usage() {
 CONTAINER_NAME=""
 GUIDED=false
 FORCE=false
+SKIP_INITIAL_CONFIRM=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -128,6 +129,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         -f|--force)
             FORCE=true
+            shift
+            ;;
+        --skip-initial-confirm)
+            # Skip only the "Continue? [y/N]" prompt, but show save/image prompts
+            # Used when called from container-deploy option 2 (user already confirmed)
+            SKIP_INITIAL_CONFIRM=true
             shift
             ;;
         --dry-run)
@@ -231,8 +238,8 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-# Confirm retirement (unless --force)
-if [ "$FORCE" != "true" ]; then
+# Confirm retirement (unless --force or --skip-initial-confirm)
+if [ "$FORCE" != "true" ] && [ "$SKIP_INITIAL_CONFIRM" != "true" ]; then
     echo -e "${YELLOW}⚠ This will stop & remove container: ${BOLD}$CONTAINER_NAME${NC}\n"
     if [ "$GUIDED" = "true" ]; then
         echo -e "${BOLD}What will happen:${NC}"
@@ -254,7 +261,7 @@ if [ "$FORCE" != "true" ]; then
         echo -e "  • ${GREEN}Docker images${NC}"
         echo ""
     fi
-    
+
     read -p "Continue? [y/N]: " CONFIRM </dev/tty
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
         echo "Cancelled."
@@ -352,6 +359,55 @@ if "$CONTAINER_REMOVE" "$CONTAINER_NAME" "${REMOVE_ARGS[@]}"; then
         echo -e "${BOLD}To recreate:${NC}  ${GREEN}container deploy $CONTAINER_NAME${NC}"
         echo ""
     fi
+
+    # Prompt for optional image deletion (always shown when custom image exists)
+    # --force skips container confirmations but not this prompt
+    {
+        # Get image info
+        IMAGE_NAME="ds01-$(id -u)/$CONTAINER_NAME:latest"
+        IMAGE_SIZE=$(docker images "$IMAGE_NAME" --format "{{.Size}}" 2>/dev/null)
+        DOCKERFILE="$HOME/dockerfiles/${CONTAINER_NAME}.Dockerfile"
+        DOCKERFILE_SIZE=""
+        if [ -f "$DOCKERFILE" ]; then
+            DOCKERFILE_SIZE=$(du -h "$DOCKERFILE" 2>/dev/null | cut -f1)
+        fi
+
+        if [ -n "$IMAGE_SIZE" ]; then
+            echo -e "${CYAN}━━━ Image Cleanup (Optional) ━━━${NC}"
+            echo ""
+
+            if [ "$GUIDED" = true ]; then
+                echo -e "${CYAN}ℹ${NC} ${BOLD}About Docker Images:${NC}"
+                echo "  • An image is like an executable built from your Dockerfile"
+                echo "  • It can be rebuilt anytime from the Dockerfile"
+                echo "  • Keeping it means faster container-deploy (no rebuild needed)"
+                echo "  • Removing it frees disk space but requires rebuild next time"
+                echo ""
+            fi
+
+            echo -e "  Image: ${BOLD}$IMAGE_NAME${NC} (${IMAGE_SIZE})"
+            if [ -n "$DOCKERFILE_SIZE" ]; then
+                echo -e "  Dockerfile: ${GREEN}✓${NC} ~/dockerfiles/${CONTAINER_NAME}.Dockerfile (${DOCKERFILE_SIZE})"
+            fi
+            echo ""
+            echo -e "  ${GREEN}Default: Keep image${NC} (faster next deploy)"
+            read -p "Also remove the Docker image? [y/N]: " REMOVE_IMAGE </dev/tty
+
+            if [[ "$REMOVE_IMAGE" =~ ^[Yy]$ ]]; then
+                if docker rmi "$IMAGE_NAME" > /dev/null 2>&1; then
+                    echo -e "${GREEN}✓${NC} Image removed"
+                    if [ -n "$DOCKERFILE_SIZE" ]; then
+                        echo -e "${DIM}  (Can rebuild with: image-create $CONTAINER_NAME)${NC}"
+                    fi
+                else
+                    echo -e "${YELLOW}⚠${NC} Could not remove image (may be in use)"
+                fi
+            else
+                echo -e "${DIM}Image kept for faster redeployment${NC}"
+            fi
+            echo ""
+        fi
+    }
 else
     echo ""
     echo -e "${RED}✗ Container retirement failed${NC}"

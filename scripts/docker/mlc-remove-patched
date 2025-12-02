@@ -1,0 +1,10 @@
+#!/bin/bash
+# DS01 patched mlc-remove - uses mlc-patched.py instead of original mlc.py
+# This preserves images by default (unlike original mlc remove)
+#
+# The original AIME mlc remove command unconditionally deletes the container's
+# Docker image. DS01 needs to preserve images by default since they are reusable
+# across container instances.
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+python3 "$SCRIPT_DIR/mlc-patched.py" remove "$@"

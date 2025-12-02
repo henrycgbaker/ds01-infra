@@ -337,11 +337,22 @@ def get_flags():
         help='Force to remove the container without asking the user.'
     )
     parser_remove.add_argument(
-        '-s', '--script', 
-        action='store_true', 
+        '-s', '--script',
+        action='store_true',
         help="Enable script mode (default: interactive mode)."
     )
-    
+    parser_remove.add_argument(
+        '--keep-image',
+        action='store_true',
+        default=True,
+        help='Keep the Docker image after removing container (default: True).'
+    )
+    parser_remove.add_argument(
+        '--remove-image',
+        action='store_true',
+        help='Also remove the Docker image after removing container.'
+    )
+
     # Parser for the "start" command
     parser_start = subparsers.add_parser(
         'start', 
@@ -2472,10 +2483,12 @@ def main():
             docker_command_delete_container = f"docker container rm {selected_container_tag}"
             subprocess.Popen(docker_command_delete_container, shell=True, text=True, stdout=subprocess.PIPE).wait()
 
-            # Delete the container's image
-            print(f"\n{NEUTRAL}Deleting related image ...{RESET}")
-            docker_command_rm_image = f"docker image rm {container_image}"            
-            subprocess.Popen(docker_command_rm_image, shell=True).wait()
+            # Delete the container's image (only if --remove-image flag is set)
+            if hasattr(args, 'remove_image') and args.remove_image:
+                print(f"\n{NEUTRAL}Deleting related image ...{RESET}")
+                docker_command_rm_image = f"docker image rm {container_image}"
+                subprocess.Popen(docker_command_rm_image, shell=True).wait()
+            # else: silently preserve image (DS01 default behavior)
 
             print(f"\n{INPUT}[{selected_container_name}]{RESET} {NEUTRAL}container removed.{RESET}\n") 
             
