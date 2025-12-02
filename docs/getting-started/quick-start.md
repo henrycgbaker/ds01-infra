@@ -391,9 +391,9 @@ image-create
 ## Next Steps
 
 ### Learn More
-- [Ephemeral Containers Concept](../concepts/ephemeral-containers.md) - Philosophy and best practices
-- [Resource Management](../concepts/resource-management.md) - How limits work
-- [Industry Practices](../concepts/industry-practices.md) - Production relevance
+- [Ephemeral Containers Concept](../background/ephemeral-philosophy.md) - Philosophy and best practices
+- [Resource Management](../background/resource-management.md) - How limits work
+- [Industry Practices](../background/industry-parallels.md) - Production relevance
 
 ### Advanced Topics
 - [Dockerfile Guide](../advanced/dockerfile-guide.md) - Efficient image building

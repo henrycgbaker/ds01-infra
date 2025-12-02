@@ -403,7 +403,7 @@ Now that you're set up, practice the daily workflow:
 2. **Work:** Code, train models, experiment
 3. **Evening:** `container-retire my-first-project`
 
-**Read:** [Daily Usage Patterns](../workflows/daily-usage.md)
+**Read:** [Daily Usage Patterns](../guides/daily-workflow.md)
 
 ### Customize Your Environment
 
@@ -421,21 +421,21 @@ container-retire my-first-project
 container-deploy my-first-project --open
 ```
 
-**Read:** [Building Custom Images](../workflows/custom-images.md)
+**Read:** [Building Custom Images](../guides/custom-images.md)
 
 ### Understand the Fundamentals
 
 New to Linux or containers? Build foundational knowledge:
-- [Linux Basics](../fundamentals/linux-basics.md)
-- [Containers Explained](../fundamentals/containers-explained.md)
-- [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md)
+- [Linux Basics](../background/linux-basics.md)
+- [Containers Explained](../background/containers-and-docker.md)
+- [Workspaces & Persistence](../background/workspaces-and-persistence.md)
 
 ### Learn DS01 Concepts
 
 Understand the philosophy and design:
-- [Ephemeral Containers](../concepts/ephemeral-containers.md)
-- [Resource Management](../concepts/resource-management.md)
-- [Industry Practices](../concepts/industry-practices.md)
+- [Ephemeral Containers](../background/ephemeral-philosophy.md)
+- [Resource Management](../background/resource-management.md)
+- [Industry Practices](../background/industry-parallels.md)
 
 ### Explore Advanced Topics
 

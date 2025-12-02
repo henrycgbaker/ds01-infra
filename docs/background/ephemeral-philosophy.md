@@ -640,13 +640,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 ### Understand Persistence
 
 **Critical knowledge:**
-→ [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md)
+→ [Workspaces & Persistence](../background/workspaces-and-persistence.md)
 
 ### Learn Daily Workflows
 
 **Put philosophy into practice:**
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
-→ [Managing Containers](../workflows/managing-containers.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)
+→ [Managing Containers](../guides/daily-workflow.md)
 
 ### Understand Resources
 
@@ -670,6 +670,6 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 **Embrace the philosophy: Containers are temporary, workspaces are forever.**
 
-**Ready for daily workflows?** → [Daily Usage Patterns](../workflows/daily-usage.md)
+**Ready for daily workflows?** → [Daily Usage Patterns](../guides/daily-workflow.md)
 
 **Understand the technology?** → [Industry Practices](industry-practices.md)

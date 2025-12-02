@@ -631,12 +631,12 @@ docker image prune
 ### Learn Daily Workflow
 
 **Put knowledge into practice:**
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)
 
 ### Advanced Organization
 
 **Project structure:**
-→ [Project Structure](../concepts/project-structure.md)
+→ [Project Structure](../guides/creating-projects.md)
 
 ---
 
@@ -653,6 +653,6 @@ docker image prune
 
 **The golden rule: If it's important, save it to `/workspace`!**
 
-**Ready to start working?** → [Daily Usage Patterns](../workflows/daily-usage.md)
+**Ready to start working?** → [Daily Usage Patterns](../guides/daily-workflow.md)
 
-**Want to understand the philosophy?** → [Ephemeral Containers](../concepts/ephemeral-containers.md)
+**Want to understand the philosophy?** → [Ephemeral Containers](../background/ephemeral-philosophy.md)

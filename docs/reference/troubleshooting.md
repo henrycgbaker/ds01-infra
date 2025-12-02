@@ -831,12 +831,12 @@ Permission denied (publickey)
 ## Next Steps
 
 **Understand the system:**
-→ [Containers Explained](../fundamentals/containers-explained.md)
-→ [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md)
+→ [Containers Explained](../background/containers-and-docker.md)
+→ [Workspaces & Persistence](../background/workspaces-and-persistence.md)
 
 **Learn best practices:**
 → [Best Practices](../advanced/best-practices.md)
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)
 
 **Command reference:**
 → [Command Reference](command-reference.md)

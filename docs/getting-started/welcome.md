@@ -129,7 +129,7 @@ container-deploy my-project --open      # Create + start + enter
 container-retire my-project             # Stop + remove + free GPU
 ```
 
-**See**: [Daily Usage Patterns](../workflows/daily-usage.md)
+**See**: [Daily Usage Patterns](../guides/daily-workflow.md)
 
 ### 3. Customize Your Environment
 Build custom images with your packages:
@@ -138,7 +138,7 @@ image-create                            # Interactive builder
 # Choose PyTorch 2.8.0, add scikit-learn, pandas, your favorite tools
 ```
 
-**See**: [Building Custom Images](../workflows/custom-images.md)
+**See**: [Building Custom Images](../guides/custom-images.md)
 
 ## Key Concepts You'll Learn
 
@@ -187,18 +187,18 @@ Containers are isolated - you can't break the system or affect others. Worst cas
 
 ### For Beginners
 1. Read [First-Time Setup](first-time-setup.md) - Complete onboarding guide
-2. Explore [Fundamentals](../fundamentals/) - Build foundational knowledge
-3. Try [Daily Usage Patterns](../workflows/daily-usage.md) - Common workflows
+2. Explore [Background](../background/) - Build foundational knowledge
+3. Try [Daily Usage Patterns](../guides/daily-workflow.md) - Common workflows
 
 ### For Experienced Users
 1. Run [Quick Start](quick-start.md) - Get started in 5 minutes
 2. Check [Command Reference](../reference/command-reference.md) - All commands
-3. Read [Ephemeral Containers](../concepts/ephemeral-containers.md) - DS01's philosophy
+3. Read [Ephemeral Containers](../background/ephemeral-philosophy.md) - DS01's philosophy
 
 ### Want to Understand More?
-- [What is a Server?](../fundamentals/what-is-a-server.md) - Shared computing explained
-- [Containers Explained](../fundamentals/containers-explained.md) - Docker fundamentals
-- [Understanding HPC](../fundamentals/understanding-hpc.md) - High-performance computing
+- [What is a Server?](../background/servers-and-hpc.md) - Shared computing explained
+- [Containers Explained](../background/containers-and-docker.md) - Docker fundamentals
+- [Understanding HPC](../background/servers-and-hpc.md) - High-performance computing
 
 ---
 

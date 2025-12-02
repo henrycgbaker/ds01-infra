@@ -1,0 +1,65 @@
+name: Sync Documentation to ds01-hub
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/**'
+      - '!docs/internal/**'
+
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source repo (ds01-infra)
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      - name: Checkout target repo (ds01-hub)
+        uses: actions/checkout@v4
+        with:
+          repository: hertie-data-science-lab/ds01-hub
+          ssh-key: ${{ secrets.DOCS_DEPLOY_KEY }}
+          path: target
+
+      - name: Sync documentation
+        run: |
+          # Remove old docs in target (preserve other content)
+          rm -rf target/docs/
+          mkdir -p target/docs/
+
+          # Sync user-facing docs only
+          cp source/docs/README.md target/docs/
+          cp source/docs/quick-reference.md target/docs/
+          cp -r source/docs/getting-started target/docs/
+          cp -r source/docs/guides target/docs/
+          cp -r source/docs/background target/docs/
+          cp -r source/docs/reference target/docs/
+          cp -r source/docs/troubleshooting target/docs/
+          cp -r source/docs/advanced target/docs/
+
+      - name: Check for changes
+        id: changes
+        working-directory: target
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit and push
+        if: steps.changes.outputs.has_changes == 'true'
+        working-directory: target
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "docs: sync from ds01-infra
+
+          Source: ${{ github.sha }}"
+          git push

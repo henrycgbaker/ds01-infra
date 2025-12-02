@@ -715,7 +715,7 @@ ls -a                       # Shows .bashrc
 → [Containers Explained](containers-explained.md)
 
 **DS01 usage:**
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)
 
 **Advanced topics:**
 → [Best Practices](../advanced/best-practices.md)

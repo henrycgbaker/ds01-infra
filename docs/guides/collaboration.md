@@ -54,4 +54,4 @@ python src/train.py
 ## Next Steps
 
 → [Creating Projects](creating-projects.md)
-→ [Project Structure](../concepts/project-structure.md)
+→ [Project Structure](../guides/creating-projects.md)
