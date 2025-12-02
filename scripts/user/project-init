@@ -108,26 +108,26 @@ else
     echo -e "  ${BOLD}DS01 Project Init${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 fi
-echo -e ""
 
 if [ "$INTERACTIVE" = true ] && [ "$GUIDED" = false ]; then
+    echo -e ""
     echo -e "${BOLD}Project Setup${NC}"
     echo -e "${DIM}Tip: Add --guided flag for detailed explanations${NC}"
-    echo -e ""
 fi
 
 # Step 1: Project Name and Type
+echo -e ""
 echo -e "${BOLD}Step 1: Project Information${NC}"
 
 if [ "$GUIDED" = true ]; then
-    echo ""
+    echo -e ""
     echo -e "A project is your workspace directory containing:"
     echo -e "  • Your code ${DIM}(scripts, notebooks)${NC}"
     echo -e "  • Your data ${DIM}(datasets, trained models)${NC}"
     echo -e "  • Configuration files"
-    echo -e "  • Research outpits ${DIM}(visualisations, outputs)${NC}"
-    echo ""
-    echo -e "${YELLOW} Everything persists across container restarts${NC}"
+    echo -e "  • Research outputs ${DIM}(visualisations, outputs)${NC}"
+    echo -e ""
+    echo -e "${YELLOW}💡 Everything persists across container restarts${NC}"
 fi
 echo -e ""
 
@@ -199,21 +199,19 @@ fi
 if [ "$EXISTING_PROJECT" = false ]; then
     echo -e ""
     echo -e "${BOLD}Step 2: Creating Project Structure${NC}"
+
+    # Show guided introduction
+    if [ "$GUIDED" = true ]; then
+        echo -e ""
+        echo -e "Why use a standardised DS/ML template structure?"
+        echo -e "  • Collaborate with others easily"
+        echo -e "  • Follow ML/DS best practices"
+        echo -e "  • Keep raw data separate from processed data"
+        echo -e "  • Track experiments and results"
+        echo -e ""
+        read -p "Press Enter to create the directory structure..." </dev/tty
+    fi
     echo -e ""
-
-# Show guided introduction
-if [ "$GUIDED" = true ]; then
-    echo -e "Why use a standardised DS/ML template structure?"
-    echo "  • Collaborate with others easily"
-    echo "  • Follow ML/DS best practices"
-    echo "  • Keep raw data separate from processed data"
-    echo "  • Track experiments and results"
-    echo ""
-
-    read -p "Press Enter to create the directory structure..." </dev/tty
-    echo ""
-fi
-
 
     if [ "$INTERACTIVE" = true ]; then
         # Directory structure choice
@@ -251,7 +249,6 @@ fi
 # Step 3: Git Setup
 echo -e ""
 echo -e "${BOLD}Step 3: Git Version Control${NC}"
-echo -e ""
 
 SKIP_GIT=false
 
@@ -278,7 +275,6 @@ fi
 if [ "$EXISTING_PROJECT" = false ]; then
     echo -e ""
     echo -e "${BOLD}Step 4: Creating Project Files${NC}"
-    echo -e ""
 
     # Call Tier 2 module: readme-create
     GUIDED_FLAG=""

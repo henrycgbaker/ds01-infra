@@ -317,6 +317,7 @@ usage() {
 
     echo ""
     echo -e "${BOLD}DS01 Container ${MODE^}${NC}"
+    echo -e "${DIM}L2 Atomic Command - For granular control. Most users should use: container-deploy${NC}"
     echo ""
     echo -e "${CYAN}Usage:${NC}"
     echo "  container-$MODE [name] [options]"
@@ -331,6 +332,8 @@ usage() {
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "$examples"
+    echo ""
+    echo -e "${DIM}Run 'help --atomic' to see all atomic container commands.${NC}"
     echo ""
 }
 
@@ -366,12 +369,14 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# === HEADER ===
-echo ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Container ${MODE^}${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
+# === HEADER (only in atomic context) ===
+if is_atomic_context && [[ -z "$DS01_ORCHESTRATOR" ]]; then
+    echo -e ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Container ${MODE^}${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e ""
+fi
 
 # === GUIDED INTRO ===
 if [[ "$GUIDED" == true && -z "$CONTAINER_NAME" ]]; then

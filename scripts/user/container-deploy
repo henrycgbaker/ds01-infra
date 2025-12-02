@@ -143,8 +143,10 @@ if [ "$GUIDED" = true ]; then
 fi
 
 # Step 1: Create container
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}Step 1/2: Creating Container${NC}"
-echo ""
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e ""
 
 # Use a temp file to communicate container name from container-create (for "use existing" case)
 CONTAINER_NAME_FILE="/tmp/ds01-deploy-container-$$"

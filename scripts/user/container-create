@@ -906,10 +906,15 @@ fi
 echo -e "${CYAN}Creating container via mlc-create-wrapper...${NC}"
 
 if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✓ Container Created Successfully!${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    # Show success banner only in atomic context
+    if [[ -z "$DS01_ORCHESTRATOR" && "${DS01_CONTEXT:-atomic}" == "atomic" ]]; then
+        echo -e ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${GREEN}${BOLD}✓ Container Created Successfully!${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    else
+        echo -e "${GREEN}✓${NC} Container created"
+    fi
 
     # Only show L2 "Next steps" when NOT called from orchestrator
     # Check both DS01_CONTEXT (new) and DS01_ORCHESTRATOR (legacy)

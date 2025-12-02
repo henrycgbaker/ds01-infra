@@ -17,6 +17,12 @@ NC='\033[0m'
 USERNAME=$(whoami)
 WORKSPACE_DIR="$HOME/workspace"
 
+# Check if we're in orchestration context (called by project-init/user-setup)
+IS_ORCHESTRATED=false
+if [[ "${DS01_CONTEXT:-}" == "orchestration" ]]; then
+    IS_ORCHESTRATED=true
+fi
+
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Git Init${NC}"
@@ -147,11 +153,14 @@ fi
 
 # Show guided introduction
 if [ "$GUIDED" = true ]; then
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}Git Version Control Setup${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    # Show banner only in atomic context
+    if [ "$IS_ORCHESTRATED" = false ]; then
+        echo -e ""
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Git Version Control Setup${NC}"
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e ""
+    fi
     echo -e "${BOLD}What We'll Set Up:${NC}"
     echo ""
     echo -e "  1. ${CYAN}.gitignore${NC}"
@@ -173,9 +182,12 @@ fi
 # Navigate to project directory
 cd "$PROJECT_DIR"
 
-echo ""
-echo -e "${BOLD}Initializing Git Repository${NC}"
-echo ""
+# Show header only in atomic context
+if [ "$IS_ORCHESTRATED" = false ]; then
+    echo -e ""
+    echo -e "${BOLD}Initializing Git Repository${NC}"
+    echo -e ""
+fi
 
 # Create comprehensive .gitignore for ML projects
 echo -e "${BLUE}Creating .gitignore...${NC}"
@@ -375,25 +387,25 @@ fi
 echo ""
 echo -e "${GREEN}✓ Git setup complete${NC}"
 
-# Summary
-if [ "$GUIDED" = true ]; then
-    echo ""
+# Summary - only show detailed output in atomic context
+if [ "$GUIDED" = true ] && [ "$IS_ORCHESTRATED" = false ]; then
+    echo -e ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Git Repository Ready${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
+    echo -e ""
     echo -e "${BOLD}Next Steps:${NC}"
-    echo ""
+    echo -e ""
     echo "  Create your first commit:"
     echo -e "     ${GREEN}cd $PROJECT_DIR${NC}"
     echo -e "     ${GREEN}git add .${NC}"
     echo -e "     ${GREEN}git commit -m \"Initial commit\"${NC}"
     if git remote get-url origin &>/dev/null; then
-        echo ""
+        echo -e ""
         echo "  2) Push to remote:"
         echo -e "     ${GREEN}git push -u origin main${NC}"
     fi
-else
+elif [ "$IS_ORCHESTRATED" = false ]; then
     # Non-guided: brief output
     echo ""
     echo -e "${BOLD}Repository info:${NC}"
