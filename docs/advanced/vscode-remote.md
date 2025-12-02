@@ -75,4 +75,4 @@ Host ds01-container
 ## Next Steps
 
 → [SSH Setup](ssh-setup.md)
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)

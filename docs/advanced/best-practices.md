@@ -119,5 +119,5 @@ container-deploy my-project --gpu 1
 
 ## Next Steps
 
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
-→ [Industry Practices](../concepts/industry-practices.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)
+→ [Industry Practices](../background/industry-parallels.md)

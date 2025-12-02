@@ -60,5 +60,5 @@ nvidia-smi      # Driver version
 
 ## Next Steps
 
-→ [Working with GPUs](../workflows/gpu-usage.md)
-→ [Resource Management](../concepts/resource-management.md)
+→ [Working with GPUs](../guides/gpu-usage.md)
+→ [Resource Management](../background/resource-management.md)

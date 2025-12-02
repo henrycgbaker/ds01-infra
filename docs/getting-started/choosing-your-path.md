@@ -48,18 +48,18 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 **Estimated time:** 4-6 hours of reading + practice
 
 #### Week 1: Understanding the Environment
-1. [What is a Server?](../fundamentals/what-is-a-server.md) (20 min)
+1. [What is a Server?](../background/servers-and-hpc.md) (20 min)
    - Shared computing resources
    - Multi-user environments
    - Why not just use your laptop?
 
-2. [Linux Basics](../fundamentals/linux-basics.md) (45 min)
+2. [Linux Basics](../background/linux-basics.md) (45 min)
    - Directory structure
    - Essential commands
    - File permissions
    - Practice exercises
 
-3. [Understanding HPC](../fundamentals/understanding-hpc.md) (30 min)
+3. [Understanding HPC](../background/servers-and-hpc.md) (30 min)
    - High-performance computing concepts
    - Clusters and nodes
    - Job scheduling basics
@@ -67,12 +67,12 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 **Practice:** Log in, navigate directories, create files, check permissions.
 
 #### Week 2: Containers and Workflows
-4. [Containers Explained](../fundamentals/containers-explained.md) (40 min)
+4. [Containers Explained](../background/containers-and-docker.md) (40 min)
    - What are containers?
    - Why use them?
    - Containers vs virtual machines
 
-5. [Docker Images](../fundamentals/docker-images.md) (30 min)
+5. [Docker Images](../background/containers-and-docker.md) (30 min)
    - Images vs containers
    - Building images
    - Dockerfiles basics
@@ -85,17 +85,17 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 **Practice:** Run `user-setup`, create a container, explore inside it.
 
 #### Week 3: Working Effectively
-7. [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md) (25 min)
+7. [Workspaces & Persistence](../background/workspaces-and-persistence.md) (25 min)
    - What's saved vs temporary
    - File organization
    - Backup strategies
 
-8. [Ephemeral Containers](../concepts/ephemeral-containers.md) (30 min)
+8. [Ephemeral Containers](../background/ephemeral-philosophy.md) (30 min)
    - DS01's philosophy
    - Daily workflows
    - Resource sharing
 
-9. [Daily Usage Patterns](../workflows/daily-usage.md) (35 min)
+9. [Daily Usage Patterns](../guides/daily-workflow.md) (35 min)
    - Common workflows
    - Best practices
    - Time-saving tips
@@ -116,23 +116,23 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 **Estimated time:** 2-3 hours
 
 #### Start Here
-1. [Containers Explained](../fundamentals/containers-explained.md) (40 min)
+1. [Containers Explained](../background/containers-and-docker.md) (40 min)
    - Container fundamentals
    - Docker basics
    - Isolation and security
 
-2. [Docker Images](../fundamentals/docker-images.md) (30 min)
+2. [Docker Images](../background/containers-and-docker.md) (30 min)
    - Image layers
    - Building images
    - Best practices
 
-3. [Ephemeral Containers](../concepts/ephemeral-containers.md) (30 min)
+3. [Ephemeral Containers](../background/ephemeral-philosophy.md) (30 min)
    - Why ephemeral?
    - Persistent vs temporary
    - Industry parallels (EC2, Kubernetes)
 
 #### DS01 Specifics
-4. [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md) (25 min)
+4. [Workspaces & Persistence](../background/workspaces-and-persistence.md) (25 min)
    - File organization
    - What's mounted where
 
@@ -140,13 +140,13 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
    - DS01 command overview
    - First container deployment
 
-6. [Managing Containers](../workflows/managing-containers.md) (30 min)
+6. [Managing Containers](../guides/daily-workflow.md) (30 min)
    - Container lifecycle
    - Deploy/retire workflows
    - Monitoring
 
 #### Deep Dive
-7. [Building Custom Images](../workflows/custom-images.md) (45 min)
+7. [Building Custom Images](../guides/custom-images.md) (45 min)
    - 4-phase image creation
    - Adding packages
    - Optimization tips
@@ -166,27 +166,27 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 **Estimated time:** 2 hours
 
 #### Start Here
-1. [Understanding HPC](../fundamentals/understanding-hpc.md) (30 min)
+1. [Understanding HPC](../background/servers-and-hpc.md) (30 min)
    - Shared computing concepts
    - Fair scheduling
    - Priority systems
 
-2. [Resource Management](../concepts/resource-management.md) (40 min)
+2. [Resource Management](../background/resource-management.md) (40 min)
    - Resource limits and quotas
    - Priority allocation
    - Systemd cgroups
 
-3. [GPU Computing](../fundamentals/gpu-computing.md) (35 min)
+3. [GPU Computing](../background/gpu-computing.md) (35 min)
    - Why GPUs for ML?
    - MIG partitioning (A100)
    - GPU monitoring
 
 #### DS01 Specifics
-4. [Ephemeral Containers](../concepts/ephemeral-containers.md) (30 min)
+4. [Ephemeral Containers](../background/ephemeral-philosophy.md) (30 min)
    - Why stop containers when idle?
    - Resource sharing etiquette
 
-5. [Working with GPUs](../workflows/gpu-usage.md) (40 min)
+5. [Working with GPUs](../guides/gpu-usage.md) (40 min)
    - GPU allocation
    - Monitoring usage
    - Troubleshooting
@@ -211,24 +211,24 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 
 #### Essential Reading (15 min)
 1. [Quick Start](quick-start.md) (10 min)
-2. [Ephemeral Containers](../concepts/ephemeral-containers.md) (5 min - skim)
+2. [Ephemeral Containers](../background/ephemeral-philosophy.md) (5 min - skim)
 
 #### Task Guides (As Needed)
 
 **Starting a new project:**
-→ [Creating Projects](../workflows/creating-projects.md)
+→ [Creating Projects](../guides/creating-projects.md)
 
 **Daily work:**
-→ [Daily Usage Patterns](../workflows/daily-usage.md)
+→ [Daily Usage Patterns](../guides/daily-workflow.md)
 
 **Custom packages:**
-→ [Building Custom Images](../workflows/custom-images.md)
+→ [Building Custom Images](../guides/custom-images.md)
 
 **GPU work:**
-→ [Working with GPUs](../workflows/gpu-usage.md)
+→ [Working with GPUs](../guides/gpu-usage.md)
 
 **Collaboration:**
-→ [Collaboration Guide](../workflows/collaboration.md)
+→ [Collaboration Guide](../guides/collaboration.md)
 
 **Problems:**
 → [Troubleshooting](../reference/troubleshooting.md)
@@ -248,23 +248,23 @@ The DS01 documentation is modular - you don't need to read everything linearly. 
 
 #### Phase 1: Foundations (2 hours)
 1. [Welcome to DS01](welcome.md)
-2. [What is a Server?](../fundamentals/what-is-a-server.md)
-3. [Understanding HPC](../fundamentals/understanding-hpc.md)
-4. [Containers Explained](../fundamentals/containers-explained.md)
-5. [Docker Images](../fundamentals/docker-images.md)
+2. [What is a Server?](../background/servers-and-hpc.md)
+3. [Understanding HPC](../background/servers-and-hpc.md)
+4. [Containers Explained](../background/containers-and-docker.md)
+5. [Docker Images](../background/containers-and-docker.md)
 
 #### Phase 2: DS01 Philosophy (1.5 hours)
-6. [Ephemeral Containers](../concepts/ephemeral-containers.md)
-7. [Resource Management](../concepts/resource-management.md)
-8. [Project Structure](../concepts/project-structure.md)
-9. [Industry Practices](../concepts/industry-practices.md)
+6. [Ephemeral Containers](../background/ephemeral-philosophy.md)
+7. [Resource Management](../background/resource-management.md)
+8. [Project Structure](../guides/creating-projects.md)
+9. [Industry Practices](../background/industry-parallels.md)
 
 #### Phase 3: Practical Skills (2 hours)
 10. [First-Time Setup](first-time-setup.md)
-11. [Daily Usage Patterns](../workflows/daily-usage.md)
-12. [Managing Containers](../workflows/managing-containers.md)
-13. [Building Custom Images](../workflows/custom-images.md)
-14. [Working with GPUs](../workflows/gpu-usage.md)
+11. [Daily Usage Patterns](../guides/daily-workflow.md)
+12. [Managing Containers](../guides/daily-workflow.md)
+13. [Building Custom Images](../guides/custom-images.md)
+14. [Working with GPUs](../guides/gpu-usage.md)
 
 #### Phase 4: Advanced Topics (2 hours)
 15. [Dockerfile Guide](../advanced/dockerfile-guide.md)
@@ -305,7 +305,7 @@ python -c "import torch; print(torch.cuda.is_available())"
 - Your favorite tools
 
 **Resources:**
-- [Building Custom Images](../workflows/custom-images.md)
+- [Building Custom Images](../guides/custom-images.md)
 - [Dockerfile Guide](../advanced/dockerfile-guide.md)
 
 **Validation:**
@@ -317,8 +317,8 @@ python -c "import transformers; print(transformers.__version__)"
 **Problem:** Train a model, retire container, restart, and continue training.
 
 **Resources:**
-- [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md)
-- [Daily Usage Patterns](../workflows/daily-usage.md)
+- [Workspaces & Persistence](../background/workspaces-and-persistence.md)
+- [Daily Usage Patterns](../guides/daily-workflow.md)
 
 **Validation:** Training checkpoint loads correctly after container recreation.
 
@@ -326,8 +326,8 @@ python -c "import transformers; print(transformers.__version__)"
 **Problem:** Monitor GPU usage and understand MIG allocation.
 
 **Resources:**
-- [GPU Computing](../fundamentals/gpu-computing.md)
-- [Working with GPUs](../workflows/gpu-usage.md)
+- [GPU Computing](../background/gpu-computing.md)
+- [Working with GPUs](../guides/gpu-usage.md)
 
 **Validation:** Can explain your GPU allocation and monitor usage.
 
@@ -344,8 +344,8 @@ python -c "import transformers; print(transformers.__version__)"
 **Problem:** Share a reproducible project with a colleague.
 
 **Resources:**
-- [Collaboration Guide](../workflows/collaboration.md)
-- [Project Structure](../concepts/project-structure.md)
+- [Collaboration Guide](../guides/collaboration.md)
+- [Project Structure](../guides/creating-projects.md)
 
 **Validation:** Colleague can clone repo and recreate environment.
 
@@ -359,23 +359,23 @@ python -c "import transformers; print(transformers.__version__)"
 **Estimated time:** 3 hours
 
 #### Cloud-Native Computing
-1. [Industry Practices](../concepts/industry-practices.md) (45 min)
+1. [Industry Practices](../background/industry-parallels.md) (45 min)
    - How AWS/GCP use containers
    - Kubernetes parallels
    - MLOps workflows
 
-2. [Ephemeral Containers](../concepts/ephemeral-containers.md) (30 min)
+2. [Ephemeral Containers](../background/ephemeral-philosophy.md) (30 min)
    - Stateless compute
    - Persistent storage separation
    - Spot instances analogy
 
-3. [Resource Management](../concepts/resource-management.md) (40 min)
+3. [Resource Management](../background/resource-management.md) (40 min)
    - Cost optimization
    - Resource quotas
    - Priority scheduling
 
 #### Production Best Practices
-4. [Project Structure](../concepts/project-structure.md) (30 min)
+4. [Project Structure](../guides/creating-projects.md) (30 min)
    - Organizing production projects
    - Reproducibility
    - Version control
@@ -391,7 +391,7 @@ python -c "import transformers; print(transformers.__version__)"
    - Multi-stage builds
    - Security scanning
 
-7. [Collaboration](../workflows/collaboration.md) (30 min)
+7. [Collaboration](../guides/collaboration.md) (30 min)
    - Team workflows
    - Shared resources
    - Documentation
@@ -454,17 +454,17 @@ You're an expert when you can:
 Based on your starting point:
 
 ### After Quick Start
-→ Read [Ephemeral Containers](../concepts/ephemeral-containers.md) to understand philosophy
-→ Explore [Daily Usage Patterns](../workflows/daily-usage.md) for efficiency
+→ Read [Ephemeral Containers](../background/ephemeral-philosophy.md) to understand philosophy
+→ Explore [Daily Usage Patterns](../guides/daily-workflow.md) for efficiency
 
 ### After First-Time Setup
 → Practice daily workflow for a week
-→ Read [Workspaces & Persistence](../fundamentals/workspaces-and-persistence.md)
-→ Try [Building Custom Images](../workflows/custom-images.md)
+→ Read [Workspaces & Persistence](../background/workspaces-and-persistence.md)
+→ Try [Building Custom Images](../guides/custom-images.md)
 
 ### After Fundamentals
-→ Dive into [Concepts](../concepts/) section
-→ Practice with [Workflows](../workflows/)
+→ Dive into [Background](../background/) section
+→ Practice with [Guides](../guides/)
 → Explore [Advanced](../advanced/) topics
 
 ---
@@ -483,7 +483,7 @@ Based on your starting point:
 ### Documentation
 - **Stuck?** → [Troubleshooting](../reference/troubleshooting.md)
 - **Need syntax?** → [Command Reference](../reference/command-reference.md)
-- **Understanding concepts?** → [Concepts](../concepts/) section
+- **Understanding concepts?** → [Background](../background/) section
 
 ### Community
 - Ask your system administrator

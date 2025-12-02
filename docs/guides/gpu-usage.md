@@ -66,5 +66,5 @@ with autocast():
 
 ## Next Steps
 
-→ [GPU Computing Fundamentals](../fundamentals/gpu-computing.md)
+→ [GPU Computing Fundamentals](../background/gpu-computing.md)
 → [Best Practices](../advanced/best-practices.md)

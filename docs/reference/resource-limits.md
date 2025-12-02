@@ -51,5 +51,5 @@ container-stats
 
 ## Next Steps
 
-→ [Resource Management](../concepts/resource-management.md)
+→ [Resource Management](../background/resource-management.md)
 → [Command Reference](command-reference.md)
