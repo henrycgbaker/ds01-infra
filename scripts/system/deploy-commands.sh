@@ -30,12 +30,48 @@ echo -e "${BOLD}DS01 Infrastructure - Command Deployment${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Check if running as root
+# Require root
+RED='\033[0;31m'
 if [ "$EUID" -ne 0 ]; then
-    echo -e "${YELLOW}⚠ Warning: Not running as root${NC}"
-    echo "Some symlinks may fail to create. Run with: sudo $0"
-    echo ""
+    echo -e "${RED}Error: This command requires sudo${NC}"
+    echo "Run with: sudo deploy"
+    exit 1
 fi
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+echo -e "${BOLD}Setting Source File Permissions${NC}"
+echo ""
+# All scripts need 755 (rwxr-xr-x) so they can be:
+# - Sourced by other scripts (bash source command)
+# - Called via python3 /path/to/script.py
+# - Executed by wrapper scripts
+
+chmod 755 "$INFRA_ROOT"/scripts/user/* 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/user/* → 755"
+
+chmod 755 "$INFRA_ROOT"/scripts/lib/*.sh "$INFRA_ROOT"/scripts/lib/*.py 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/lib/* → 755"
+
+chmod 755 "$INFRA_ROOT"/scripts/docker/*.sh "$INFRA_ROOT"/scripts/docker/*.py 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/docker/* → 755"
+
+chmod 755 "$INFRA_ROOT"/scripts/admin/* 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/admin/* → 755"
+
+chmod 755 "$INFRA_ROOT"/scripts/monitoring/*.sh "$INFRA_ROOT"/scripts/monitoring/*.py 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/monitoring/* → 755"
+
+chmod 755 "$INFRA_ROOT"/scripts/maintenance/*.sh 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/maintenance/* → 755"
+
+chmod 755 "$INFRA_ROOT"/scripts/system/*.sh 2>/dev/null
+echo -e "${GREEN}✓${NC} scripts/system/* → 755"
+
+# Config files need 644 (rw-r--r--) - readable by all
+chmod 644 "$INFRA_ROOT"/config/*.yaml "$INFRA_ROOT"/config/*.yml 2>/dev/null
+echo -e "${GREEN}✓${NC} config/*.yaml → 644"
+
+echo ""
 
 create_symlink() {
     local target=$1
@@ -64,57 +100,61 @@ create_symlink() {
 SUCCESS_COUNT=0
 FAIL_COUNT=0
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 1: Base System Wrappers${NC}"
+# ═══════════════════════════════════════════════════════════════════════════════
+#                              USER COMMANDS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}USER COMMANDS${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-create_symlink "$INFRA_ROOT/scripts/docker/mlc-create-wrapper.sh" "mlc-create" "(wraps aime-ml-containers)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/mlc-stats-wrapper.sh" "mlc-stats" "(wraps aime-ml-containers)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-
-echo ""
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 2: Atomic Unit Commands${NC}"
-echo ""
-
-echo -e "${BOLD}Container Management (10 commands):${NC}"
-create_symlink "$INFRA_ROOT/scripts/user/container-create" "container-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-run" "container-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-attach" "container-attach" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-pause" "container-pause" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-list" "container-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-stats" "container-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-remove" "container-remove" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/container-exit" "container-exit" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-echo ""
-
-echo -e "${BOLD}Image Management (4 commands):${NC}"
-create_symlink "$INFRA_ROOT/scripts/user/image-create" "image-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/image-list" "image-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/image-update" "image-update" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/image-delete" "image-delete" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-echo ""
-
-echo -e "${BOLD}Project Setup Modules (6 commands):${NC}"
-create_symlink "$INFRA_ROOT/scripts/user/dir-create" "dir-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/git-init" "git-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/readme-create" "readme-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+# --- Onboarding & Setup ---
+echo -e "${BOLD}Onboarding:${NC}"
+create_symlink "$INFRA_ROOT/scripts/user/user-setup" "user-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/project-init" "project-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/shell-setup" "shell-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ssh-setup" "ssh-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/vscode-setup" "vscode-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 3: Container Orchestrators${NC}"
-echo ""
-
-echo -e "${BOLD}Container Orchestrators (ephemeral model):${NC}"
+# --- Container Commands ---
+echo -e "${BOLD}Container Lifecycle:${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/container-deploy" "container-deploy" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/container-retire" "container-retire" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-create" "container-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-start" "container-start" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-run" "container-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-attach" "container-attach" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-stop" "container-stop" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-remove" "container-remove" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-pause" "container-pause" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-exit" "container-exit" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-list" "container-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/container-stats" "container-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
+# --- Image Commands ---
+echo -e "${BOLD}Image Management:${NC}"
+create_symlink "$INFRA_ROOT/scripts/user/image-create" "image-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/image-update" "image-update" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/install-to-image.sh" "image-install" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/image-list" "image-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/image-delete" "image-delete" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# --- Dashboard (user-facing) ---
+echo -e "${BOLD}Dashboard:${NC}"
+create_symlink "$INFRA_ROOT/scripts/admin/dashboard" "dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# --- Resource Info ---
+echo -e "${BOLD}Resource Info:${NC}"
+create_symlink "$INFRA_ROOT/scripts/user/check-limits" "check-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/docker/gpu-queue-manager.py" "gpu-queue" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# --- Dispatchers (natural language style) ---
 echo -e "${BOLD}Dispatchers:${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/container-dispatcher.sh" "container" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/image-dispatcher.sh" "image" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
@@ -122,104 +162,108 @@ create_symlink "$INFRA_ROOT/scripts/user/project-dispatcher.sh" "project" && ((S
 create_symlink "$INFRA_ROOT/scripts/user/user-dispatcher.sh" "user" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}TIER 4: Workflow Orchestrators${NC}"
-echo ""
-
-create_symlink "$INFRA_ROOT/scripts/user/project-init" "project-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/user-setup" "user-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-echo ""
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}User Utilities${NC}"
-echo ""
-
-create_symlink "$INFRA_ROOT/scripts/user/check-limits" "check-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/ds01-status" "ds01-status" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/ds01-run" "ds01-run" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/get-limits" "get-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/ssh-config" "ssh-config" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/install-to-image.sh" "install-to-image" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-echo ""
-
-echo -e "${BOLD}Admin Commands${NC}"
-create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "alias-list" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "aliases" "(→ alias-list)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "commands" "(→ alias-list)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "help" "(→ alias-list)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/alias-create" "alias-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/ds01-dashboard" "ds01-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/ds01-logs" "ds01-logs" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/ds01-users" "ds01-users" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/admin/ds01-mig-partition" "ds01-mig-partition" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+# --- Help & Info ---
+echo -e "${BOLD}Help:${NC}"
+create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "help" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/alias-list" "commands" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/admin/version" "version" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-echo -e "${BOLD}Monitoring & Audit Commands${NC}"
-create_symlink "$INFRA_ROOT/scripts/admin/dashboard" "dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/container-dashboard.sh" "container-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-status-dashboard.py" "gpu-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-utilization-monitor.py" "gpu-utilization-monitor" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/mig-utilization-monitor.py" "mig-utilization-monitor" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+# --- Legacy (deprecated) ---
+echo -e "${BOLD}Legacy (deprecated):${NC}"
+create_symlink "$INFRA_ROOT/scripts/user/project-init" "new-project" "(use project-init)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/user-setup" "new-user" "(use user-setup)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#                              ADMIN COMMANDS (ds01-*)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}ADMIN COMMANDS (ds01-* prefix)${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+# --- Deployment ---
+echo -e "${BOLD}Deployment:${NC}"
+create_symlink "$INFRA_ROOT/scripts/system/deploy-commands.sh" "deploy" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# --- Dashboard & Monitoring ---
+echo -e "${BOLD}Dashboards:${NC}"
+create_symlink "$INFRA_ROOT/scripts/admin/dashboard" "ds01-dashboard" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-status-dashboard.py" "ds01-gpu" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/container-dashboard.sh" "ds01-containers" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/gpu-utilization-monitor.py" "ds01-gpu-util" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/mig-utilization-monitor.py" "ds01-mig-util" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# --- System Management ---
+echo -e "${BOLD}System:${NC}"
+create_symlink "$INFRA_ROOT/scripts/admin/ds01-users" "ds01-users" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/ds01-logs" "ds01-logs" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/ds01-events" "ds01-events" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/resource-alert-checker.sh" "resource-alert-checker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/check-idle-containers.sh" "check-idle-containers" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/docker/gpu-queue-manager.py" "gpu-queue" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/maintenance/backup-logs.sh" "backup-logs" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/audit-system.sh" "audit-system" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/audit-docker.sh" "audit-docker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/monitoring/audit-container.sh" "audit-container" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/admin/ds01-mig-partition" "ds01-mig-partition" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/who-owns-containers.sh" "ds01-who" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/ds01-health-check" "ds01-health" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}Legacy Aliases (Deprecated - For Backwards Compatibility)${NC}"
+# --- Auditing ---
+echo -e "${BOLD}Auditing:${NC}"
+create_symlink "$INFRA_ROOT/scripts/monitoring/audit-system.sh" "ds01-audit" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/audit-docker.sh" "ds01-audit-docker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/audit-container.sh" "ds01-audit-container" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-create_symlink "$INFRA_ROOT/scripts/user/project-init" "new-project" "(→ project-init)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
-create_symlink "$INFRA_ROOT/scripts/user/user-setup" "new-user" "(→ user-setup)" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+# --- Resource Management ---
+echo -e "${BOLD}Resources:${NC}"
+create_symlink "$INFRA_ROOT/scripts/docker/gpu-queue-manager.py" "ds01-gpu-queue" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/resource-alert-checker.sh" "ds01-alerts" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/check-idle-containers.sh" "ds01-idle" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# --- Maintenance ---
+echo -e "${BOLD}Maintenance:${NC}"
+create_symlink "$INFRA_ROOT/scripts/maintenance/backup-logs.sh" "ds01-backup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#                              INTERNAL (not advertised)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${BOLD}INTERNAL (Tier 1 - not advertised)${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo ""
+
+create_symlink "$INFRA_ROOT/scripts/docker/mlc-create-wrapper.sh" "mlc-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/monitoring/mlc-stats-wrapper.sh" "mlc-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+echo ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#                              SUMMARY
+# ═══════════════════════════════════════════════════════════════════════════════
+
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}Summary${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
-echo -e "Symlinks created: ${GREEN}$SUCCESS_COUNT${NC}"
+echo -e "Commands deployed: ${GREEN}$SUCCESS_COUNT${NC}"
 if [ "$FAIL_COUNT" -gt 0 ]; then
-    echo -e "Failed/Skipped:   ${YELLOW}$FAIL_COUNT${NC}"
+    echo -e "Failed/Skipped:    ${YELLOW}$FAIL_COUNT${NC}"
 fi
 echo ""
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-echo -e "${BOLD}Command Examples:${NC}"
+echo -e "${BOLD}Quick Reference:${NC}"
 echo ""
-echo -e "${CYAN}Tier 4 - Complete Onboarding:${NC}"
-echo "  user-setup                  # First-time user onboarding wizard"
-echo "  user setup                  # Same (via dispatcher)"
-echo "  get-limits                  # Show resource limits and usage"
-echo "  user get-limits --guided    # With explanations"
+echo -e "  ${GREEN}User Commands:${NC}"
+echo "    container deploy <name>    Start working"
+echo "    container retire <name>    Done for the day"
+echo "    help                       Show all commands"
 echo ""
-echo -e "${CYAN}Tier 3 - Project Setup:${NC}"
-echo "  project-init                # Complete project setup"
-echo "  project-init --guided       # With explanations"
-echo "  project init --guided       # Same (via dispatcher)"
+echo -e "  ${YELLOW}Admin Commands (sudo required):${NC}"
+echo "    sudo deploy                Redeploy all commands"
+echo "    ds01-dashboard             System overview"
+echo "    ds01-users                 User management"
 echo ""
-echo -e "${CYAN}Tier 2 - Container Management:${NC}"
-echo "  container-create my-proj pytorch    # Create container"
-echo "  container-run my-proj               # Start and enter container"
-echo "  container list                      # List containers (via dispatcher)"
-echo "  container-list                      # Same (direct command)"
-echo ""
-echo -e "${CYAN}Tier 2 - Image Management:${NC}"
-echo "  image-create my-image --type=cv    # Create custom image"
-echo "  image list                         # List images (via dispatcher)"
-echo ""
-echo -e "${CYAN}Tier 1 - Base System (Enhanced):${NC}"
-echo "  mlc-create my-proj pytorch         # Create with resource limits"
-echo "  mlc-open my-proj                   # Open container"
-echo "  mlc-list                           # List containers"
-echo "  mlc-stats                          # Show resource usage"
-echo ""
-echo -e "${YELLOW}💡 All commands support --help for usage information${NC}"
+echo -e "${YELLOW}💡 Run 'help' to see all available commands${NC}"
 echo ""
