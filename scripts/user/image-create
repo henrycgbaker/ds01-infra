@@ -104,6 +104,19 @@ show_base_image_packages() {
     echo ""
 }
 
+detect_cuda_arch() {
+    # Auto-detect appropriate CUDA architecture based on host driver
+    # Driver 535+ supports CUDA 12.x, older drivers use CUDA 11.8
+    local driver_major
+    driver_major=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)
+
+    if [ -n "$driver_major" ] && [ "$driver_major" -ge 535 ] 2>/dev/null; then
+        echo "CUDA_ADA"
+    else
+        echo "CUDA_AMPERE"
+    fi
+}
+
 get_base_image() {
     local framework="$1"
     local custom_image="$2"
@@ -122,9 +135,9 @@ get_base_image() {
         # Capitalize framework name (AIME uses Pytorch, Tensorflow)
         local framework_capital=$(echo "$framework" | sed 's/tf/tensorflow/; s/\b\(.\)/\u\1/g')
 
-        # Determine GPU architecture (default: CUDA_AMPERE for A100s)
-        # A100 = Ampere (compute 8.0), RTX 4090 = Ada (compute 8.9)
-        local arch="${MLC_ARCH:-CUDA_AMPERE}"
+        # Determine GPU architecture based on host driver (auto-detect if not specified)
+        # Driver 535+ supports CUDA 12.x (CUDA_ADA), older drivers use CUDA 11.8 (CUDA_AMPERE)
+        local arch="${MLC_ARCH:-$(detect_cuda_arch)}"
 
         # Look up specific version or latest
         local image=""
@@ -161,7 +174,12 @@ get_base_image() {
             echo "pytorch/pytorch:2.5.1-cpu"
             ;;
         *)
-            echo "pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
+            # Match fallback to auto-detected architecture
+            if [ "$(detect_cuda_arch)" = "CUDA_ADA" ]; then
+                echo "pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime"
+            else
+                echo "pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
+            fi
             ;;
     esac
 }
