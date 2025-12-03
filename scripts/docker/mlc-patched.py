@@ -1669,6 +1669,15 @@ def build_docker_create_command(
         '--group-add', 'sudo'
     ]
 
+    # ========== DS01 PATCH: Set CUDA_VISIBLE_DEVICES for MIG isolation ==========
+    # AIME base images set NVIDIA_VISIBLE_DEVICES=all and the NVIDIA Container Runtime
+    # doesn't properly isolate MIG devices. Setting CUDA_VISIBLE_DEVICES ensures PyTorch
+    # and other CUDA applications only see the allocated device.
+    if num_gpus and num_gpus.startswith('device='):
+        device_id = num_gpus.replace('device=', '')
+        cuda_extras.extend(['-e', f'CUDA_VISIBLE_DEVICES={device_id}'])
+    # ========== END DS01 PATCH ==========
+
     rocm_extras = [
         '--device', '/dev/kfd',
         '--device', '/dev/dri',
