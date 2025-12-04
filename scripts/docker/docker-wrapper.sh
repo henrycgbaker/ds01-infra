@@ -1,9 +1,10 @@
 #!/bin/bash
 # /opt/ds01-infra/scripts/docker/docker-wrapper.sh
-# DS01 Docker Wrapper - Universal Resource Enforcement
+# DS01 Docker Wrapper - Universal Resource Enforcement & Ownership Tracking
 #
-# This wrapper intercepts Docker commands and injects per-user cgroup-parent
-# for ALL containers created on the system, regardless of interface used.
+# This wrapper intercepts Docker commands and injects:
+# - Per-user cgroup-parent for resource limits
+# - Owner labels for permission enforcement
 #
 # Installation: Copy to /usr/local/bin/docker (takes precedence over /usr/bin/docker)
 #
@@ -12,7 +13,8 @@
 # 2. Extracts user's group from resource-limits.yaml
 # 3. Ensures user's slice exists (ds01-{group}-{user}.slice)
 # 4. Injects --cgroup-parent if not already specified
-# 5. Passes through to real Docker binary
+# 5. Injects --label ds01.user=<username> for ownership tracking
+# 6. Passes through to real Docker binary
 #
 # All other Docker commands pass through unchanged.
 
@@ -70,6 +72,24 @@ has_cgroup_parent() {
     return 1
 }
 
+# Check if ds01.user label is already specified
+has_owner_label() {
+    for arg in "$@"; do
+        case "$arg" in
+            --label=ds01.user=*|--label)
+                # Check next arg for ds01.user=
+                if [[ "$arg" == "--label" ]]; then
+                    continue
+                fi
+                if [[ "$arg" == ds01.user=* ]]; then
+                    return 0
+                fi
+                ;;
+        esac
+    done
+    return 1
+}
+
 # Get user's group from resource-limits.yaml
 get_user_group() {
     local user="$1"
@@ -103,8 +123,8 @@ main() {
     # Get the Docker subcommand
     local subcommand="$1"
 
-    # Check if we need to inject cgroup-parent
-    if needs_cgroup_injection "$subcommand" && ! has_cgroup_parent "$@"; then
+    # Check if we need to inject for container creation
+    if needs_cgroup_injection "$subcommand"; then
         log_debug "Intercepting '$subcommand' for user $CURRENT_USER"
 
         # Get user's group
@@ -120,13 +140,28 @@ main() {
         ensure_user_slice "$USER_GROUP" "$CURRENT_USER"
         log_debug "Ensured slice: $SLICE_NAME"
 
-        # Inject --cgroup-parent after the subcommand
-        # docker run [OPTIONS] IMAGE [COMMAND]
-        # docker create [OPTIONS] IMAGE [COMMAND]
-        shift  # Remove subcommand from args
+        # Build injection arguments
+        local INJECT_ARGS=()
 
-        log_debug "Executing: $REAL_DOCKER $subcommand --cgroup-parent=$SLICE_NAME $*"
-        exec "$REAL_DOCKER" "$subcommand" "--cgroup-parent=$SLICE_NAME" "$@"
+        # Inject --cgroup-parent if not already specified
+        if ! has_cgroup_parent "$@"; then
+            INJECT_ARGS+=("--cgroup-parent=$SLICE_NAME")
+            log_debug "Injecting cgroup-parent: $SLICE_NAME"
+        fi
+
+        # Inject owner label if not already specified
+        if ! has_owner_label "$@"; then
+            INJECT_ARGS+=("--label" "ds01.user=$CURRENT_USER")
+            INJECT_ARGS+=("--label" "ds01.managed=true")
+            log_debug "Injecting owner label: ds01.user=$CURRENT_USER"
+        fi
+
+        # Remove subcommand from args
+        shift
+
+        # Execute with injected args
+        log_debug "Executing: $REAL_DOCKER $subcommand ${INJECT_ARGS[*]} $*"
+        exec "$REAL_DOCKER" "$subcommand" "${INJECT_ARGS[@]}" "$@"
     else
         # Pass through unchanged
         log_debug "Pass-through: $REAL_DOCKER $*"

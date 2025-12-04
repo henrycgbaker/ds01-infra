@@ -172,6 +172,57 @@ sudo scripts/system/create-user-slice.sh <username> <group>
 sudo scripts/system/create-user-slice.sh alice students
 ```
 
+### setup-docker-permissions.sh
+
+Set up per-user container isolation via Docker socket proxy.
+
+**Purpose:** Ensure users can only see and interact with their own containers
+
+**Usage:**
+```bash
+# Deploy permissions system
+sudo scripts/system/setup-docker-permissions.sh
+
+# Uninstall
+sudo scripts/system/setup-docker-permissions.sh --uninstall
+
+# Preview changes
+sudo scripts/system/setup-docker-permissions.sh --dry-run
+```
+
+**What it does:**
+1. Creates `ds01-admin` Linux group for admin users
+2. Creates `ds01-dashboard` service user for monitoring
+3. Configures Docker daemon to listen on `/var/run/docker-real.sock`
+4. Starts filter proxy on `/var/run/docker.sock`
+5. Starts container ownership sync service
+
+**Architecture:**
+```
+Users/VS Code → /var/run/docker.sock (proxy) → /var/run/docker-real.sock (daemon)
+```
+
+**Services created:**
+- `ds01-container-sync` - Syncs container ownership data every 5 seconds
+- `ds01-docker-filter` - Filter proxy for container visibility
+
+**User experience:**
+- Regular users: `docker ps` only shows their containers
+- Regular users: Operations on others' containers return "Permission denied: container owned by \<owner\>"
+- Admins (`ds01-admin` group): Full access to all containers
+
+**Adding admins:**
+```bash
+sudo usermod -aG ds01-admin <username>
+```
+
+**Checking status:**
+```bash
+systemctl status ds01-docker-filter
+systemctl status ds01-container-sync
+cat /var/lib/ds01/opa/container-owners.json | python3 -m json.tool
+```
+
 ## Deployment
 
 ### Initial Deployment

@@ -451,6 +451,106 @@ sudo cp /var/lib/ds01/gpu-state.json /var/lib/ds01/gpu-state.json.bak
 sudo python3 scripts/docker/gpu_allocator.py status
 ```
 
+## Container Permissions System
+
+DS01 implements per-user container isolation using a Docker socket proxy.
+
+### Architecture
+
+```
+Users/VS Code → /var/run/docker.sock (proxy) → /var/run/docker-real.sock (daemon)
+                       ↑
+              Filter Proxy detects user
+              via SO_PEERCRED credentials
+```
+
+### Components
+
+**docker-filter-proxy.py** - Transparent Docker socket proxy
+- Filters `docker ps` to only show user's own containers
+- Blocks operations (exec, logs, start, stop, rm) on containers owned by others
+- Detects connecting user via Unix socket credentials (SO_PEERCRED)
+- Admins (ds01-admin group) have full access
+- Returns: `"Permission denied: container owned by <owner>"`
+
+**sync-container-owners.py** - Container ownership synchronization
+- Maintains `/var/lib/ds01/opa/container-owners.json`
+- Maps container IDs to owners by reading Docker labels
+- Updates every 5 seconds (configurable)
+- Identifies owners from:
+  - `ds01.user` label (DS01 containers)
+  - `aime.mlc.USER` label (AIME containers)
+  - `devcontainer.local_folder` path (Dev Containers)
+
+**docker-wrapper.sh** - Universal container labeling
+- Intercepts `docker run` and `docker create` commands
+- Injects `--label ds01.user=<username>` on all containers
+- Ensures all containers have ownership tracking
+
+### Admin Access
+
+Users with full container access:
+- Members of `ds01-admin` Linux group
+- Members listed in `resource-limits.yaml` `groups.admin.members`
+- The `ds01-dashboard` service user
+
+### Setup
+
+```bash
+# Deploy permissions system
+sudo scripts/system/setup-docker-permissions.sh
+
+# Uninstall if needed
+sudo scripts/system/setup-docker-permissions.sh --uninstall
+
+# Preview changes without applying
+sudo scripts/system/setup-docker-permissions.sh --dry-run
+```
+
+### Testing
+
+```bash
+# Run test suite
+scripts/testing/docker-permissions/test-permissions.sh
+
+# As admin - should see all containers
+docker ps -a
+
+# As regular user - should only see own containers
+docker ps -a
+
+# Try accessing another user's container (should be denied for non-admins)
+docker exec <other-user-container> ls
+```
+
+### Ownership Data
+
+**Location:** `/var/lib/ds01/opa/container-owners.json`
+
+**Structure:**
+```json
+{
+  "containers": {
+    "abc123def456": {
+      "owner": "alice@example.com",
+      "name": "my-project._.alice",
+      "ds01_managed": true
+    }
+  },
+  "admins": ["datasciencelab", "ds01-dashboard"],
+  "service_users": ["ds01-dashboard"],
+  "updated_at": "2025-12-04T18:30:00Z"
+}
+```
+
+### Fail-Open Behavior
+
+Containers without ownership labels (legacy or external) are accessible by all users. To lock down a container, add an owner label:
+
+```bash
+docker run --label ds01.user=$(whoami) ...
+```
+
 ## Related Documentation
 
 - [Root README](../../README.md) - System architecture and overview
@@ -458,3 +558,4 @@ sudo python3 scripts/docker/gpu_allocator.py status
 - [scripts/user/README.md](../user/README.md) - User command workflows
 - [scripts/maintenance/README.md](../maintenance/README.md) - Cleanup automation
 - [scripts/monitoring/README.md](../monitoring/README.md) - GPU monitoring tools
+- [scripts/system/README.md](../system/README.md) - System administration including permissions setup
