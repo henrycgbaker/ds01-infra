@@ -2,6 +2,8 @@
 # Create custom Docker image for DS01
 # Interactive wizard for building personalized ML/DL images
 
+set -e
+
 BLUE='\033[94m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -10,6 +12,11 @@ CYAN='\033[0;36m'
 BOLD='\033[1m'
 DIM='\033[2m'
 NC='\033[0m'
+
+# Source context library for orchestrator detection
+if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+fi
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
@@ -71,6 +78,67 @@ usage() {
     echo -e "  4. Then run: ${GREEN}container-deploy my-project${NC}"
     echo ""
     echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
+}
+
+extended_usage() {
+    usage  # Include basic help first
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}All Options${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Base Image Selection:${NC}"
+    echo "  --framework <name>     PyTorch, TensorFlow, or JAX"
+    echo "  --usecase <name>       cv, nlp, rl, ml, or custom"
+    echo "  --skip-base-packages   Don't install use-case packages"
+    echo ""
+    echo -e "${BOLD}Package Installation:${NC}"
+    echo "  --requirements <file>  Install from requirements.txt"
+    echo "  --packages <list>      Additional pip packages"
+    echo "  --system-packages <list>  Additional apt packages"
+    echo ""
+    echo -e "${BOLD}Jupyter Configuration:${NC}"
+    echo "  --jupyter-extensions <list>  JupyterLab extensions"
+    echo "  --skip-jupyter               Don't configure Jupyter"
+    echo ""
+    echo -e "${BOLD}Build Options:${NC}"
+    echo "  --no-cache             Force fresh build"
+    echo "  --no-build             Create Dockerfile only"
+    echo "  --dockerfile <path>    Use existing Dockerfile"
+    echo "  --project-dockerfile   Store Dockerfile in project dir"
+    echo ""
+    echo -e "${BOLD}More Examples:${NC}"
+    echo "  image-create my-project --requirements requirements.txt"
+    echo "  image-create nlp-model --framework pytorch --usecase nlp"
+    echo "  image-create custom --skip-jupyter --no-build"
+    echo ""
+}
+
+show_concepts() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Image Concepts${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What is a Docker Image?${NC}"
+    echo -e "  • ${CYAN}Dockerfile${NC} = Recipe (text file with build instructions)"
+    echo -e "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)"
+    echo -e "  • ${CYAN}Container${NC} = Running instance (where you actually work)"
+    echo ""
+    echo -e "${BOLD}Framework Comparison${NC}"
+    echo -e "  • ${CYAN}PyTorch${NC}: Best for research, dynamic graphs, NLP"
+    echo -e "  • ${CYAN}TensorFlow${NC}: Best for production, static graphs, mobile"
+    echo -e "  • ${CYAN}JAX${NC}: Best for high-performance numerical computing"
+    echo ""
+    echo -e "${BOLD}Use Case Templates${NC}"
+    echo -e "  • ${CYAN}cv${NC}: Computer vision (opencv, albumentations, timm)"
+    echo -e "  • ${CYAN}nlp${NC}: NLP/LLMs (transformers, datasets, tokenizers)"
+    echo -e "  • ${CYAN}rl${NC}: Reinforcement learning (gymnasium, stable-baselines3)"
+    echo -e "  • ${CYAN}ml${NC}: General ML (scikit-learn, xgboost, lightgbm)"
+    echo ""
+    echo -e "${BOLD}Ready to start?${NC}"
+    echo -e "  Run: ${GREEN}image-create${NC}            (interactive wizard)"
+    echo -e "  Run: ${GREEN}image-create --guided${NC}   (with step-by-step explanations)"
     echo ""
 }
 
@@ -565,6 +633,7 @@ interactive_mode() {
     if [ -z "$IMAGE_NAME" ]; then
         echo -e "${BOLD}Image name${NC} ${DIM}(e.g., my-project, thesis-cv)${NC}"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "> " IMAGE_NAME </dev/tty
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     fi
@@ -572,10 +641,20 @@ interactive_mode() {
     # New naming convention: ds01-{user-id}/{project-name}:latest
     FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
 
-    # Check if exists
-    if docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^${FULL_IMAGE_NAME}:latest$"; then
-        echo -e "${YELLOW}⚠ Image '$FULL_IMAGE_NAME:latest' already exists${NC}"
+    # Check if exists (DS01 format or AIME format)
+    EXISTING_DS01=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^${FULL_IMAGE_NAME}:latest$" || true)
+    EXISTING_AIME=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep ":${IMAGE_NAME}\._\.${USER_ID}$" || true)
+
+    if [ -n "$EXISTING_DS01" ] || [ -n "$EXISTING_AIME" ]; then
+        echo -e "${YELLOW}⚠ Image with name '${IMAGE_NAME}' already exists${NC}"
+        if [ -n "$EXISTING_DS01" ]; then
+            echo -e "  ${DIM}DS01 image: ${EXISTING_DS01}${NC}"
+        fi
+        if [ -n "$EXISTING_AIME" ]; then
+            echo -e "  ${DIM}AIME image: ${EXISTING_AIME}${NC}"
+        fi
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Overwrite? [y/N]: " OVERWRITE </dev/tty
         echo ""
         if [[ ! "$OVERWRITE" =~ ^[Yy]$ ]]; then
@@ -585,11 +664,12 @@ interactive_mode() {
     fi
 
     echo -e "${BOLD}Image repo will be named: ${CYAN}${IMAGE_NAME}${NC}"
-    echo -e "${BOLD}Image namespace will be: ${CYAN}ds01-${USER_ID}${NC}\n"
+    echo -e "${BOLD}Image namespace will be: ${CYAN}ds01-${USER_ID}${NC}"
     if [ "$GUIDED" = true ]; then
-        echo -e "${DIM}Full image reference will be "{namespace}/{repo_name}:{tag}": ${CYAN}${FULL_IMAGE_NAME}:latest${NC}"
-        echo -e "${DIM}Here, the {namespace} is given by 'ds01-{user-id}', and we apply a default tag 'latest'.${NC}\n"
+        echo -e "${DIM}Full image reference: ${CYAN}${FULL_IMAGE_NAME}:latest${NC}"
+        echo -e "${DIM}Format: {namespace}/{repo_name}:{tag} where namespace = ds01-{user-id}${NC}"
     fi
+    echo ""
 
     # Framework
     if [ -z "$FRAMEWORK" ]; then
@@ -623,6 +703,7 @@ interactive_mode() {
         echo -e "  ${BOLD}4)${NC} PyTorch CPU-only"
         echo -e "  ${BOLD}5)${NC} Custom (specify base image)"
         echo -e ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-5, default: 1]: " FW_CHOICE </dev/tty
 
         case $FW_CHOICE in
@@ -679,8 +760,7 @@ interactive_mode() {
         echo -e "  ${BOLD}1)${NC} Import from requirements.txt file ${GREEN}(default)${NC}"
         echo -e "  ${BOLD}2)${NC} Guided selection (Jupyter, Data Science, Use Case)"
         echo ""
-        # Flush any buffered stdin before reading
-        read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-2, default: 1]: " PKG_SOURCE_CHOICE </dev/tty
 
         case $PKG_SOURCE_CHOICE in
@@ -728,6 +808,8 @@ interactive_mode() {
             echo ""
             echo -e "${YELLOW}💡 Recommendation:${NC} Install if you use notebooks"
             echo ""
+            read -p "Press Enter to continue..." </dev/tty
+            echo ""
         fi
 
         if [ "$GUIDED" = false ]; then
@@ -740,6 +822,7 @@ interactive_mode() {
         echo -e "  ${BOLD}2)${NC} No - Skip (use terminal/IDE only)"
         echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-3, default: 1]: " JUPYTER_PKG_CHOICE </dev/tty
 
         case $JUPYTER_PKG_CHOICE in
@@ -797,8 +880,10 @@ interactive_mode() {
             echo "  • scikit-learn - Traditional ML algorithms"
             echo "  • matplotlib, seaborn - Visualisation"
             echo ""
-            echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)\n"
+            echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)"
             echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults (needed for most DS work)"
+            echo ""
+            read -p "Press Enter to continue..." </dev/tty
             echo ""
         fi
         echo -e "${BOLD}Install core data science packages?${NC}"
@@ -806,6 +891,7 @@ interactive_mode() {
         echo -e "  ${BOLD}2)${NC} No - Skip (framework-only setup)"
         echo -e "  ${BOLD}3)${NC} Custom - Specify packages manually"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-3, default: 1]: " DS_PKG_CHOICE </dev/tty
 
         case $DS_PKG_CHOICE in
@@ -881,6 +967,8 @@ interactive_mode() {
             echo ""
             echo -e "• ${CYAN}Custom${NC} - Skip use case packages or specify manually"
             echo ""
+            read -p "Press Enter to continue..." </dev/tty
+            echo ""
         fi
 
         echo -e "${BOLD}Select use case (additional domain-specific packages):${NC}"
@@ -890,6 +978,7 @@ interactive_mode() {
         echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
         echo -e "  ${BOLD}5)${NC} Custom (${DIM}specify packages manually${NC}"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-5, default: 1]: " UC_CHOICE </dev/tty
 
         case $UC_CHOICE in
@@ -912,7 +1001,7 @@ interactive_mode() {
     fi
 
     # Display included packages before asking for additional
-    if [ -z "$USECASE" ] && [ "$SKIP_BASE_PACKAGES" != "true" ]; then
+    if [ -n "$USECASE" ] && [ "$SKIP_BASE_PACKAGES" != "true" ]; then
         echo ""
         echo -e "${CYAN}━━━ Packages To Be Installed ━━━${NC}"
         echo ""
@@ -1415,8 +1504,16 @@ while [[ $# -gt 0 ]]; do
             GUIDED=true
             shift
             ;;
-        -h|--help|--info)
+        -h|--help)
             usage
+            exit 0
+            ;;
+        --info)
+            extended_usage
+            exit 0
+            ;;
+        --concepts)
+            show_concepts
             exit 0
             ;;
         -*)
@@ -1603,6 +1700,7 @@ else
     fi
     echo -e "${DIM}This can take a few minutes${NC}"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Build image now? [Y/n]: " BUILD_CONFIRM </dev/tty
     BUILD_CONFIRM=${BUILD_CONFIRM:-Y}
     echo ""
@@ -1651,27 +1749,50 @@ $([ -n "$ADDITIONAL_PACKAGES" ] && echo "- Additional: $ADDITIONAL_PACKAGES")
 $([ -n "$SYSTEM_PACKAGES" ] && echo "- System: $SYSTEM_PACKAGES")
 INFOEOF
 
-        echo ""
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${GREEN}${BOLD}✓ Phase 2/2: Image Built Successfully${NC}"
-        echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo -e "${BOLD}Image reference:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}\n"
-        echo -e "${DIM}Metadata saved to:${NC} ${DIM}$HOME/ds01-config/images/${METADATA_FILE}.info${NC}"
-        echo -e "${DIM}Dockerfile location:${NC} ${DIM}$DOCKERFILE${NC}"
+        # Show success output (suppress banner in orchestration context)
+        if type is_atomic_context &>/dev/null && is_atomic_context && [[ -z "$DS01_ORCHESTRATOR" ]]; then
+            echo ""
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}${BOLD}✓ Image Built Successfully${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "${BOLD}Image:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}"
+            echo -e "${DIM}Dockerfile: $DOCKERFILE${NC}"
 
-        if [ "$GUIDED" = true ]; then
+            if [ "$GUIDED" = true ]; then
+                echo ""
+                echo -e "${BOLD}What Just Happened?${NC}"
+                echo "  ✓ Downloaded base image with $FRAMEWORK"
+                echo "  ✓ Installed packages"
+                echo "  ✓ Configured Jupyter Lab"
+                echo ""
+                echo -e "${BOLD}Key Concepts:${NC}"
+                echo -e "  • ${CYAN}Dockerfile${NC} = Recipe (text instructions)"
+                echo -e "  • ${CYAN}Image${NC} = Blueprint (stored by Docker)"
+                echo -e "  • ${CYAN}Container${NC} = Running instance"
+                echo ""
+                echo -e "${BOLD}Next:${NC} ${GREEN}container-deploy $IMAGE_NAME${NC}"
+                echo ""
+                echo -e "${BOLD}Other Commands:${NC}"
+                echo -e "  ${GREEN}image-list${NC}     - List your images"
+                echo -e "  ${GREEN}image-update${NC}   - Modify and rebuild"
+            else
+                echo ""
+                echo -e "Next: ${GREEN}container-deploy $IMAGE_NAME${NC}"
+            fi
+        elif [[ -z "$DS01_ORCHESTRATOR" ]]; then
+            # Fallback if context library not loaded - still show output
             echo ""
-            echo -e "${BOLD}What Just Happened?${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${GREEN}${BOLD}✓ Image Built Successfully${NC}"
+            echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
             echo ""
-            echo "  ✓ Downloaded base image with $FRAMEWORK"
-            echo "  ✓ Installed all requested packages"
-            echo "  ✓ Configured Jupyter Lab"
-            echo "  ✓ Set up Python environment"
+            echo -e "${BOLD}Image:${NC} ${CYAN}$FULL_IMAGE_NAME:latest${NC}"
             echo ""
-            echo " Next steps: create & deploy a container based on your image:"
-            echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
+            echo -e "Next: ${GREEN}container-deploy $IMAGE_NAME${NC}"
         fi
+        # In orchestration context (DS01_ORCHESTRATOR set), output is suppressed
+        # Orchestrator handles its own success messages
     else
         echo ""
         echo -e "${RED}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1681,52 +1802,5 @@ INFOEOF
         echo "Check Dockerfile: $DOCKERFILE"
         echo ""
         exit 1
-    fi
-fi
-
-# Image creation complete - suggest next steps
-if [ "$IMAGE_BUILT" = true ]; then
-    echo ""
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}${BOLD}✓ Image Built Successfully${NC}"
-    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo ""
-
-    if [ "$GUIDED" = true ]; then
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}What Just Happened?${NC}"
-        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo "You've created a Docker image - a blueprint for containers."
-        echo ""
-        echo -e "  • ${CYAN}Dockerfile${NC} = Recipe (text file with build instructions)"
-        echo -e "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)"
-        echo -e "  • ${CYAN}Container${NC} = Running instance (where you actually work)"
-        echo ""
-        echo "Think of it like: Recipe → Executable Program → Running Process"
-        echo ""
-        echo -e "${BOLD}Next Step: Create a Container${NC}"
-        echo ""
-        echo "An image is just a blueprint. To actually use it, you need to"
-        echo "create & deploy a container - a running instance where you'll do your work."
-        echo ""
-        echo "Deploy container:"
-        echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
-        echo ""
-        echo "This will:"
-        echo "  • Create a container from your image"
-        echo "  • Allocate GPU resources"
-        echo "  • Mount your workspace directory"
-        echo "  • Apply resource limits"
-        echo ""
-        echo -e "${BOLD}Other Useful Commands:${NC}"
-        echo -e "  ${GREEN}image-list${NC}          List all your images"
-        echo -e "  ${GREEN}image-update${NC}        Update Dockerfile & rebuild this image"
-        echo -e "  ${GREEN}container-list${NC}      List all containers"
-        echo -e "  ${GREEN}container-deploy${NC}       Deploy a container"
-        echo ""
-    else
-        echo -e "${BOLD}Next Step:${NC}"
-        echo -e "  ${GREEN}container-deploy $IMAGE_NAME${NC}"
     fi
 fi

@@ -6,24 +6,32 @@ Comprehensive design philosophy and guidelines for consistent, user-friendly CLI
 
 **Audience:** Developers writing or modifying DS01 scripts.
 
+**Development Context:** Most patterns in this guide are already implemented across DS01 commands. This guide serves two purposes:
+1. **Cleanup & Consistency** - Ensure existing implementations follow the same patterns
+2. **Reference for New Work** - Standard to apply when creating new commands
+
+When modifying existing commands, prefer conservative changes that streamline and consolidate rather than wholesale rewrites. The existing implementations represent significant iteration and user testing.
+
 ---
 
 ## Table of Contents
 
 1. [Design Philosophy](#design-philosophy)
-2. [Architecture Patterns](#architecture-patterns)
-3. [Color Scheme](#color-scheme)
-4. [Typography & Layout](#typography--layout)
-5. [Banners & Headers](#banners--headers)
-6. [Progress & Background Output](#progress--background-output)
-7. [Interactive Prompts](#interactive-prompts)
-8. [Messages & Notifications](#messages--notifications)
-9. [Interface Isolation](#interface-isolation)
-10. [Help System](#help-system)
-11. [Code Standards](#code-standards)
-12. [Common Patterns](#common-patterns)
-13. [Anti-Patterns](#anti-patterns)
-14. [Quick Reference](#quick-reference)
+2. [Industry Best Practices](#industry-best-practices)
+3. [Architecture Patterns](#architecture-patterns)
+4. [Color Scheme](#color-scheme)
+5. [Typography & Layout](#typography--layout)
+6. [Banners & Headers](#banners--headers)
+7. [Progress & Background Output](#progress--background-output)
+8. [Interactive Prompts](#interactive-prompts)
+9. [Messages & Notifications](#messages--notifications)
+10. [Interface Isolation](#interface-isolation)
+11. [Help System](#help-system)
+12. [Code Standards](#code-standards)
+13. [Common Patterns](#common-patterns)
+14. [Anti-Patterns](#anti-patterns)
+15. [Quick Reference](#quick-reference)
+16. [Collaboration Guidelines](#collaboration-guidelines)
 
 ---
 
@@ -42,6 +50,78 @@ Comprehensive design philosophy and guidelines for consistent, user-friendly CLI
 5. **Modular, Non-Repetitive** - Avoid conditional paths that output redundant messages (e.g., "Created!" then "Successfully created!").
 
 6. **Interface Isolation** - Users entering at one level (orchestrator vs atomic) should only see references to commands at that level.
+
+---
+
+## Industry Best Practices
+
+DS01 CLI design draws from established industry standards and research. Use these as a baseline to enhance, not replace, existing implementations.
+
+### Reference Standards
+
+| Standard | Key Principle | DS01 Application |
+|----------|--------------|------------------|
+| [POSIX CLI Guidelines](https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/V1_chap12.html) | `-` for short flags, `--` for long | `--help`, `--guided`, `-h` |
+| [GNU Coding Standards](https://www.gnu.org/prep/standards/) | `--version`, `--help` required | All commands implement `--help` |
+| [12 Factor CLI Apps](https://medium.com/@jdxcode/12-factor-cli-apps-dd3c227a0e46) | Prefer flags over prompts for automation | Interactive by default, flags for scripting |
+| [Command Line Interface Guidelines](https://clig.dev/) | Human-first design, progressive disclosure | `--guided` for beginners, concise default |
+
+### Progressive Disclosure
+
+Show basics first, details on demand:
+
+```
+                              REFERENCE                    EDUCATION
+                        ┌─────────────────────┐    ┌─────────────────────┐
+                        │                     │    │                     │
+Quick start:   command  │  --help    --info   │    │ --concepts --guided │
+                        │  (quick)   (full)   │    │ (pre-run)  (during) │
+                        │                     │    │                     │
+                        └─────────────────────┘    └─────────────────────┘
+```
+
+- **Reference** follows traditional CLI patterns (POSIX/GNU)
+- **Education** is DS01-specific for users new to containers
+
+### Error Message Design (Nielsen Norman)
+
+Errors should be:
+1. **Visible** - Red color, ✗ symbol
+2. **Specific** - What went wrong
+3. **Constructive** - How to fix it
+4. **Human-readable** - No stack traces for users
+
+```bash
+# GOOD - Nielsen Norman compliant
+echo -e "${RED}✗${NC} GPU limit reached (2/2 in use)"
+echo ""
+echo -e "  ${BOLD}To fix:${NC} Free a GPU by retiring a container:"
+echo -e "    ${GREEN}container-retire <name>${NC}"
+
+# BAD - technical, unhelpful
+echo "Error: CUDA_ERROR_OUT_OF_MEMORY"
+```
+
+### Confirmation Before Destruction
+
+Irreversible actions require explicit confirmation:
+
+```bash
+# For destructive actions (delete, remove, retire)
+read -p "Delete container 'my-project'? (yes/no): " CONFIRM
+[[ "$CONFIRM" == "yes" ]] || exit 0
+
+# For safe actions (create, start)
+read -p "Continue? [Y/n]: " CONFIRM  # Default to yes
+```
+
+### Exit Codes
+
+Follow standard conventions:
+- `0` - Success
+- `1` - General error
+- `2` - Misuse (bad arguments)
+- `130` - Interrupted (Ctrl+C)
 
 ---
 
@@ -483,12 +563,26 @@ fi
 
 ## Help System
 
-### Two Help Modes
+### Help Modes (4 Tiers)
 
-| Flag | Purpose | Content |
-|------|---------|---------|
-| `--help`, `-h` | Concise reference | Usage, options, examples |
-| `--info` | Verbose explanation | Concepts, detailed descriptions |
+DS01 follows traditional CLI patterns (`--help`, `--info`) while adding educational layers for new users (`--concepts`, `--guided`).
+
+| Flag | Type | Purpose | Content |
+|------|------|---------|---------|
+| `-h`, `--help` | Reference | Quick reference | Usage, main options, 1-2 examples |
+| `--info` | Reference | Full reference | All subcommands, all options, more examples |
+| `--concepts` | Education | Pre-run learning | What is an image? Framework comparison, key terms |
+| `--guided` | Education | Interactive learning | Explanations during workflow, pauses, "What Just Happened?" |
+
+**Two categories:**
+- **Reference docs** (`--help`, `--info`): Traditional CLI help, read before running
+- **Educational modes** (`--concepts`, `--guided`): For users new to containers/DS01
+
+**When to use each:**
+- Know what you're doing? → `--help` or just run it
+- Need to see all options? → `--info`
+- New to Docker/containers? → `--concepts` first, then run
+- Learning DS01 step-by-step? → `--guided`
 
 ### Help Structure
 
@@ -883,6 +977,42 @@ echo -e "${RED}✗${NC} Action failed"
 - [ ] No redundant messages from conditional paths
 - [ ] Single blank line between sections, no doubles
 - [ ] No trailing blank lines
+
+---
+
+## Collaboration Guidelines
+
+When working with AI assistants or other developers on DS01 CLI commands:
+
+### When to Ask Questions
+
+Ask for input/decisions when:
+- **Multiple valid approaches** exist (e.g., "Should this use fzf or a numbered menu?")
+- **Trade-offs are unclear** (e.g., "More verbose output vs cleaner terminal?")
+- **Design intent is ambiguous** (e.g., "Is this educational content meant for `--guided` or `--info`?")
+- **Removing content** that may have been intentionally added (e.g., "This explanation seems redundant, but was it added for a reason?")
+
+### Streamlining Philosophy
+
+When consolidating or removing content:
+
+| Action | Approach |
+|--------|----------|
+| **Duplicate banners** | Remove without question - clearly redundant |
+| **Duplicate text content** | Consolidate to single location |
+| **Educational explanations** | Consider moving to `--guided` or `--info`, not deleting |
+| **"What Just Happened?" summaries** | Keep in `--guided`, streamline for default |
+| **Other commands suggestions** | Keep in `--guided`, remove from default |
+
+**Rule:** When uncertain whether content is "bloat" or "valuable education," ask first.
+
+### Baseline Enhancement
+
+Existing implementations represent the baseline to enhance:
+- Study patterns already used in the codebase
+- Propose improvements based on industry best practices
+- Favor incremental refinement over wholesale rewrites
+- Document decisions in this guide for future consistency
 
 ---
 

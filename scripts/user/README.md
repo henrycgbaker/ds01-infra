@@ -347,14 +347,22 @@ shell-setup --force        # Reconfigure even if already correct
 
 ## Command Flags
 
-### Common Flags (All Commands)
+### Help System (4 Tiers)
 
-- `-h`, `--help` - Show command usage
-- `--info` - Show detailed information about command
+DS01 uses a 4-tier help system: 2 reference modes (traditional CLI) + 2 educational modes (for new users).
 
-### L2+ Commands
+| Flag | Type | Purpose |
+|------|------|---------|
+| `-h`, `--help` | Reference | Quick reference - usage, main options |
+| `--info` | Reference | Full reference - all options, more examples |
+| `--concepts` | Education | Pre-run learning - what is an image? framework comparison |
+| `--guided` | Education | Interactive learning - explanations during workflow |
 
-- `--guided` - Educational mode with detailed explanations
+**When to use:**
+- Know what you're doing? → Just run the command, or `--help`
+- Need all options? → `--info`
+- New to containers? → `--concepts` first
+- Learning step-by-step? → `--guided`
 
 ### Specific Flags
 
