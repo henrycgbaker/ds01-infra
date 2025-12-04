@@ -2268,8 +2268,18 @@ def main():
                 
             # Add the models volume mapping if models_dir is set
             if models_dir != default_models_dir:
-                volumes +=  ['-v', f'{models_dir}:{models}'] 
-                
+                volumes +=  ['-v', f'{models_dir}:{models}']
+
+            # DS01: Mount container aliases for consistent shell environment
+            alias_file = '/opt/ds01-infra/config/container-aliases.sh'
+            if os.path.exists(alias_file):
+                volumes += ['-v', f'{alias_file}:/etc/ds01/container-aliases.sh:ro']
+
+            # DS01: Mount profile.d script to auto-source aliases on shell startup
+            profile_file = '/opt/ds01-infra/config/ds01-profile.sh'
+            if os.path.exists(profile_file):
+                volumes += ['-v', f'{profile_file}:/etc/profile.d/ds01.sh:ro']
+
             docker_create_cmd = build_docker_create_command(
                 user_name,
                 user_id,
