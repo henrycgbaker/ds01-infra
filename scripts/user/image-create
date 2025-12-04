@@ -661,24 +661,23 @@ interactive_mode() {
 
     # === Package Source Selection (after Phase 1, before Phase 2) ===
     if [ "$SKIP_BASE_PACKAGES" != true ] && [ "$REQUIREMENTS_MODE" != true ]; then
-        echo ""
         echo -e "${CYAN}━━━ Package Installation Method ━━━${NC}"
         echo ""
 
         if [ "$GUIDED" = true ]; then
             echo "You can install Python packages in two ways:"
             echo ""
-            echo -e "  ${CYAN}1) Guided Selection${NC} - Choose from curated package sets"
-            echo "     Best for: New users, exploring options"
-            echo ""
-            echo -e "  ${CYAN}2) Import requirements.txt${NC} - Use existing file"
+            echo -e "  ${CYAN}1) Import requirements.txt${NC} - Use existing file"
             echo "     Best for: Reproducing existing environments"
+            echo ""
+            echo -e "  ${CYAN}2) Guided Selection${NC} - Choose from curated package sets"
+            echo "     Best for: New users, exploring options"
             echo ""
         fi
 
         echo -e "${BOLD}How would you like to specify packages?${NC}"
-        echo -e "  ${BOLD}1)${NC} Guided selection (Jupyter, Data Science, Use Case) ${GREEN}(default)${NC}"
-        echo -e "  ${BOLD}2)${NC} Import from requirements.txt file"
+        echo -e "  ${BOLD}1)${NC} Import from requirements.txt file ${GREEN}(default)${NC}"
+        echo -e "  ${BOLD}2)${NC} Guided selection (Jupyter, Data Science, Use Case)"
         echo ""
         # Flush any buffered stdin before reading
         read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
@@ -686,6 +685,9 @@ interactive_mode() {
 
         case $PKG_SOURCE_CHOICE in
             2)
+                REQUIREMENTS_MODE=false
+                ;;
+            *)
                 if select_requirements_file; then
                     REQUIREMENTS_MODE=true
                     # Skip Phases 2-4 by setting all choices to "skip"
@@ -700,9 +702,6 @@ interactive_mode() {
                     echo -e "${YELLOW}Falling back to guided selection${NC}"
                     REQUIREMENTS_MODE=false
                 fi
-                ;;
-            *)
-                REQUIREMENTS_MODE=false
                 ;;
         esac
         echo ""
