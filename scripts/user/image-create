@@ -17,6 +17,10 @@ GROUP_ID=$(id -g)
 DOCKERFILES_DIR="$HOME/dockerfiles"
 PROJECT_DOCKERFILE=false
 
+# Requirements.txt import support
+REQUIREMENTS_FILE=""      # Path to selected requirements.txt
+REQUIREMENTS_MODE=false   # true if using requirements.txt instead of guided phases
+
 # Source username utilities for sanitization
 source "/opt/ds01-infra/scripts/lib/username-utils.sh"
 SANITIZED_USERNAME=$(sanitize_username_for_slice "$USERNAME")
@@ -35,6 +39,7 @@ usage() {
     echo "  -t, --type TYPE            Use case type (cv, nlp, rl, ml, custom)"
     echo "  -p, --packages PACKAGES    Additional Python packages (space-separated)"
     echo "  -s, --system PACKAGES      System packages via apt (space-separated)"
+    echo "  -r, --requirements PATH    Import packages from requirements.txt file"
     echo "  --project-dockerfile       Store Dockerfile in project dir (~/workspace/<project>/)"
     echo "  --no-build                 Create Dockerfile only, don't build image"
     echo "  --guided                   Show detailed explanations for beginners"
@@ -57,6 +62,7 @@ usage() {
     echo "  image-create thesis-model -f pytorch -t cv    # CV project with PyTorch"
     echo "  image-create nlp-exp -f pytorch -t nlp -p \"wandb optuna\"  # With extra packages"
     echo "  image-create custom-setup -t custom --no-build  # Just create Dockerfile"
+    echo "  image-create my-proj -r ~/workspace/my-proj/requirements.txt  # From requirements.txt"
     echo ""
     echo -e "${CYAN}Quick Start:${NC}"
     echo -e "  1. Run: ${GREEN}image-create my-project${NC}"
@@ -327,6 +333,226 @@ get_usecase_packages() {
     esac
 }
 
+# ============================================================================
+# Requirements.txt Import Functions
+# ============================================================================
+
+scan_requirements_files() {
+    # Scans ~/workspace/*/ and ~/ for requirements.txt files
+    # Outputs: "path|display_name" for each entry, one per line
+
+    local workspace_dir="$HOME/workspace"
+
+    # Scan ~/workspace/*/requirements.txt (direct children only)
+    if [ -d "$workspace_dir" ]; then
+        for project_dir in "$workspace_dir"/*/; do
+            if [ -d "$project_dir" ]; then
+                local req_file="${project_dir}requirements.txt"
+                if [ -f "$req_file" ] && [ -r "$req_file" ]; then
+                    local project_name=$(basename "$project_dir")
+                    echo "$req_file|$project_name"
+                fi
+            fi
+        done
+    fi
+
+    # Check ~/requirements.txt (global)
+    local global_req="$HOME/requirements.txt"
+    if [ -f "$global_req" ] && [ -r "$global_req" ]; then
+        echo "$global_req|Global (home directory)"
+    fi
+}
+
+validate_requirements_file() {
+    # Validates requirements.txt file
+    # Args: $1 = file path
+    # Returns: 0 on success, 1 on failure
+    # Outputs warnings to stderr
+
+    local req_file="$1"
+
+    # Check file exists and is readable
+    if [ ! -f "$req_file" ]; then
+        echo -e "${RED}Error: File not found: $req_file${NC}" >&2
+        return 1
+    fi
+
+    if [ ! -r "$req_file" ]; then
+        echo -e "${RED}Error: Cannot read file: $req_file${NC}" >&2
+        return 1
+    fi
+
+    # Check file is not empty (excluding comments and blank lines)
+    local line_count
+    line_count=$(grep -v '^#' "$req_file" | grep -v '^[[:space:]]*$' | wc -l)
+    if [ "$line_count" -eq 0 ]; then
+        echo -e "${YELLOW}Warning: requirements.txt appears to be empty${NC}" >&2
+    fi
+
+    # Warn about packages already in AIME base
+    local aime_base_packages="numpy pillow tqdm conda ipython psutil torch torchvision torchaudio"
+    local duplicates=""
+
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "${line// }" ]] && continue
+
+        # Extract package name (strip version specifiers)
+        local pkg_name
+        pkg_name=$(echo "$line" | sed 's/[=<>~!].*//' | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+
+        for base_pkg in $aime_base_packages; do
+            if [ "$pkg_name" = "$base_pkg" ]; then
+                duplicates="$duplicates $pkg_name"
+            fi
+        done
+    done < "$req_file"
+
+    if [ -n "$duplicates" ]; then
+        echo "" >&2
+        echo -e "${YELLOW}Note: These packages are already in AIME base image:${NC}" >&2
+        echo -e "  ${DIM}$duplicates${NC}" >&2
+        echo -e "${DIM}They will be reinstalled (safe, may update version)${NC}" >&2
+    fi
+
+    return 0
+}
+
+select_requirements_file() {
+    # Interactive selection of requirements.txt file
+    # Sets REQUIREMENTS_FILE global variable
+    # Returns: 0 on success, 1 on cancel
+
+    echo ""
+    echo -e "${CYAN}━━━ Import from requirements.txt ━━━${NC}"
+    echo ""
+
+    # Scan for files
+    local file_paths=()
+    local display_names=()
+
+    while IFS='|' read -r path name; do
+        [ -z "$path" ] && continue
+        file_paths+=("$path")
+        display_names+=("$name")
+    done < <(scan_requirements_files)
+
+    if [ ${#file_paths[@]} -eq 0 ]; then
+        echo -e "${YELLOW}No requirements.txt files found in:${NC}"
+        echo "  - ~/workspace/*/"
+        echo "  - ~/"
+        echo ""
+        # Flush any buffered stdin before reading
+        read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Enter path to requirements.txt (or press Enter to cancel): " MANUAL_PATH </dev/tty
+
+        if [ -z "$MANUAL_PATH" ]; then
+            return 1
+        fi
+
+        # Expand ~ if present
+        MANUAL_PATH="${MANUAL_PATH/#\~/$HOME}"
+
+        if validate_requirements_file "$MANUAL_PATH"; then
+            REQUIREMENTS_FILE="$MANUAL_PATH"
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    echo -e "${BOLD}Select a requirements.txt file:${NC}"
+    echo ""
+
+    local i=1
+    for idx in "${!file_paths[@]}"; do
+        local path="${file_paths[$idx]}"
+        local name="${display_names[$idx]}"
+        # Show shortened path for display
+        local short_path="${path/#$HOME/~}"
+        echo -e "  ${BOLD}$i)${NC} $name (${DIM}$short_path${NC})"
+        ((i++))
+    done
+    echo -e "  ${BOLD}$i)${NC} Enter path manually..."
+    echo ""
+
+    local max_choice=$i
+    # Flush any buffered stdin before reading
+    read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+    read -p "Choice [1-$max_choice]: " CHOICE </dev/tty
+
+    # Handle manual entry (last option)
+    if [ "$CHOICE" -eq "$max_choice" ] 2>/dev/null; then
+        echo ""
+        read -p "Enter path to requirements.txt: " MANUAL_PATH </dev/tty
+        MANUAL_PATH="${MANUAL_PATH/#\~/$HOME}"
+
+        if [ -z "$MANUAL_PATH" ]; then
+            return 1
+        fi
+
+        if validate_requirements_file "$MANUAL_PATH"; then
+            REQUIREMENTS_FILE="$MANUAL_PATH"
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # Validate numeric choice
+    if ! [[ "$CHOICE" =~ ^[0-9]+$ ]] || [ "$CHOICE" -lt 1 ] || [ "$CHOICE" -gt "${#file_paths[@]}" ]; then
+        echo -e "${RED}Invalid selection${NC}"
+        return 1
+    fi
+
+    # Get selected file
+    local selected_path="${file_paths[$((CHOICE-1))]}"
+
+    if validate_requirements_file "$selected_path"; then
+        REQUIREMENTS_FILE="$selected_path"
+        local short_path="${selected_path/#$HOME/~}"
+        echo ""
+        echo -e "${GREEN}✓${NC} Selected: ${CYAN}$short_path${NC}"
+        return 0
+    else
+        return 1
+    fi
+}
+
+read_requirements_packages() {
+    # Reads packages from requirements.txt file
+    # Args: $1 = file path
+    # Outputs: space-separated package list (preserving version specifiers)
+
+    local req_file="$1"
+    local packages=""
+
+    while IFS= read -r line; do
+        # Skip comments
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        # Skip empty lines
+        [[ -z "${line// }" ]] && continue
+        # Skip -r/-e/--requirement/--editable (recursive requirements, editable installs)
+        [[ "$line" =~ ^[[:space:]]*- ]] && continue
+
+        # Trim whitespace
+        local pkg
+        pkg=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+        if [ -n "$pkg" ]; then
+            packages="$packages $pkg"
+        fi
+    done < "$req_file"
+
+    # Trim leading space
+    echo "${packages# }"
+}
+
+# ============================================================================
+# End Requirements.txt Import Functions
+# ============================================================================
+
 interactive_mode() {
     if [ "$GUIDED" = false ]; then
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -337,7 +563,9 @@ interactive_mode() {
 
     # Image name
     if [ -z "$IMAGE_NAME" ]; then
-        read -p "Image name (e.g., my-project, thesis-cv): " IMAGE_NAME </dev/tty
+        echo -e "${BOLD}Image name${NC} ${DIM}(e.g., my-project, thesis-cv)${NC}"
+        echo ""
+        read -p "> " IMAGE_NAME </dev/tty
         IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     fi
     echo ""
@@ -430,6 +658,56 @@ interactive_mode() {
             fi
         fi
     fi
+
+    # === Package Source Selection (after Phase 1, before Phase 2) ===
+    if [ "$SKIP_BASE_PACKAGES" != true ] && [ "$REQUIREMENTS_MODE" != true ]; then
+        echo ""
+        echo -e "${CYAN}━━━ Package Installation Method ━━━${NC}"
+        echo ""
+
+        if [ "$GUIDED" = true ]; then
+            echo "You can install Python packages in two ways:"
+            echo ""
+            echo -e "  ${CYAN}1) Guided Selection${NC} - Choose from curated package sets"
+            echo "     Best for: New users, exploring options"
+            echo ""
+            echo -e "  ${CYAN}2) Import requirements.txt${NC} - Use existing file"
+            echo "     Best for: Reproducing existing environments"
+            echo ""
+        fi
+
+        echo -e "${BOLD}How would you like to specify packages?${NC}"
+        echo -e "  ${BOLD}1)${NC} Guided selection (Jupyter, Data Science, Use Case) ${GREEN}(default)${NC}"
+        echo -e "  ${BOLD}2)${NC} Import from requirements.txt file"
+        echo ""
+        # Flush any buffered stdin before reading
+        read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Choice [1-2, default: 1]: " PKG_SOURCE_CHOICE </dev/tty
+
+        case $PKG_SOURCE_CHOICE in
+            2)
+                if select_requirements_file; then
+                    REQUIREMENTS_MODE=true
+                    # Skip Phases 2-4 by setting all choices to "skip"
+                    JUPYTER_CHOICE="skip"
+                    DATA_SCIENCE_CHOICE="skip"
+                    USECASE="custom"
+                    CUSTOM_USECASE_PACKAGES=""
+                    echo ""
+                    local short_req="${REQUIREMENTS_FILE/#$HOME/~}"
+                    echo -e "${GREEN}✓${NC} Will install packages from: ${CYAN}$short_req${NC}"
+                else
+                    echo -e "${YELLOW}Falling back to guided selection${NC}"
+                    REQUIREMENTS_MODE=false
+                fi
+                ;;
+            *)
+                REQUIREMENTS_MODE=false
+                ;;
+        esac
+        echo ""
+    fi
+    # === End Package Source Selection ===
 
     # Phase 2: Core Python & Jupyter
     if [ -z "$JUPYTER_CHOICE" ] && [ "$SKIP_BASE_PACKAGES" != true ]; then
@@ -757,6 +1035,7 @@ create_dockerfile() {
     local custom_ds_pkgs="${10}"       # NEW: custom DS packages
     local custom_usecase_pkgs="${11}"
     local skip_base="${12}"
+    local requirements_file="${13}"     # Path to requirements.txt (optional)
 
     local base_image=$(get_base_image "$framework" "$custom_base")
     local usecase_packages=$(get_usecase_packages "$usecase")
@@ -828,7 +1107,35 @@ DOCKERFILEEOF
 
 DOCKERFILEEOF
 
-        # Phase 2: Jupyter & Interactive packages
+        # === Requirements.txt installation (if provided) ===
+        if [ -n "$requirements_file" ] && [ -f "$requirements_file" ]; then
+            local req_packages
+            req_packages=$(read_requirements_packages "$requirements_file")
+
+            if [ -n "$req_packages" ]; then
+                local short_req="${requirements_file/#$HOME/~}"
+                echo "# Packages from requirements.txt" >> "$dockerfile"
+                echo "# Source: $short_req" >> "$dockerfile"
+                echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
+
+                local pkg_array=($req_packages)
+                local pkg_count=${#pkg_array[@]}
+                local i=0
+                for pkg in "${pkg_array[@]}"; do
+                    ((i++))
+                    if [ $i -lt $pkg_count ]; then
+                        echo "    $pkg \\" >> "$dockerfile"
+                    else
+                        echo "    $pkg" >> "$dockerfile"
+                    fi
+                done
+                echo "" >> "$dockerfile"
+            fi
+        fi
+        # === End Requirements.txt installation ===
+
+        # Phase 2: Jupyter & Interactive packages (only if not using requirements.txt)
+        if [ -z "$requirements_file" ]; then
         if [ "$jupyter_choice" = "skip" ]; then
             echo "# Jupyter packages skipped by user" >> "$dockerfile"
             echo "" >> "$dockerfile"
@@ -919,8 +1226,9 @@ DOCKERFILEEOF
             done
             echo "" >> "$dockerfile"
         fi
+        fi  # End: if [ -z "$requirements_file" ] - Phases 2-4
 
-        # Additional user packages
+        # Additional user packages (always available, even with requirements.txt)
         if [ -n "$additional" ]; then
             echo "# Additional user packages" >> "$dockerfile"
             echo "RUN pip install --no-cache-dir \\" >> "$dockerfile"
@@ -1091,6 +1399,11 @@ while [[ $# -gt 0 ]]; do
             SYSTEM_PACKAGES="$2"
             shift 2
             ;;
+        -r|--requirements)
+            REQUIREMENTS_FILE="$2"
+            REQUIREMENTS_MODE=true
+            shift 2
+            ;;
         --project-dockerfile)
             PROJECT_DOCKERFILE=true
             shift
@@ -1124,6 +1437,26 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Validate --requirements flag if provided
+if [ "$REQUIREMENTS_MODE" = true ] && [ -n "$REQUIREMENTS_FILE" ]; then
+    # Expand ~ if present
+    REQUIREMENTS_FILE="${REQUIREMENTS_FILE/#\~/$HOME}"
+
+    if ! validate_requirements_file "$REQUIREMENTS_FILE"; then
+        echo -e "${RED}Error: Invalid requirements file${NC}"
+        exit 1
+    fi
+
+    SHORT_REQ="${REQUIREMENTS_FILE/#$HOME/~}"
+    echo -e "${GREEN}✓${NC} Using requirements file: ${CYAN}$SHORT_REQ${NC}"
+
+    # Set package choices to skip (requirements.txt handles packages)
+    JUPYTER_CHOICE="skip"
+    DATA_SCIENCE_CHOICE="skip"
+    USECASE="custom"
+    CUSTOM_USECASE_PACKAGES=""
+fi
 
 # Handle --project-dockerfile flag
 if [ "$PROJECT_DOCKERFILE" = true ]; then
@@ -1217,7 +1550,7 @@ echo -e "${GREEN}${BOLD}✓ Phase 1/2: Complete${NC}"
 echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$JUPYTER_CHOICE" "$CUSTOM_JUPYTER_PACKAGES" "$DATA_SCIENCE_CHOICE" "$CUSTOM_DS_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES")
+DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$JUPYTER_CHOICE" "$CUSTOM_JUPYTER_PACKAGES" "$DATA_SCIENCE_CHOICE" "$CUSTOM_DS_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES" "$REQUIREMENTS_FILE")
 echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
 
 
