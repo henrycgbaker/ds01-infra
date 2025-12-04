@@ -1642,6 +1642,13 @@ else
     fi
     # Use same naming convention as interactive mode: ds01-{user-id}/{project-name}
     FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
+
+    # In non-interactive mode, default to including Jupyter and Data Science packages
+    # unless using requirements.txt mode (which sets these to "skip")
+    if [ "$REQUIREMENTS_MODE" != true ]; then
+        [ -z "$JUPYTER_CHOICE" ] && JUPYTER_CHOICE="default"
+        [ -z "$DATA_SCIENCE_CHOICE" ] && DATA_SCIENCE_CHOICE="default"
+    fi
 fi
 
 # Check user's resource limits and provide helpful info
