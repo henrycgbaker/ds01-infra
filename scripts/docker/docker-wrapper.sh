@@ -113,6 +113,24 @@ ensure_user_slice() {
     fi
 }
 
+# Check if user is an admin (ds01-admin group)
+is_admin() {
+    groups "$CURRENT_USER" 2>/dev/null | grep -qE '\bds01-admin\b'
+}
+
+# Filter docker ps/container ls to show only user's containers (non-admins)
+filter_container_list() {
+    # Admins see all containers
+    if is_admin; then
+        log_debug "Admin user - showing all containers"
+        exec "$REAL_DOCKER" "$@"
+    fi
+
+    # Non-admins: filter by ds01.user label
+    log_debug "Filtering container list for user $CURRENT_USER"
+    exec "$REAL_DOCKER" "$@" --filter "label=ds01.user=$CURRENT_USER"
+}
+
 # Main logic
 main() {
     # If no arguments, pass through
@@ -122,6 +140,16 @@ main() {
 
     # Get the Docker subcommand
     local subcommand="$1"
+
+    # Filter 'ps' command for non-admins
+    if [[ "$subcommand" == "ps" ]]; then
+        filter_container_list "$@"
+    fi
+
+    # Filter 'container ls' or 'container list' for non-admins
+    if [[ "$subcommand" == "container" ]] && [[ "${2:-}" == "ls" || "${2:-}" == "list" ]]; then
+        filter_container_list "$@"
+    fi
 
     # Check if we need to inject for container creation
     if needs_cgroup_injection "$subcommand"; then

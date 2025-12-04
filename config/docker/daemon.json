@@ -1,0 +1,16 @@
+{
+    "default-runtime": "nvidia",
+    "runtimes": {
+        "nvidia": {
+            "args": [],
+            "path": "nvidia-container-runtime"
+        }
+    },
+    "exec-opts": [
+        "native.cgroupdriver=systemd"
+    ],
+    "cgroup-parent": "ds01.slice",
+    "hosts": [
+        "unix:///var/run/docker.sock"
+    ]
+}
