@@ -256,6 +256,57 @@ def create_error_response(status_code: int, message: str) -> bytes:
     return response.encode() + body
 
 
+def passthrough_bidirectional(client_sock: socket.socket, docker_sock: socket.socket):
+    """
+    Pass through data bidirectionally between client and Docker.
+    Used for HTTP/2 (gRPC/BuildKit) connections that we can't parse.
+    Uses threads for more reliable handling.
+    """
+    import select
+
+    closed = threading.Event()
+
+    def forward(src, dst, name):
+        """Forward data from src to dst"""
+        try:
+            src.settimeout(300.0)  # 5 min timeout for builds
+            while not closed.is_set():
+                try:
+                    data = src.recv(65536)
+                    if not data:
+                        log(f"Passthrough {name}: connection closed by peer", "DEBUG")
+                        break
+                    dst.sendall(data)
+                except socket.timeout:
+                    continue
+                except Exception as e:
+                    log(f"Passthrough {name} error: {e}", "DEBUG")
+                    break
+        finally:
+            closed.set()
+
+    # Start forwarding threads
+    client_to_docker = threading.Thread(
+        target=forward,
+        args=(client_sock, docker_sock, "client->docker"),
+        daemon=True
+    )
+    docker_to_client = threading.Thread(
+        target=forward,
+        args=(docker_sock, client_sock, "docker->client"),
+        daemon=True
+    )
+
+    client_to_docker.start()
+    docker_to_client.start()
+
+    # Wait for either direction to close
+    client_to_docker.join()
+    docker_to_client.join(timeout=1.0)
+
+    log("Passthrough complete", "DEBUG")
+
+
 def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
     """Handle a single client connection"""
     try:
@@ -271,23 +322,73 @@ def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
             is_admin = False
             log("Connection from unknown user (no credentials)", "DEBUG")
 
-        # Read request
+        # Read initial data to detect protocol
         request = b""
-        while True:
+        client_sock.settimeout(5.0)
+        try:
+            chunk = client_sock.recv(4096)
+            if not chunk:
+                return
+            request = chunk
+        except socket.timeout:
+            return
+        client_sock.settimeout(None)
+
+        # Detect HTTP/2 connection preface: "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+        # BuildKit/gRPC uses HTTP/2
+        if request.startswith(b"PRI * HTTP/2.0"):
+            log(f"HTTP/2 connection from {username} - passing through", "DEBUG")
+            # Connect to real Docker and pass through
+            docker_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            docker_sock.connect(REAL_DOCKER_SOCKET)
+            docker_sock.sendall(request)
+            passthrough_bidirectional(client_sock, docker_sock)
+            docker_sock.close()
+            return
+
+        # For HTTP/1.1, continue reading headers
+        while b"\r\n\r\n" not in request:
             chunk = client_sock.recv(4096)
             if not chunk:
                 break
             request += chunk
-            if b"\r\n\r\n" in request:
-                match = re.search(rb"Content-Length: (\d+)", request, re.IGNORECASE)
-                if match:
-                    content_length = int(match.group(1))
-                    headers_end = request.index(b"\r\n\r\n") + 4
-                    body_received = len(request) - headers_end
-                    if body_received >= content_length:
-                        break
-                else:
+
+        if not request:
+            return
+
+        # Parse headers
+        headers_end = request.index(b"\r\n\r\n") + 4
+        headers_part = request[:headers_end]
+        body_so_far = request[headers_end:]
+
+        # Determine how to read the body
+        content_length_match = re.search(rb"Content-Length:\s*(\d+)", headers_part, re.IGNORECASE)
+        is_chunked_request = b"Transfer-Encoding: chunked" in headers_part
+
+        if content_length_match:
+            content_length = int(content_length_match.group(1))
+            # Read remaining body based on Content-Length
+            while len(body_so_far) < content_length:
+                chunk = client_sock.recv(65536)
+                if not chunk:
                     break
+                body_so_far += chunk
+            request = headers_part + body_so_far
+        elif is_chunked_request:
+            # Read chunked request body until terminator (0\r\n\r\n)
+            client_sock.settimeout(30.0)  # Longer timeout for builds
+            while not body_so_far.endswith(b"0\r\n\r\n"):
+                try:
+                    chunk = client_sock.recv(65536)
+                    if not chunk:
+                        break
+                    body_so_far += chunk
+                except socket.timeout:
+                    log(f"Timeout reading chunked request from {username}", "DEBUG")
+                    break
+            client_sock.settimeout(None)
+            request = headers_part + body_so_far
+        # else: no body expected (GET, HEAD, etc.)
 
         if not request:
             return
@@ -310,6 +411,17 @@ def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
                 client_sock.sendall(error_response)
                 return
 
+        # Check if this is a gRPC or session endpoint (BuildKit uses these for builds)
+        # These require bidirectional streaming
+        is_grpc = (path == '/grpc' or path.startswith('/grpc') or
+                   path == '/session' or path.startswith('/session'))
+
+        # Build operations also need bidirectional streaming for BuildKit
+        is_build = '/build' in path
+
+        # Other streaming operations (unidirectional docker->client)
+        is_streaming_op = any(op in path for op in ['/exec/', '/attach/', '/logs'])
+
         # Connect to real Docker
         docker_sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         docker_sock.connect(REAL_DOCKER_SOCKET)
@@ -317,9 +429,34 @@ def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
         # Forward request to Docker
         docker_sock.sendall(request)
 
+        if is_grpc or is_build:
+            # gRPC and build operations require bidirectional streaming (BuildKit)
+            log(f"Bidirectional streaming for: {path}", "DEBUG")
+            passthrough_bidirectional(client_sock, docker_sock)
+            docker_sock.close()
+            return
+
+        if is_streaming_op:
+            # For streaming operations, pass through data bidirectionally
+            log(f"Streaming operation: {path}", "DEBUG")
+            docker_sock.settimeout(300.0)  # 5 min timeout for builds
+            try:
+                while True:
+                    chunk = docker_sock.recv(65536)
+                    if not chunk:
+                        break
+                    client_sock.sendall(chunk)
+            except socket.timeout:
+                log(f"Streaming timeout for {path}", "DEBUG")
+            except Exception as e:
+                log(f"Streaming error: {e}", "DEBUG")
+            finally:
+                docker_sock.close()
+            return  # Already sent response directly
+
         # Read response - need to properly handle HTTP response
         response = b""
-        docker_sock.settimeout(5.0)  # Short timeout for initial response
+        docker_sock.settimeout(30.0)  # Longer timeout for container creation
 
         # First, read headers
         while b"\r\n\r\n" not in response:
@@ -329,6 +466,7 @@ def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
                     break
                 response += chunk
             except socket.timeout:
+                log(f"Timeout reading response headers for {path}", "DEBUG")
                 break
 
         # Parse headers to determine body length
@@ -344,6 +482,7 @@ def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
             if content_length_match:
                 content_length = int(content_length_match.group(1))
                 # Read remaining body
+                docker_sock.settimeout(10.0)
                 while len(body_so_far) < content_length:
                     try:
                         chunk = docker_sock.recv(65536)
@@ -351,11 +490,12 @@ def handle_client(client_sock: socket.socket, admin_uids: Set[int]):
                             break
                         body_so_far += chunk
                     except socket.timeout:
+                        log(f"Timeout reading response body for {path}", "DEBUG")
                         break
                 response = headers_part + body_so_far
             elif is_chunked:
                 # Read until we get the final chunk (0\r\n\r\n)
-                docker_sock.settimeout(1.0)
+                docker_sock.settimeout(5.0)
                 while not body_so_far.endswith(b"0\r\n\r\n"):
                     try:
                         chunk = docker_sock.recv(65536)

@@ -145,6 +145,67 @@ if [ "$GUIDED" = true ]; then
     echo ""
 fi
 
+# ============================================================================
+# PRE-CHECK: Verify custom image exists (for robust container creation)
+# ============================================================================
+# Custom images built via image-create have pre-configured users, which:
+# - Avoids memory-intensive docker commit phase
+# - Avoids orphaned containers on failure
+# - Ensures proper DS01 labels are applied
+#
+# Image naming convention: ds01-{uid}/{name}:latest
+# ============================================================================
+
+if [ -n "$CONTAINER_NAME" ]; then
+    EXPECTED_IMAGE="ds01-${USER_ID}/${CONTAINER_NAME}:latest"
+
+    # Check if custom image exists
+    if ! docker images -q "$EXPECTED_IMAGE" 2>/dev/null | grep -q .; then
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD}Custom Image Required${NC}"
+        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+        echo -e "Image not found: ${CYAN}${EXPECTED_IMAGE}${NC}"
+        echo ""
+        echo "To ensure reliable container creation, DS01 requires you to"
+        echo "build a custom image first. This image includes your user"
+        echo "configuration pre-built, avoiding runtime setup issues."
+        echo ""
+        echo -e "${BOLD}Quick fix:${NC}"
+        echo -e "  ${GREEN}image-create ${CONTAINER_NAME}${NC}"
+        echo ""
+        echo "Then retry:"
+        echo -e "  ${GREEN}container deploy ${CONTAINER_NAME}${NC}"
+        echo ""
+
+        if [ "$GUIDED" = true ]; then
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BOLD}Why Custom Images?${NC}"
+            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo "Custom images (built via image-create) have your user already"
+            echo "configured inside them. This means:"
+            echo ""
+            echo "  ✓ No memory-intensive docker commit step"
+            echo "  ✓ Faster container startup"
+            echo "  ✓ More reliable (no orphaned containers on failure)"
+            echo "  ✓ Proper tracking labels always applied"
+            echo ""
+            echo "Think of it like installing an OS: you do it once, then use it"
+            echo "many times. image-create is the 'install', container-deploy is"
+            echo "the 'use'."
+            echo ""
+        fi
+
+        exit 1
+    else
+        # Custom image found - pass it to container-create as second positional arg
+        # container-create expects: container-create <name> <image>
+        CREATE_ARGS+=("$EXPECTED_IMAGE")
+        echo -e "${DIM}Using custom image: ${EXPECTED_IMAGE}${NC}"
+    fi
+fi
+
 # Step 1: Create container
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${BOLD}Step 1/2: Creating Container${NC}"

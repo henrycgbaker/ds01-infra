@@ -635,7 +635,12 @@ interactive_mode() {
         echo ""
         read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "> " IMAGE_NAME </dev/tty
-        IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+        # Sanitize: lowercase, spaces to hyphens, remove invalid chars, strip leading/trailing separators
+        IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]//g' | sed 's/^[._-]*//; s/[._-]*$//')
+        if [ -z "$IMAGE_NAME" ]; then
+            echo -e "${RED}Error: Image name cannot be empty or only contain special characters${NC}"
+            exit 1
+        fi
     fi
     echo ""
     # New naming convention: ds01-{user-id}/{project-name}:latest
@@ -1629,8 +1634,12 @@ fi
 if [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
     interactive_mode
 else
-    # Non-interactive: sanitize image name and use USER_ID (not USERNAME which may contain @)
-    IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+    # Non-interactive: sanitize image name - lowercase, spaces to hyphens, remove invalid chars, strip leading/trailing separators
+    IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]//g' | sed 's/^[._-]*//; s/[._-]*$//')
+    if [ -z "$IMAGE_NAME" ]; then
+        echo -e "${RED}Error: Image name cannot be empty or only contain special characters${NC}"
+        exit 1
+    fi
     # Use same naming convention as interactive mode: ds01-{user-id}/{project-name}
     FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
 fi
