@@ -14,6 +14,7 @@ This directory contains all user-facing DS01 commands, organised into **5 layers
 - **Modular and reusable**: Each layer builds on the previous
 - **Educational mode**: All L2+ commands support `--guided` flag
 - **Flexible syntax**: Dispatchers enable `command subcommand` and `command-subcommand`
+- **Consistent UI/UX**: Follow [ds01-UI_UX_GUIDE.md](../../ds01-UI_UX_GUIDE.md) for colors, layout, prompts
 
 ### Layer Breakdown
 
@@ -609,6 +610,7 @@ container-create --image ds01-alice/shared-project:latest
 ## Related Documentation
 
 - [Root README](../../README.md) - System overview
+- [ds01-UI_UX_GUIDE.md](../../ds01-UI_UX_GUIDE.md) - **UI/UX design guide** (philosophy, colors, layout)
 - [scripts/docker/README.md](../docker/README.md) - Container creation internals, GPU allocation
 - [scripts/system/README.md](../system/README.md) - Admin operations, user management
 - [scripts/maintenance/README.md](../maintenance/README.md) - Lifecycle automation, cleanup

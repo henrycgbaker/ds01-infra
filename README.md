@@ -66,6 +66,7 @@ DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically ra
 - **Modular and reusable**: Single-purpose commands compose into workflows
 - **Educational mode**: All Tier 2+ commands support `--guided` flag
 - **Single source of truth**: No code duplication between tiers
+- **Consistent CLI/UX**: Follow [ds01-UI_UX_GUIDE.md](ds01-UI_UX_GUIDE.md) for all commands
 
 **See detailed architecture docs:**
 - [scripts/user/README.md](scripts/user/README.md) - Command tiers and user workflows
@@ -96,6 +97,8 @@ DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically ra
 ```
 ds01-infra/
 ├── README.md                    # This file (overview + quick start)
+├── CLAUDE.md                    # AI assistant instructions
+├── ds01-UI_UX_GUIDE.md          # UI/UX design guide (philosophy, colors, layout)
 │
 ├── config/                      # Configuration
 │   ├── README.md                # Configuration guide
