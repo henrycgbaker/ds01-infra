@@ -2856,3 +2856,108 @@ Phase 0 (Foundation / Tech Debt)
 ---
 
 *End of Document*
+
+---
+
+## 19. Open Issues & Technical Debt
+
+### 19.1 Container Labeling Gap (HIGH PRIORITY)
+
+**Status**: Open  
+**Date Identified**: 2025-12-04  
+**Related Doc**: `/opt/ds01-infra/docs/docker-permissions-migration.md`
+
+#### Problem
+
+Containers created via Docker API (not CLI) don't receive DS01 ownership labels:
+
+| Creation Method | Gets `ds01.user` Label | Gets `ds01.managed` Label |
+|-----------------|------------------------|---------------------------|
+| CLI (`docker run`) via wrapper | ✅ Yes | ✅ Yes |
+| VS Code Dev Containers | ❌ No | ❌ No |
+| Docker Compose | ❌ No | ❌ No |
+| Direct Docker API | ❌ No | ❌ No |
+
+**Impact**:
+- Cleanup scripts only process containers with `aime.mlc.USER` or `ds01.managed=true` labels
+- VS Code dev containers are never auto-removed
+- Visibility filtering works (wrapper catches `docker ps`) but ownership tracking incomplete
+
+#### Root Cause
+
+1. **Wrapper limitation**: `/usr/local/bin/docker` only intercepts CLI commands
+2. **Docker labels are immutable**: Cannot add labels after container creation
+3. **Cleanup script filter**: Uses `--filter "label=aime.mlc.USER"` only
+
+#### Current Workarounds
+
+1. **Sync script** (`sync-container-owners.py`) detects owners from multiple sources:
+   - `ds01.user` label
+   - `aime.mlc.USER` label  
+   - `devcontainer.local_folder` label (extracts username from path)
+
+2. **External JSON** (`/var/lib/ds01/opa/container-owners.json`) tracks all containers
+
+#### Proposed Solutions
+
+**Option A: Update cleanup scripts to use sync logic**
+- Modify `cleanup-stale-containers.sh` to detect owners like `sync-container-owners.py`
+- Check multiple label sources, not just `aime.mlc.USER`
+- Estimated effort: 2-3 hours
+
+**Option B: Add container labeler service**
+- Docker event listener that labels new containers post-creation
+- Problem: Docker labels are immutable after creation
+- Would need to track in external file instead
+
+**Option C: Use external JSON for cleanup decisions**
+- Cleanup scripts read `/var/lib/ds01/opa/container-owners.json`
+- Already synced by `sync-container-owners.py`
+- Estimated effort: 1-2 hours
+
+#### Files Affected
+
+- `/opt/ds01-infra/scripts/maintenance/cleanup-stale-containers.sh` (line 96)
+- `/opt/ds01-infra/scripts/docker/sync-container-owners.py` (reference implementation)
+- `/opt/ds01-infra/scripts/docker/docker-wrapper.sh` (current labeling)
+
+#### Action Items
+
+- [ ] Decide on solution approach (A, B, or C)
+- [ ] Update cleanup script to handle dev containers
+- [ ] Test with VS Code dev container
+- [ ] Update documentation
+
+---
+
+### 19.2 OPA Authorization Blocking (PARKED)
+
+**Status**: Parked  
+**Date Identified**: 2025-12-04  
+**Related Doc**: `/opt/ds01-infra/docs/docker-permissions-migration.md`
+
+#### Problem
+
+OPA authorization plugin installed but not functional - cannot block users from exec/stop on other users' containers.
+
+#### Root Cause
+
+The `opa-docker-authz` plugin doesn't support `-data-file` flag. Without external data, the policy can't look up container ownership.
+
+#### Current State
+
+- OPA plugin: Installed at `/usr/local/bin/opa-docker-authz`
+- Policy: Ready at `/opt/ds01-infra/config/opa/docker-authz.rego`
+- Service: Disabled
+- Authorization: Not in `daemon.json`
+
+#### Solution When Resumed
+
+Use OPA in server mode to load both policy and data:
+
+```bash
+opa run --server --addr localhost:8181 policy.rego data.json
+opa-docker-authz -opa-url http://localhost:8181/v1/data/docker/authz/allow
+```
+
+See `/opt/ds01-infra/docs/docker-permissions-migration.md` for full details.
