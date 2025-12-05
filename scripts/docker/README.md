@@ -419,6 +419,25 @@ python3 scripts/docker/gpu_allocator.py status
 bash -x scripts/docker/mlc-create-wrapper.sh <container> <image> <user>
 ```
 
+### Exit Code 2 with No Output
+
+**Symptom:** Container creation fails with "exit code: 2" and no diagnostic output
+
+**Cause:** This was caused by `set -e` in wrapper scripts preventing error handling code from running. When a command in a `$()` substitution fails with `set -e` enabled, the script exits immediately without capturing the exit code or running error handlers.
+
+**Fix applied (Dec 2024):** The `mlc-create-wrapper.sh` now temporarily disables `set -e` around the Python call:
+```bash
+set +e  # Disable exit-on-error to allow error handling
+MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
+MLC_EXIT_CODE=$?
+set -e  # Re-enable
+```
+
+**Prevention:** When writing new wrapper scripts that need to capture exit codes:
+- Use `set +e` / `set -e` around command substitutions that may fail
+- Or use `|| true` pattern: `result=$(cmd 2>&1) || true; exit_code=$?`
+- Never rely on `$?` after a `$()` substitution with `set -e` enabled
+
 ### MIG Not Detected
 
 **Symptom:** MIG instances not showing in allocation

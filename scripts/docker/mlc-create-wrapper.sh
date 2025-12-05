@@ -537,8 +537,11 @@ if [ -n "${DS01_DEBUG:-}" ]; then
     echo "  python3 $MLC_PATCHED $MLC_ARGS"
 fi
 
+# Temporarily disable set -e to capture exit code and allow error handling
+set +e
 MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
 MLC_EXIT_CODE=$?
+set -e
 
 if [ $MLC_EXIT_CODE -ne 0 ]; then
     echo ""
@@ -582,6 +585,18 @@ if [ $MLC_EXIT_CODE -ne 0 ]; then
         echo -e "${BLUE}mlc-patched.py Output:${NC}"
         echo "  (no output captured)"
         echo ""
+        # Exit code 2 usually means Python/argparse error
+        if [ "$MLC_EXIT_CODE" -eq 2 ]; then
+            echo -e "${YELLOW}Note: Exit code 2 often indicates a Python argument parsing error.${NC}"
+            echo "Checking if mlc-patched.py can be executed..."
+            echo ""
+            if python3 "$MLC_PATCHED" --help &>/dev/null; then
+                echo "  mlc-patched.py is accessible and working"
+            else
+                echo "  mlc-patched.py may have an issue - check file permissions and Python imports"
+            fi
+            echo ""
+        fi
     fi
 
     # Show helpful troubleshooting steps

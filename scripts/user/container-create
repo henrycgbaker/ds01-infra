@@ -972,5 +972,11 @@ else
     echo -e "${RED}✗ Container creation failed (exit code: $EXIT_CODE)${NC}"
     echo ""
     echo -e "${YELLOW}Common issues:${NC}"
+    echo "  • GPU allocation failure - try 'gpu-status' to check availability"
+    echo "  • Image not found - run 'image-create <name>' first"
+    echo "  • Container already exists - use 'container-remove <name>' first"
+    echo ""
+    echo -e "${YELLOW}For detailed error output, check the messages above.${NC}"
+    echo ""
     exit $EXIT_CODE
 fi
