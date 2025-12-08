@@ -3,20 +3,29 @@
 DS01 Unified Dashboard - Visual System Monitoring
 
 Usage:
-  dashboard                    # Default compact view
+  dashboard                    # Default compact view (GPU, CPU by user, system)
   dashboard --full             # All sections expanded
   dashboard --watch / -w       # Watch mode (2s refresh)
   dashboard --json             # JSON output for scripting
 
-  # Subcommands (modular sections)
-  dashboard gpu                # GPU/MIG utilization
+Modular Sections:
+  dashboard gpu                # GPU/MIG utilization diagram
+  dashboard cpu                # CPU usage by user diagram
+  dashboard system             # CPU, Memory, Disk bars
   dashboard mig-config         # MIG partition configuration
-  dashboard system             # CPU, Memory, Disk utilization
   dashboard containers         # All containers with stats
-  dashboard users              # Per-user resource breakdown
-  dashboard allocations [N]    # Recent N GPU allocations (default: 10)
+  dashboard users              # Per-user resource summary
   dashboard temp               # GPU temperatures and power
-  dashboard alerts             # Active alerts and warnings
+
+Additional Views:
+  dashboard allocations [N]    # Recent N GPU allocations (default: 10)
+  dashboard alerts             # Active alerts and warnings (idle containers, etc)
+
+Examples:
+  dashboard                    # Quick system overview
+  dashboard --watch            # Live monitoring
+  dashboard alerts             # Check for issues
+  dashboard allocations 20     # Last 20 GPU allocations
 """
 
 import sys
@@ -327,6 +336,62 @@ class DashboardData:
 
         return users
 
+    def get_user_cpu_usage(self) -> Dict:
+        """Get per-user CPU usage from running containers"""
+        user_cpu = {}
+
+        try:
+            # Get container stats with CPU usage
+            result = subprocess.run(
+                [DOCKER_BIN, 'stats', '--no-stream', '--format',
+                 '{{.Name}}\t{{.CPUPerc}}'],
+                capture_output=True, text=True, timeout=10
+            )
+
+            # Build container -> CPU% mapping
+            container_cpu = {}
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    name = parts[0]
+                    cpu_str = parts[1].replace('%', '')
+                    try:
+                        container_cpu[name] = float(cpu_str)
+                    except ValueError:
+                        container_cpu[name] = 0.0
+
+            # Get container owners
+            result = subprocess.run(
+                [DOCKER_BIN, 'ps', '--format',
+                 '{{.Names}}\t{{.Label "ds01.user"}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "aime.mlc.username"}}\t{{.Label "devcontainer.local_folder"}}'],
+                capture_output=True, text=True
+            )
+
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 1:
+                    name = parts[0]
+                    ds01_user = parts[1] if len(parts) > 1 else ''
+                    aime_user = parts[2] if len(parts) > 2 else ''
+                    aime_username = parts[3] if len(parts) > 3 else ''
+                    devcontainer_path = parts[4] if len(parts) > 4 else ''
+                    user = self.extract_owner(ds01_user, aime_user, aime_username, devcontainer_path)
+
+                    if user not in user_cpu:
+                        user_cpu[user] = {'cpu_percent': 0.0, 'containers': 0}
+
+                    user_cpu[user]['containers'] += 1
+                    user_cpu[user]['cpu_percent'] += container_cpu.get(name, 0.0)
+
+        except Exception:
+            pass
+
+        return user_cpu
+
     def get_alerts(self) -> List[Dict]:
         """Get active system alerts"""
         alerts = []
@@ -586,6 +651,38 @@ class DashboardRenderer:
         lines.append(self.box_bot())
         return "\n".join(lines)
 
+    def render_cpu_users_section(self) -> str:
+        """Render per-user CPU usage as horizontal bars (similar to GPU section)"""
+        user_cpu = self.data.get_user_cpu_usage()
+
+        lines = []
+        lines.append(self.box_top())
+        lines.append(self.box_line(Colors.c("CPU USAGE BY USER", Colors.BOLD)))
+        lines.append(self.box_mid())
+
+        if not user_cpu:
+            lines.append(self.box_line(Colors.c("No running containers", Colors.GRAY)))
+        else:
+            # Sort by CPU usage descending
+            sorted_users = sorted(user_cpu.items(), key=lambda x: x[1]['cpu_percent'], reverse=True)
+
+            for user, stats in sorted_users[:8]:  # Top 8 users
+                cpu_pct = stats['cpu_percent']
+                container_count = stats['containers']
+
+                # Truncate long usernames
+                user_display = user[:12] if len(user) > 12 else user
+
+                # Create bar (width 25 to fit in box)
+                bar = Colors.bar(min(cpu_pct, 100), width=25, show_percent=False)
+                cpu_str = f"{cpu_pct:>5.1f}%"
+
+                line = f"{user_display:<12} {bar} {cpu_str} ({container_count} containers)"
+                lines.append(self.box_line(line))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
     def render_allocations_section(self, limit: int = 5) -> str:
         """Render recent GPU allocations"""
         allocations = self.data.get_recent_allocations(limit)
@@ -810,16 +907,10 @@ class DashboardRenderer:
             "",
             self.render_gpu_section(),
             "",
-            self.render_system_section(),
+            self.render_cpu_users_section(),
             "",
-            self.render_allocations_section(5),
+            self.render_system_section(),
         ]
-
-        # Only show alerts if there are any
-        alerts = self.render_alerts_section()
-        if alerts:
-            sections.append("")
-            sections.append(alerts)
 
         sections.append("")
         return "\n".join(sections)
@@ -858,7 +949,7 @@ def main():
     parser.add_argument('--watch', '-w', action='store_true', help='Watch mode (2s refresh)')
     parser.add_argument('--json', action='store_true', help='JSON output')
     parser.add_argument('command', nargs='?',
-                        choices=['gpu', 'mig-config', 'system', 'containers', 'users',
+                        choices=['gpu', 'cpu', 'mig-config', 'system', 'containers', 'users',
                                  'allocations', 'temp', 'alerts', 'monitor'],
                         help='Subcommand')
     parser.add_argument('args', nargs='*', help='Subcommand arguments')
@@ -904,6 +995,8 @@ def main():
         print(renderer.render_header())
         print()
         print(renderer.render_gpu_section())
+    elif args.command == 'cpu':
+        print(renderer.render_cpu_users_section())
     elif args.command == 'mig-config':
         print(renderer.render_mig_config_section())
     elif args.command == 'system':
