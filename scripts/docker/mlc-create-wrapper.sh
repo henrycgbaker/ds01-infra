@@ -10,7 +10,10 @@
 #
 # Installation: sudo ln -sf /opt/ds01-infra/scripts/docker/mlc-create-wrapper.sh /usr/local/bin/mlc-create
 
-set -e
+# Note: We intentionally do NOT use 'set -e' here.
+# This script has explicit error handling throughout, and set -e causes
+# silent failures when commands fail inside $() substitutions, preventing
+# our friendly error messages from being displayed.
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
