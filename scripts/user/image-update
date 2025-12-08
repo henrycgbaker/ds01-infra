@@ -91,21 +91,9 @@ select_image_interactive() {
         local user_id=$(id -u)
         mapfile -t images < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$user_id/" | grep -v "REPOSITORY")
 
-        # Show only DS01 images in table format
-        if [ ${#images[@]} -gt 0 ]; then
-            # Build filter expression for docker images command
-            local filter_expr=""
-            for img in "${images[@]}"; do
-                if [ -n "$filter_expr" ]; then
-                    filter_expr="$filter_expr|"
-                fi
-                filter_expr="$filter_expr$img"
-            done
-            docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
-                head -1 >&2  # Show header
-            docker images --format "{{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
-                grep -E "^($filter_expr)" >&2
-        fi
+        # Show only DS01 images in table format (use awk to preserve table formatting)
+        docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
+            awk -v uid="$user_id" 'NR==1 || $1 ~ "^ds01-"uid"/"' >&2
 
         echo "" >&2
 
