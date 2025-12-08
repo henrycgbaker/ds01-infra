@@ -361,7 +361,7 @@ CONTAINER_STATUS=$(docker inspect -f '{{.State.Status}}' "$CONTAINER_TAG" 2>/dev
 if [ "$DRY_RUN" = true ]; then
     echo -e "${YELLOW}━━━ DRY RUN MODE ━━━${NC}"
     echo ""
-    echo "Would retire container: ${CYAN}$CONTAINER_NAME${NC}"
+    echo -e "Would retire container: ${CYAN}$CONTAINER_NAME${NC}"
     echo ""
     if [ "$CONTAINER_STATUS" = "running" ]; then
         echo -e "  ${DIM}1. Stop container${NC}"

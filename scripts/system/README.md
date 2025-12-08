@@ -44,19 +44,25 @@ docker info  # Should work without sudo
 - If docker group doesn't exist: `sudo groupadd docker`
 - If docker daemon not running: `sudo systemctl start docker`
 
-### update-symlinks.sh
+### deploy-commands.sh (alias: `deploy`)
 
-Create/update symlinks for all DS01 commands in `/usr/local/bin/`.
+Deploy all DS01 commands to `/usr/local/bin/`.
 
-**Purpose:** Make all DS01 commands globally accessible
+**Purpose:** Make all DS01 commands globally accessible (copies, not symlinks)
 
 **Usage:**
 ```bash
-sudo scripts/system/update-symlinks.sh
+sudo deploy
+# or
+sudo /opt/ds01-infra/scripts/system/deploy-commands.sh
 ```
 
 **What it does:**
-Creates symlinks for all 30+ commands organized by tier:
+1. Sets permissions on source files (755 for scripts, 644 for configs)
+2. Copies all commands to `/usr/local/bin/` (not symlinks, for security)
+3. Makes commands accessible to all users
+
+Deploys all 40+ commands organized by tier:
 
 **Tier 4 (Wizards):**
 - `user-setup` → `scripts/user/user-setup`

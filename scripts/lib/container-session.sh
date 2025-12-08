@@ -152,6 +152,9 @@ attach_to_container() {
         docker exec -d "$tag" bash -c 'exec -a "[ds01-keep-alive]" sleep infinity' 2>/dev/null || true
     fi
 
+    echo -e "${DIM}Type 'exit' to exit the container${NC}"
+    echo ""
+
     # Attach via mlc-open or docker exec
     if [[ -f "$MLC_OPEN" && -x "$MLC_OPEN" ]]; then
         if [[ -n "$DS01_ORCHESTRATOR" ]]; then
@@ -237,7 +240,7 @@ show_post_exit_menu() {
                     bash "$SCRIPT_DIR/user/container-retire" "$name" --skip-initial-confirm
                 else
                     echo -e "${RED}✗${NC} container-retire not found"
-                    echo "Manual cleanup: ${GREEN}container-retire $name${NC}"
+                    echo -e "Manual cleanup: ${GREEN}container-retire $name${NC}"
                 fi
                 ;;
             *)

@@ -218,7 +218,7 @@ show_container_stats() {
     if [ -z "$containers" ]; then
         echo -e "${YELLOW}No running containers found${NC}\n"
         if [ -n "$container_name" ]; then
-            echo "Start container: ${GREEN}container-run $container_name${NC}"
+            echo -e "Start container: ${GREEN}container-run $container_name${NC}"
         else
             echo -e "View all containers: ${GREEN}container-list --all${NC}"
         fi

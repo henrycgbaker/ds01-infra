@@ -181,7 +181,7 @@ draw_summary() {
     local running=$(docker ps --filter "label=aime.mlc.DS01_USER=$current_user" --format "{{.Names}}" | wc -l)
     local stopped=$((total - running))
     
-    echo "  Containers: $total total  |  ${GREEN}$running running${NC}  |  ${YELLOW}$stopped stopped${NC}"
+    echo -e "  Containers: $total total  |  ${GREEN}$running running${NC}  |  ${YELLOW}$stopped stopped${NC}"
     echo ""
     
     # Disk usage for workspace

@@ -497,7 +497,6 @@ case $START_MODE in
         ;;
     open)
         echo -e "${CYAN}Starting container and opening terminal...${NC}"
-        echo ""
 
         # Pass --guided if set
         RUN_ARGS=()

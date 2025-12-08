@@ -152,8 +152,8 @@ show_simple() {
             echo -e "${DIM}Show all containers: ${GREEN}container-list --all${NC}"
             echo ""
         fi
-        echo -e "${BOLD}Create a container:${NC}"
-        echo -e "  ${GREEN}container-create my-project${NC}"
+        echo -e "${BOLD}Deploy a container:${NC}"
+        echo -e "  ${GREEN}container-deploy my-project${NC}"
         echo ""
         return
     fi

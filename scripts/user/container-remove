@@ -77,10 +77,10 @@ usage() {
     echo "  -h, --help              Show this help message"
     echo ""
     echo -e "${CYAN}What gets removed:${NC}"
-    echo "  • ${BOLD}Container${NC} - Always removed (the running instance)"
-    echo "  • ${BOLD}GPU allocation${NC} - Always released (good citizen!)"
-    echo "  • ${BOLD}Docker image${NC} - Only with --images flag (the blueprint)"
-    echo "  • ${BOLD}Volumes${NC} - Only with --volumes flag (persistent data)"
+    echo -e "  • ${BOLD}Container${NC} - Always removed (the running instance)"
+    echo -e "  • ${BOLD}GPU allocation${NC} - Always released (good citizen!)"
+    echo -e "  • ${BOLD}Docker image${NC} - Only with --images flag (the blueprint)"
+    echo -e "  • ${BOLD}Volumes${NC} - Only with --volumes flag (persistent data)"
     echo ""
     echo -e "${CYAN}What is ALWAYS preserved:${NC}"
     echo -e "  ${GREEN}✓${NC} Your workspace files (~/workspace/<project>/)"
@@ -772,7 +772,7 @@ else
         echo -e "${GREEN}✓${NC} No stopped containers\n"
     else
         echo -e "${YELLOW}Found $stopped_count stopped container(s)${NC}\n"
-        echo "Remove all with: ${GREEN}container-remove --all${NC}\n"
+        echo -e "Remove all with: ${GREEN}container-remove --all${NC}\n"
     fi
 fi
 

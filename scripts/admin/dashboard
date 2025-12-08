@@ -372,7 +372,36 @@ class DashboardRenderer:
         padding = self.WIDTH - 4 - len(clean)
         if pad and padding > 0:
             return f"│ {content}{' ' * padding} │"
-        return f"│ {content[:self.WIDTH-4]} │"
+        # Content too long - truncate properly preserving ANSI codes
+        truncated = self._truncate_ansi(content, self.WIDTH - 4)
+        return f"│ {truncated} │"
+
+    def _truncate_ansi(self, text: str, max_visible: int) -> str:
+        """Truncate string to max visible characters, preserving ANSI codes"""
+        result = []
+        visible_count = 0
+        i = 0
+
+        while i < len(text) and visible_count < max_visible:
+            char = text[i]
+            if char == '\033':
+                # Start of ANSI escape sequence - collect it entirely
+                escape_seq = char
+                i += 1
+                while i < len(text):
+                    escape_seq += text[i]
+                    if text[i] == 'm':
+                        i += 1
+                        break
+                    i += 1
+                result.append(escape_seq)
+            else:
+                result.append(char)
+                visible_count += 1
+                i += 1
+
+        # Add reset code to close any open formatting
+        return ''.join(result) + Colors.RESET
 
     def render_header(self) -> str:
         """Render dashboard header"""

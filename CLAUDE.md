@@ -294,6 +294,11 @@ See module-specific READMEs for detailed testing procedures.
 
 ## Common Operations
 
+**Deploy commands to /usr/local/bin (after editing scripts):**
+```bash
+sudo deploy   # Copies all DS01 commands to /usr/local/bin
+```
+
 **Add user to docker:**
 ```bash
 sudo scripts/system/add-user-to-docker.sh <username>

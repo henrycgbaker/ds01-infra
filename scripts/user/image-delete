@@ -362,10 +362,10 @@ if [ "$CONTAINER_COUNT" -gt 0 ]; then
         echo ""
         echo "Options:"
         echo "  1. Stop and remove containers first:"
-        echo "     ${GREEN}container-stop <name> && container-remove${NC}"
+        echo -e "     ${GREEN}container-stop <name> && container-remove${NC}"
         echo ""
         echo "  2. Force delete (stops/removes containers):"
-        echo "     ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
+        echo -e "     ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
         echo ""
         return 1
     else
@@ -441,9 +441,9 @@ if docker rmi "$IMAGE_NAME"; then
         fi
     else
         echo -e "${YELLOW}📄 Dockerfile kept at:${NC}"
-        echo "   ${BLUE}$DOCKERFILE${NC}"
+        echo -e "   ${BLUE}$DOCKERFILE${NC}"
         echo ""
-        echo "Rebuild later with: ${GREEN}image-update $IMAGE_NAME${NC}"
+        echo -e "Rebuild later with: ${GREEN}image-update $IMAGE_NAME${NC}"
         echo ""
     fi
 
@@ -460,9 +460,9 @@ else
     echo -e "\n${RED}✗ Failed to remove image${NC}"
     echo ""
     echo "Troubleshooting:"
-    echo "  1. Check for running containers: ${GREEN}container-list${NC}"
-    echo "  2. Force deletion: ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
-    echo "  3. Manual removal: ${BLUE}docker rmi $IMAGE_ID${NC}"
+    echo -e "  1. Check for running containers: ${GREEN}container-list${NC}"
+    echo -e "  2. Force deletion: ${YELLOW}image-delete $IMAGE_NAME --force${NC}"
+    echo -e "  3. Manual removal: ${BLUE}docker rmi $IMAGE_ID${NC}"
     return 1
 fi
 

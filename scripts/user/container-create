@@ -126,7 +126,7 @@ detailed_help() {
     echo "  Containers receive resources based on your user group:"
     echo "  • CPUs, Memory, Shared Memory - Per-container limits"
     echo "  • GPU/MIG instances - Allocated from available pool"
-    echo "  • Check your limits: ${GREEN}check-limits${NC}"
+    echo -e "  • Check your limits: ${GREEN}check-limits${NC}"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo ""
@@ -214,10 +214,10 @@ show_concepts() {
     echo ""
     echo -e "${BOLD}Recommended Workflow:${NC}"
     echo ""
-    echo "  1. Build custom image:    ${GREEN}image-create my-project${NC}"
-    echo "  2. Deploy container:      ${GREEN}container-deploy my-project${NC}"
+    echo -e "  1. Build custom image:    ${GREEN}image-create my-project${NC}"
+    echo -e "  2. Deploy container:      ${GREEN}container-deploy my-project${NC}"
     echo "  3. Work in container"
-    echo "  4. When done:             ${GREEN}container-retire my-project${NC}"
+    echo -e "  4. When done:             ${GREEN}container-retire my-project${NC}"
     echo ""
     echo -e "${DIM}Or use atomic commands for fine-grained control:${NC}"
     echo "  container-create → container-start → container-stop → container-remove"
@@ -1004,7 +1004,7 @@ if [ "$DRY_RUN" = true ]; then
     echo "Command that would be executed:"
     echo -e "  ${CYAN}bash $MLC_WRAPPER $CONTAINER_NAME $FRAMEWORK -w=\"$WORKSPACE_DIR\"${NC}"
     if [ "$CPU_ONLY" = true ]; then
-        echo "  ${CYAN}--cpu-only${NC}"
+        echo -e "  ${CYAN}--cpu-only${NC}"
     fi
     echo ""
     exit 0

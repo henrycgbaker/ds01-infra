@@ -175,7 +175,7 @@ if [ "$GUIDED" = true ]; then
     echo "    • Halts the entire container"
     echo "    • All processes terminate, container state saved to disk - ready for restart"
     if [ "$gpu_hold" != "None" ] && [ "$gpu_hold" != "null" ] && [ "$gpu_hold" != "indefinite" ]; then
-        echo "    • GPU held for ${CYAN}$gpu_hold${NC}, then auto-released"
+        echo -e "    • GPU held for ${CYAN}$gpu_hold${NC}, then auto-released"
     elif [ "$gpu_hold" = "indefinite" ]; then
         echo "    • GPU held indefinitely until cleanup"
     fi

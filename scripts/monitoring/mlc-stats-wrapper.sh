@@ -61,6 +61,6 @@ echo ""
 
 # Tips
 echo -e "${BOLD}Quick Actions:${NC}"
-echo "  Full dashboard: ${GREEN}ds01-dashboard${NC}"
-echo "  Open container: ${GREEN}mlc-open <name>${NC}"
-echo "  Stop container: ${GREEN}mlc-stop <name>${NC}"
+echo -e "  Full dashboard: ${GREEN}ds01-dashboard${NC}"
+echo -e "  Open container: ${GREEN}mlc-open <name>${NC}"
+echo -e "  Stop container: ${GREEN}mlc-stop <name>${NC}"

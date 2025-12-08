@@ -299,7 +299,7 @@ select_image_interactive() {
         if [ "$count" -eq 0 ]; then
             echo -e "${RED}No images found${NC}" >&2
             echo "" >&2
-            echo "Run ${GREEN}image-create${NC} to create your first image" >&2
+            echo -e "Run ${GREEN}image-create${NC} to create your first image" >&2
             return 1
         fi
 
