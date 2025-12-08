@@ -756,14 +756,14 @@ interactive_mode() {
             *)
                 if select_requirements_file; then
                     REQUIREMENTS_MODE=true
-                    # Skip Phases 2-4 by setting all choices to "skip"
-                    JUPYTER_CHOICE="skip"
-                    DATA_SCIENCE_CHOICE="skip"
+                    # Don't skip Jupyter/DS phases - user can still add those
+                    # Only skip use-case since requirements.txt handles domain packages
                     USECASE="custom"
                     CUSTOM_USECASE_PACKAGES=""
                     echo ""
                     local short_req="${REQUIREMENTS_FILE/#$HOME/~}"
                     echo -e "${GREEN}✓${NC} Will install packages from: ${CYAN}$short_req${NC}"
+                    echo -e "${DIM}You can still add Jupyter and Data Science packages below${NC}"
                 else
                     echo -e "${YELLOW}Falling back to guided selection${NC}"
                     REQUIREMENTS_MODE=false
@@ -1579,9 +1579,8 @@ if [ "$REQUIREMENTS_MODE" = true ] && [ -n "$REQUIREMENTS_FILE" ]; then
     SHORT_REQ="${REQUIREMENTS_FILE/#$HOME/~}"
     echo -e "${GREEN}✓${NC} Using requirements file: ${CYAN}$SHORT_REQ${NC}"
 
-    # Set package choices to skip (requirements.txt handles packages)
-    JUPYTER_CHOICE="skip"
-    DATA_SCIENCE_CHOICE="skip"
+    # Still include Jupyter and Data Science by default (user can override with --skip-jupyter etc)
+    # Only skip use-case since requirements.txt handles domain packages
     USECASE="custom"
     CUSTOM_USECASE_PACKAGES=""
 fi
