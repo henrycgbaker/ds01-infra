@@ -21,6 +21,9 @@ BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
 
+# Soft limit threshold (warn at 80% usage)
+SOFT_LIMIT_THRESHOLD=80
+
 USERNAME="${USER}"
 VERBOSE="${1:-}"
 
