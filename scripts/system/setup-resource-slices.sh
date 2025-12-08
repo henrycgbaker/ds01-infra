@@ -54,15 +54,16 @@ echo "Creating group slices for: $GROUP_LIST"
 echo ""
 
 for GROUP in $GROUP_LIST; do
-    # Get limits - with fallback to defaults if not specified
-    MAX_CPUS=$(yq eval ".groups.$GROUP.max_cpus // .defaults.max_cpus" "$CONFIG_FILE")
-    MAX_MEMORY=$(yq eval ".groups.$GROUP.memory // .defaults.memory" "$CONFIG_FILE")
-    MAX_TASKS=$(yq eval ".groups.$GROUP.max_tasks // .defaults.max_tasks" "$CONFIG_FILE")
+    # Group slices are for ACCOUNTING only, not limiting
+    # Resource limits are enforced per-container via docker --cpus, --memory flags
+    #
+    # Why no limits at group level:
+    # - A group slice contains ALL containers for ALL users in that group
+    # - If we set CPUQuota=3200% (32 CPUs), only one container could use full allocation
+    # - With 10 students × 3 containers × 32 CPUs = 960 CPUs needed (impossible)
+    # - Per-container limits via Docker are the correct enforcement point
 
-    # Convert CPU count to percentage (100% = 1 core)
-    CPU_QUOTA=$((MAX_CPUS * 100))
-
-    # Create slice file with base configuration
+    # Create slice file with accounting only (no resource limits)
     cat > /etc/systemd/system/ds01-${GROUP}.slice << EOF
 [Unit]
 Description=DS01 ${GROUP^} Group
@@ -74,16 +75,10 @@ CPUAccounting=true
 MemoryAccounting=true
 TasksAccounting=true
 IOAccounting=true
-CPUQuota=${CPU_QUOTA}%
-MemoryMax=${MAX_MEMORY}
+# Note: No CPUQuota/MemoryMax here - limits enforced per-container via Docker
 EOF
 
-    # Add TasksMax only if not null (null = infinity)
-    if [ "$MAX_TASKS" != "null" ]; then
-        echo "TasksMax=${MAX_TASKS}" >> /etc/systemd/system/ds01-${GROUP}.slice
-    fi
-    
-    echo "✓ Created ds01-${GROUP}.slice (CPUs: ${MAX_CPUS}, Memory: ${MAX_MEMORY}, Tasks: ${MAX_TASKS})"
+    echo "✓ Created ds01-${GROUP}.slice (accounting only, no resource limits)"
 done
 
 systemctl daemon-reload

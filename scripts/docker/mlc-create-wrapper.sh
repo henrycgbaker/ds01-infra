@@ -406,11 +406,16 @@ else
             else
                 # Use friendly error messages
                 ERROR_MESSAGES="$SCRIPT_DIR/../lib/error-messages.sh"
+                echo ""  # Blank line before error
                 if [ -f "$ERROR_MESSAGES" ]; then
                     source "$ERROR_MESSAGES"
                     show_limit_error "$ALLOC_OUTPUT" "$CURRENT_USER" "$CONTAINER_TAG"
                 else
+                    # Fallback if error-messages.sh not found
                     log_error "GPU allocation failed: $ALLOC_OUTPUT"
+                    echo ""
+                    echo "Your allocation may have been rejected due to resource limits."
+                    echo "Run 'check-limits' to see your current usage."
                 fi
                 exit 1
             fi

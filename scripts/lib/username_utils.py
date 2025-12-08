@@ -11,10 +11,10 @@ Usage:
     from username_utils import sanitize_username_for_slice, get_user_slice_name
 
     sanitized = sanitize_username_for_slice("h.baker@hertie-school.lan")
-    # Result: "h-baker-at-hertie-school-lan"
+    # Result: "h_baker" (domain stripped, dots replaced with underscores)
 
     slice_name = get_user_slice_name("student", "h.baker@hertie-school.lan")
-    # Result: "ds01-student-h-baker-at-hertie-school-lan.slice"
+    # Result: "ds01-student-h_baker.slice"
 """
 
 import re
@@ -24,8 +24,13 @@ def sanitize_username_for_slice(username: str) -> str:
     """
     Sanitize username for systemd slice naming.
 
-    Replaces @ with -at-, dots with hyphens, and removes invalid characters.
-    Valid systemd chars: a-zA-Z0-9_:-
+    Strips domain (@...), replaces dots with underscores, removes invalid characters.
+    Uses underscores (not hyphens) to avoid systemd hierarchy interpretation.
+
+    IMPORTANT: Systemd interprets hyphens as hierarchy separators.
+    Using hyphens causes slice names like "ds01-student-h-baker.slice" to create
+    nested hierarchy: ds01.slice/ds01-student.slice/ds01-student-h.slice/...
+    The intermediate slices don't have CPU accounting, causing container failures.
 
     Args:
         username: The original username (may contain @, ., etc.)
@@ -35,11 +40,11 @@ def sanitize_username_for_slice(username: str) -> str:
 
     Examples:
         >>> sanitize_username_for_slice("h.baker@hertie-school.lan")
-        'h-baker-at-hertie-school-lan'
+        'h_baker'
         >>> sanitize_username_for_slice("alice")
         'alice'
         >>> sanitize_username_for_slice("john.doe")
-        'john-doe'
+        'john_doe'
     """
     if not username:
         return username
@@ -51,18 +56,19 @@ def sanitize_username_for_slice(username: str) -> str:
     if '@' in sanitized:
         sanitized = sanitized.split('@')[0]
 
-    # Replace dots with hyphens
-    sanitized = sanitized.replace('.', '-')
+    # Replace dots with underscores (NOT hyphens - see docstring)
+    sanitized = sanitized.replace('.', '_')
 
-    # Replace any remaining invalid characters with hyphens
+    # Replace any remaining invalid characters with underscores
     # Valid systemd chars: a-zA-Z0-9_:-
-    sanitized = re.sub(r'[^a-zA-Z0-9_:-]', '-', sanitized)
+    # We use underscores to avoid hierarchy issues with hyphens
+    sanitized = re.sub(r'[^a-zA-Z0-9_:]', '_', sanitized)
 
-    # Collapse multiple consecutive hyphens to single hyphen
-    sanitized = re.sub(r'-+', '-', sanitized)
+    # Collapse multiple consecutive underscores to single underscore
+    sanitized = re.sub(r'_+', '_', sanitized)
 
-    # Trim leading and trailing hyphens
-    sanitized = sanitized.strip('-')
+    # Trim leading and trailing underscores
+    sanitized = sanitized.strip('_')
 
     # Truncate to 32 characters (Linux username/groupname limit)
     # groupadd/useradd fail with names > 32 chars
@@ -71,8 +77,8 @@ def sanitize_username_for_slice(username: str) -> str:
         import hashlib
         # Generate 4-char hash from original username to avoid collisions
         hash_suffix = hashlib.md5(username.encode()).hexdigest()[:4]
-        # Truncate to 27 chars + hyphen + 4-char hash = 32 chars
-        sanitized = sanitized[:27].rstrip('-') + '-' + hash_suffix
+        # Truncate to 27 chars + underscore + 4-char hash = 32 chars
+        sanitized = sanitized[:27].rstrip('_') + '_' + hash_suffix
 
     return sanitized
 
@@ -91,7 +97,7 @@ def get_user_slice_name(group: str, username: str) -> str:
         username: The original username
 
     Returns:
-        Full slice name like "ds01-student-h-baker-at-hertie-school-lan.slice"
+        Full slice name like "ds01-student-h_baker.slice"
     """
     sanitized = sanitize_username_for_slice(username)
     return f"ds01-{group}-{sanitized}.slice"

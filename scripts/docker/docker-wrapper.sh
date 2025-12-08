@@ -117,26 +117,27 @@ ensure_user_slice() {
     fi
 }
 
-# Phase B: Container list filtering (Dec 2025)
-# Admins see all containers, non-admins see only their labeled containers
+# Phase B: Container list filtering - DISABLED (Dec 2025)
+#
+# Previously filtered 'docker ps' to show only user's containers for non-admins.
+# This was removed because:
+# 1. It broke GPU state reader (couldn't see other users' GPU allocations)
+# 2. OPA policy already prevents operations on other users' containers
+# 3. Visibility != Access - seeing containers is harmless, OPA controls actions
+# 4. Simpler architecture = fewer bugs
+#
+# Access control is now handled entirely by OPA authorization plugin.
 
-# Check if user is an admin (ds01-admin group)
+# Check if user is an admin (ds01-admin group) - kept for potential future use
 is_admin() {
     groups "$CURRENT_USER" 2>/dev/null | grep -qE '\bds01-admin\b'
 }
 
-# Filter docker ps/container ls to show only user's containers (non-admins)
-# Note: Pre-existing containers without ds01.user label will be hidden from non-admins
+# No longer filtering - all users see all containers
+# OPA handles access control for operations
 filter_container_list() {
-    # Admins see all containers (including unlabeled legacy containers)
-    if is_admin; then
-        log_debug "Admin user - showing all containers"
-        exec "$REAL_DOCKER" "$@"
-    fi
-
-    # Non-admins: filter by ds01.user label (only shows their labeled containers)
-    log_debug "Filtering container list for user $CURRENT_USER"
-    exec "$REAL_DOCKER" "$@" --filter "label=ds01.user=$CURRENT_USER"
+    log_debug "Passing through container list (no filtering)"
+    exec "$REAL_DOCKER" "$@"
 }
 
 # Main logic

@@ -35,6 +35,7 @@ container-stats                         # Resource usage
 container-create my-project             # Create only
 container-start my-project              # Start background
 container-run my-project                # Start and enter
+container-attach my-project             # Attach to running
 container-stop my-project               # Stop only
 container-remove my-project             # Remove only
 ```
@@ -50,6 +51,7 @@ image-create my-project
 # Manage images
 image-list                              # Your images
 image-update my-project                 # Rebuild
+image-install my-project pandas numpy   # Add packages
 image-delete my-project                 # Remove
 ```
 
@@ -72,8 +74,10 @@ readme-create my-project                # Generate README
 ## System Status
 
 ```bash
-ds01-dashboard                          # System overview
+dashboard                               # System overview (or: ds01-dashboard)
 check-limits                            # Your quotas
+help                                    # List all commands
+version                                 # Show version
 ```
 
 ---
@@ -161,6 +165,20 @@ docker logs my-project._.$(whoami)
 container-retire my-project
 container-deploy my-project
 ```
+
+---
+
+## Alternative Syntax
+
+Commands also work with spaces instead of hyphens:
+
+```bash
+container deploy my-project    # Same as container-deploy
+image create my-project        # Same as image-create
+project init my-project        # Same as project-init
+```
+
+See [Dispatcher Commands](reference/commands/dispatcher-commands.md) for details.
 
 ---
 

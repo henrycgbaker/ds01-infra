@@ -17,6 +17,12 @@ import sys
 from typing import Dict, List, Optional
 from collections import defaultdict
 
+# Real Docker binary - bypasses the wrapper at /usr/local/bin/docker
+# The wrapper filters 'docker ps' for non-admin users, which would cause
+# the GPU state reader to miss allocations from other users, leading to
+# incorrect "available" GPU status and double-allocations.
+DOCKER_BIN = "/usr/bin/docker"
+
 
 # Interface detection constants
 INTERFACE_ORCHESTRATION = "orchestration"
@@ -80,7 +86,7 @@ class GPUStateReader:
         """Get docker inspect output for a container."""
         try:
             result = subprocess.run(
-                ["docker", "inspect", container_name],
+                [DOCKER_BIN, "inspect", container_name],
                 capture_output=True,
                 text=True,
                 check=True
@@ -287,9 +293,9 @@ class GPUStateReader:
         container_names = []
 
         try:
-            # Get all containers
+            # Get all containers (using real docker binary to see all users' containers)
             result = subprocess.run(
-                ["docker", "ps", "-a", "--format", "{{.Names}}"],
+                [DOCKER_BIN, "ps", "-a", "--format", "{{.Names}}"],
                 capture_output=True,
                 text=True,
                 check=True

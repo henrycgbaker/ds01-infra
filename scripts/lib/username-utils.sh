@@ -9,10 +9,11 @@
 # Usage:
 #   source /opt/ds01-infra/scripts/lib/username-utils.sh
 #   sanitized=$(sanitize_username_for_slice "h.baker@hertie-school.lan")
-#   # Result: h-baker-at-hertie-school-lan
+#   # Result: h_baker (domain stripped, dots replaced with underscores)
 
 # Sanitize username for systemd slice naming
-# Replaces @ with -at-, dots with hyphens, and removes invalid characters
+# Strips domain (@...), replaces dots with underscores, removes invalid characters
+# Uses underscores (not hyphens) to avoid systemd hierarchy interpretation
 sanitize_username_for_slice() {
     local username="$1"
 
@@ -28,18 +29,23 @@ sanitize_username_for_slice() {
     # e.g., "c.fusarbassini@hertie-school.lan" -> "c.fusarbassini"
     sanitized="${sanitized%%@*}"
 
-    # Replace dots with hyphens
-    sanitized="${sanitized//./-}"
+    # Replace dots with underscores (NOT hyphens!)
+    # IMPORTANT: Systemd interprets hyphens as hierarchy separators
+    # Using hyphens causes slice names like "ds01-student-h-baker.slice" to create
+    # nested hierarchy: ds01.slice/ds01-student.slice/ds01-student-h.slice/ds01-student-h-baker.slice
+    # The intermediate slices don't have CPU accounting enabled, causing container start failures
+    sanitized="${sanitized//./_}"
 
-    # Replace any remaining invalid characters with hyphens
+    # Replace any remaining invalid characters with underscores
     # Valid systemd chars: a-zA-Z0-9_:-
-    sanitized=$(echo "$sanitized" | sed 's/[^a-zA-Z0-9_:-]/-/g')
+    # We use underscores to avoid hierarchy issues with hyphens
+    sanitized=$(echo "$sanitized" | sed 's/[^a-zA-Z0-9_:]/_/g')
 
-    # Collapse multiple consecutive hyphens to single hyphen
-    sanitized=$(echo "$sanitized" | sed 's/--*/-/g')
+    # Collapse multiple consecutive underscores to single underscore
+    sanitized=$(echo "$sanitized" | sed 's/__*/_/g')
 
-    # Trim leading and trailing hyphens
-    sanitized=$(echo "$sanitized" | sed 's/^-//; s/-$//')
+    # Trim leading and trailing underscores
+    sanitized=$(echo "$sanitized" | sed 's/^_//; s/_$//')
 
     # Truncate to 32 characters (Linux username/groupname limit)
     # groupadd/useradd fail with names > 32 chars

@@ -18,13 +18,18 @@ try:
     from username_utils import sanitize_username_for_slice
 except ImportError:
     # Fallback if library not available
+    # Uses underscores (not hyphens) to avoid systemd hierarchy interpretation
     import re
     def sanitize_username_for_slice(username: str) -> str:
         if not username:
             return username
-        sanitized = username.replace('@', '-at-').replace('.', '-')
-        sanitized = re.sub(r'[^a-zA-Z0-9_:-]', '-', sanitized)
-        sanitized = re.sub(r'-+', '-', sanitized).strip('-')
+        # Strip domain part
+        if '@' in username:
+            username = username.split('@')[0]
+        # Replace dots and invalid chars with underscores (NOT hyphens)
+        sanitized = username.replace('.', '_')
+        sanitized = re.sub(r'[^a-zA-Z0-9_:]', '_', sanitized)
+        sanitized = re.sub(r'_+', '_', sanitized).strip('_')
         return sanitized
 
 class ResourceLimitParser:
