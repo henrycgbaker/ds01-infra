@@ -4,6 +4,24 @@ Commands for container lifecycle management.
 
 ---
 
+## Getting Help
+
+All container commands support these flags:
+
+| Flag | Purpose |
+|------|---------|
+| `--help` | Quick reference (usage, main options) |
+| `--info` | Full reference (all options, examples) |
+| `--concepts` | Pre-run education (what is a container?) |
+| `--guided` | Interactive learning (explanations during) |
+
+```bash
+container-deploy --concepts   # Learn before deploying
+container-stop --info         # See all stop options
+```
+
+---
+
 ## Quick Reference
 
 ```bash

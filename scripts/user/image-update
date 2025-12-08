@@ -4,7 +4,11 @@
 
 set -e
 
-BLUE='\033[94m'
+# Source DS01 context library for conditional output
+[[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]] && \
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -136,6 +140,7 @@ select_image_interactive() {
         echo " $i) Exit" >&2
         echo "" >&2
 
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Select number (or 'q' to quit): " selection </dev/tty
 
         # Handle exit
@@ -204,6 +209,137 @@ usage() {
     echo -e "   ${GREEN}container-deploy my-project${NC}  ${DIM}# Create + start${NC}"
     echo ""
     echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
+}
+
+detailed_help() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Docker Image Updater - Full Reference${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  image-update [image-name] [options]"
+    echo "  image-update                    # Interactive selection"
+    echo ""
+    echo -e "${BOLD}Positional Arguments:${NC}"
+    echo "  image-name        Image to update (can be short name or full path)"
+    echo "                    Short: my-project"
+    echo "                    Full: ds01-\${USER_ID}/my-project"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  --add \"pkg1 pkg2\"     Add Python packages (space-separated)"
+    echo "  --add-system \"pkg1\"   Add system packages (apt packages)"
+    echo "  --edit                Open Dockerfile in editor"
+    echo "  --guided              Educational mode with explanations"
+    echo "  --no-cache            Full rebuild without Docker cache"
+    echo "  --concepts            Show pre-run educational content"
+    echo "  --info                Show this detailed reference"
+    echo "  -h, --help            Show quick reference"
+    echo ""
+    echo -e "${BOLD}Modes:${NC}"
+    echo ""
+    echo -e "  ${CYAN}Interactive${NC} (default)"
+    echo "    Visual package management: view, add, remove packages"
+    echo "    Best for: Exploring and managing packages interactively"
+    echo ""
+    echo -e "  ${CYAN}Quick${NC} (--add / --add-system)"
+    echo "    Command-line package additions"
+    echo "    Best for: Scripting, quick additions"
+    echo ""
+    echo -e "  ${CYAN}Advanced${NC} (--edit)"
+    echo "    Direct Dockerfile editing in your editor"
+    echo "    Best for: Complex customizations"
+    echo ""
+    echo -e "  ${CYAN}Guided${NC} (--guided)"
+    echo "    Step-by-step with explanations"
+    echo "    Best for: Learning, first-time users"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo ""
+    echo -e "  ${DIM}# Interactive mode with visual package management${NC}"
+    echo "  image-update my-project"
+    echo ""
+    echo -e "  ${DIM}# Quick add Python packages${NC}"
+    echo "  image-update my-project --add \"wandb optuna\""
+    echo ""
+    echo -e "  ${DIM}# Add multiple with version specifiers${NC}"
+    echo "  image-update my-project --add \"numpy>=1.24 pandas==2.0.0\""
+    echo ""
+    echo -e "  ${DIM}# Add system packages${NC}"
+    echo "  image-update my-project --add-system \"tmux htop git-lfs\""
+    echo ""
+    echo -e "  ${DIM}# Edit Dockerfile directly${NC}"
+    echo "  image-update my-project --edit"
+    echo ""
+    echo -e "  ${DIM}# Clean rebuild (no cache)${NC}"
+    echo "  image-update my-project --no-cache"
+    echo ""
+    echo -e "  ${DIM}# Combine: add packages + clean rebuild${NC}"
+    echo "  image-update my-project --add \"new-pkg\" --no-cache"
+    echo ""
+    echo -e "${BOLD}After Updating:${NC}"
+    echo "  Redeploy containers to use the updated image:"
+    echo -e "  1. ${GREEN}container-retire my-project${NC}   ${DIM}# Remove old container${NC}"
+    echo -e "  2. ${GREEN}container-deploy my-project${NC}   ${DIM}# Create with new image${NC}"
+    echo ""
+    echo -e "${BOLD}Related Commands:${NC}"
+    echo -e "  ${GREEN}image-create${NC}   Create a new image from scratch"
+    echo -e "  ${GREEN}image-list${NC}     View all your images"
+    echo -e "  ${GREEN}image-delete${NC}   Remove an image"
+    echo ""
+}
+
+show_concepts() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Understanding Image Updates${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What does image-update do?${NC}"
+    echo "  Rebuilds an existing Docker image after modifying its Dockerfile."
+    echo "  Use this to add, remove, or change packages in your environment."
+    echo ""
+    echo -e "${BOLD}Key Terms:${NC}"
+    echo -e "  • ${CYAN}Dockerfile${NC} - Recipe file that defines your image"
+    echo -e "  • ${CYAN}Image${NC} - Built environment (frozen, reusable)"
+    echo -e "  • ${CYAN}Rebuild${NC} - Create new image version from Dockerfile"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}When to use image-update vs image-create:${NC}"
+    echo ""
+    echo -e "  ${GREEN}image-create${NC} - Starting fresh"
+    echo "    • First-time image creation"
+    echo "    • Changing base framework (PyTorch → TensorFlow)"
+    echo "    • Starting over with different packages"
+    echo ""
+    echo -e "  ${GREEN}image-update${NC} - Modifying existing"
+    echo "    • Adding new packages"
+    echo "    • Removing packages"
+    echo "    • Updating package versions"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}How Docker Caching Works:${NC}"
+    echo "  Docker caches each layer to speed up rebuilds."
+    echo "  Only changed layers get rebuilt."
+    echo ""
+    echo "  If a rebuild seems wrong:"
+    echo -e "  • Use ${GREEN}--no-cache${NC} for a clean rebuild"
+    echo "  • This takes longer but ensures fresh packages"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}After Updating:${NC}"
+    echo "  Existing containers still use the OLD image."
+    echo "  To use the updated image, redeploy:"
+    echo -e "  1. ${GREEN}container-retire my-project${NC}"
+    echo -e "  2. ${GREEN}container-deploy my-project${NC}"
+    echo ""
+    echo -e "${BOLD}Ready to start?${NC}"
+    echo -e "  Run: ${GREEN}image-update${NC}              (select image interactively)"
+    echo -e "  Run: ${GREEN}image-update my-project${NC}   (update specific image)"
     echo ""
 }
 
@@ -678,6 +814,7 @@ interactive_mode() {
         echo -e "  ${BOLD}5)${NC} Continue to rebuild ${BOLD}${YELLOW}(necessary to apply changes!)${NC}"
         echo -e "  ${BOLD}6)${NC} Cancel"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-6]: " CHOICE </dev/tty
 
         case $CHOICE in
@@ -690,6 +827,7 @@ interactive_mode() {
                     echo "Enter package names (space-separated):"
                     echo -e "${DIM}Examples: wandb optuna pytorch-lightning pandas==1.5.3 transformers>=4.30.0${NC}"
                     echo ""
+                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                     read -p "> " NEW_PACKAGES </dev/tty
 
                     if [ -z "$NEW_PACKAGES" ]; then
@@ -734,6 +872,7 @@ interactive_mode() {
                         if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
                             echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
                             echo ""
+                            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                             read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
                             REBUILD_NOW=${REBUILD_NOW:-Y}
                             if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
@@ -753,6 +892,7 @@ interactive_mode() {
                 echo "Enter system package names (space-separated):"
                 echo -e "${DIM}Examples: tmux htop tree${NC}"
                 echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                 read -p "> " NEW_SYS_PACKAGES </dev/tty
 
                 if [ -n "$NEW_SYS_PACKAGES" ]; then
@@ -765,6 +905,7 @@ interactive_mode() {
                     echo ""
                     echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
                     echo ""
+                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                     read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
                     REBUILD_NOW=${REBUILD_NOW:-Y}
                     if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
@@ -782,6 +923,7 @@ interactive_mode() {
                 echo ""
                 echo "Enter package names to remove (space-separated):"
                 echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                 read -p "> " REMOVE_PACKAGES </dev/tty
 
                 if [ -n "$REMOVE_PACKAGES" ]; then
@@ -794,6 +936,7 @@ interactive_mode() {
                     echo ""
                     echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
                     echo ""
+                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                     read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
                     REBUILD_NOW=${REBUILD_NOW:-Y}
                     if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
@@ -819,6 +962,7 @@ interactive_mode() {
                     echo ""
                     cat "$dockerfile"
                     echo ""
+                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                     read -p "Press Enter to continue..." </dev/tty
                 else
                     echo -e "${YELLOW}Opening Dockerfile in $EDITOR_CMD...${NC}"
@@ -901,6 +1045,7 @@ guided_mode() {
     echo "  • ${CYAN}Minimum version${NC}: 'pandas>=2.0.0' → installs latest ≥2.0.0"
     echo "  • ${CYAN}Compatible${NC}: 'pandas~=1.5.0' → installs latest 1.5.x"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to continue..." </dev/tty
     echo ""
 
@@ -938,8 +1083,16 @@ while [[ $# -gt 0 ]]; do
             NO_CACHE=true
             shift
             ;;
-        -h|--help|--info)
+        -h|--help)
             usage
+            exit 0
+            ;;
+        --info)
+            detailed_help
+            exit 0
+            ;;
+        --concepts)
+            show_concepts
             exit 0
             ;;
         -*)
@@ -1029,7 +1182,8 @@ if [ ! -f "$DOCKERFILE" ]; then
     echo -e "${RED}✗ Dockerfile not found${NC}"
     echo "Expected location: $DOCKERFILE"
     echo ""
-    read -p "Enter path to Dockerfile: " CUSTOM_PATH
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+    read -p "Enter path to Dockerfile: " CUSTOM_PATH </dev/tty
     if [ -f "$CUSTOM_PATH" ]; then
         DOCKERFILE="$CUSTOM_PATH"
     else
@@ -1125,6 +1279,7 @@ fi
 echo ""
 echo -e "${DIM}Time estimate: 3-5 minutes${NC}"
 echo ""
+read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 read -p "Rebuild image now? [Y/n]: " REBUILD_CONFIRM </dev/tty
 REBUILD_CONFIRM=${REBUILD_CONFIRM:-Y}
 echo ""
@@ -1259,6 +1414,7 @@ if eval "$BUILD_CMD"; then
         echo "  • Create a new container from the updated image"
         echo "  • Your workspace files will be preserved"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Recreate container now? [Y/n]: " RECREATE_CONFIRM </dev/tty
         RECREATE_CONFIRM=${RECREATE_CONFIRM:-Y}
 

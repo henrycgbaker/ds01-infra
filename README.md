@@ -64,9 +64,17 @@ DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically ra
 **Design principles:**
 - **Wrap, don't replace**: Use AIME's proven container management
 - **Modular and reusable**: Single-purpose commands compose into workflows
-- **Educational mode**: All Tier 2+ commands support `--guided` flag
+- **4-tier help system**: `--help`, `--info`, `--concepts`, `--guided` for all commands
 - **Single source of truth**: No code duplication between tiers
 - **Consistent CLI/UX**: Follow [ds01-UI_UX_GUIDE.md](ds01-UI_UX_GUIDE.md) for all commands
+
+**Help system:**
+| Flag | Purpose |
+|------|---------|
+| `--help` | Quick reference (usage, main options) |
+| `--info` | Full reference (all options, examples) |
+| `--concepts` | Pre-run education (what is X?) |
+| `--guided` | Interactive learning during execution |
 
 **See detailed architecture docs:**
 - [scripts/user/README.md](scripts/user/README.md) - Command tiers and user workflows

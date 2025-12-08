@@ -4,7 +4,7 @@
 
 set -e
 
-BLUE='\033[94m'
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -117,28 +117,55 @@ extended_usage() {
 show_concepts() {
     echo ""
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}DS01 Image Concepts${NC}"
+    echo -e "${BOLD}Understanding Docker Images${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
     echo -e "${BOLD}What is a Docker Image?${NC}"
-    echo -e "  • ${CYAN}Dockerfile${NC} = Recipe (text file with build instructions)"
-    echo -e "  • ${CYAN}Image${NC} = Blueprint (built from Dockerfile, stored by Docker)"
-    echo -e "  • ${CYAN}Container${NC} = Running instance (where you actually work)"
+    echo "  A Docker image is a blueprint for your computing environment."
+    echo "  Think of it like a recipe that defines all the software you need."
     echo ""
-    echo -e "${BOLD}Framework Comparison${NC}"
-    echo -e "  • ${CYAN}PyTorch${NC}: Best for research, dynamic graphs, NLP"
-    echo -e "  • ${CYAN}TensorFlow${NC}: Best for production, static graphs, mobile"
-    echo -e "  • ${CYAN}JAX${NC}: Best for high-performance numerical computing"
+    echo -e "${BOLD}Key Terms:${NC}"
+    echo -e "  • ${CYAN}Dockerfile${NC} - Recipe (text file with build instructions)"
+    echo -e "  • ${CYAN}Image${NC} - Blueprint (built from Dockerfile, stored by Docker)"
+    echo -e "  • ${CYAN}Container${NC} - Running instance (where you actually work)"
+    echo -e "  • ${CYAN}Workspace${NC} - Your files (~/workspace/<project>/, always safe)"
     echo ""
-    echo -e "${BOLD}Use Case Templates${NC}"
-    echo -e "  • ${CYAN}cv${NC}: Computer vision (opencv, albumentations, timm)"
-    echo -e "  • ${CYAN}nlp${NC}: NLP/LLMs (transformers, datasets, tokenizers)"
-    echo -e "  • ${CYAN}rl${NC}: Reinforcement learning (gymnasium, stable-baselines3)"
-    echo -e "  • ${CYAN}ml${NC}: General ML (scikit-learn, xgboost, lightgbm)"
+    echo -e "${BOLD}Important:${NC} Your workspace files are separate from containers."
+    echo "  Containers can be deleted and recreated; your files remain."
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Framework Comparison:${NC}"
+    echo ""
+    echo -e "  ${CYAN}PyTorch${NC} (default, recommended)"
+    echo "    Best for: Research, prototyping, NLP, computer vision"
+    echo "    Why: Dynamic graphs, Pythonic API, huge community"
+    echo ""
+    echo -e "  ${CYAN}TensorFlow${NC}"
+    echo "    Best for: Production, mobile deployment, TPU training"
+    echo "    Why: Mature ecosystem, TensorBoard, Keras integration"
+    echo ""
+    echo -e "  ${CYAN}JAX${NC}"
+    echo "    Best for: High-performance computing, research, TPU"
+    echo "    Why: Functional design, XLA compilation, auto-differentiation"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Use Case Templates:${NC}"
+    echo -e "  • ${CYAN}ml${NC} - General ML (xgboost, lightgbm, optuna)"
+    echo -e "  • ${CYAN}cv${NC} - Computer Vision (opencv, albumentations, timm)"
+    echo -e "  • ${CYAN}nlp${NC} - NLP/LLMs (transformers, datasets, tokenizers)"
+    echo -e "  • ${CYAN}rl${NC} - Reinforcement Learning (gymnasium, stable-baselines3)"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}image-create vs image-update:${NC}"
+    echo -e "  • ${GREEN}image-create${NC} - Create a new image from scratch"
+    echo -e "  • ${GREEN}image-update${NC} - Rebuild existing image (after Dockerfile changes)"
     echo ""
     echo -e "${BOLD}Ready to start?${NC}"
     echo -e "  Run: ${GREEN}image-create${NC}            (interactive wizard)"
-    echo -e "  Run: ${GREEN}image-create --guided${NC}   (with step-by-step explanations)"
+    echo -e "  Run: ${GREEN}image-create --guided${NC}   (step-by-step with explanations)"
     echo ""
 }
 
@@ -172,10 +199,10 @@ show_base_image_packages() {
     if [ "$GUIDED" = true ]; then
         echo -e "${DIM}To see full package list: docker run --rm $base_image pip list${NC}"
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Press Enter to continue..." </dev/tty
+        echo ""
     fi
-
-    read -p "Press Enter to continue..." </dev/tty
-    echo ""
 }
 
 detect_cuda_arch() {
@@ -353,6 +380,7 @@ check_user_limits() {
                 echo -e "View containers: ${GREEN}container-list${NC}"
                 echo -e "Retire container:  ${GREEN}container-retire <name>${NC}"
                 echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                 read -p "Continue creating image anyway? [y/N]: " CONTINUE </dev/tty
                 if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
                     echo "Cancelled."
@@ -579,9 +607,6 @@ select_requirements_file() {
 
     if validate_requirements_file "$selected_path"; then
         REQUIREMENTS_FILE="$selected_path"
-        local short_path="${selected_path/#$HOME/~}"
-        echo ""
-        echo -e "${GREEN}✓${NC} Selected: ${CYAN}$short_path${NC}"
         return 0
     else
         return 1
@@ -813,6 +838,7 @@ interactive_mode() {
             echo ""
             echo -e "${YELLOW}💡 Recommendation:${NC} Install if you use notebooks"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Press Enter to continue..." </dev/tty
             echo ""
         fi
@@ -888,6 +914,7 @@ interactive_mode() {
             echo -e "${YELLOW}⚠ Note:${NC} These are NOT in AIME base (only numpy included)"
             echo -e "${YELLOW}💡 Recommendation:${NC} Install defaults (needed for most DS work)"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Press Enter to continue..." </dev/tty
             echo ""
         fi
@@ -972,6 +999,7 @@ interactive_mode() {
             echo ""
             echo -e "• ${CYAN}Custom${NC} - Skip use case packages or specify manually"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Press Enter to continue..." </dev/tty
             echo ""
         fi
@@ -1626,6 +1654,7 @@ if [ "$GUIDED" = true ]; then
     echo "  4. Build image (takes 3-5 minutes, depending on existing cache)"
     echo "  5. Create containers from this image"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to start creating your image..." </dev/tty
     echo ""
 fi

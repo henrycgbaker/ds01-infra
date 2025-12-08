@@ -11,7 +11,7 @@ if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
 fi
 
 # Colors
-BLUE='\033[94m'
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -83,6 +83,151 @@ usage() {
     echo ""
 }
 
+detailed_help() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Container Create - Full Reference${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${DIM}L2 Atomic Command - For granular control. Most users should use: container-deploy${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  container-create [name] [image] [options]"
+    echo "  container-create              # Interactive wizard"
+    echo ""
+    echo -e "${BOLD}Positional Arguments:${NC}"
+    echo "  name              Container name (determines workspace directory)"
+    echo "  image             Docker image to use. Can be:"
+    echo "                    • Custom image name (e.g., my-project-image)"
+    echo "                    • Full image path (e.g., ds01-1001/my-project)"
+    echo "                    • Framework name (pytorch, tensorflow)"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  --guided          Interactive mode with detailed explanations"
+    echo "  --cpu-only        Create CPU-only container (no GPU allocation)"
+    echo "  -w, --workspace   Custom workspace directory"
+    echo "                    Default: ~/workspace/<container-name>"
+    echo "  -d, --data        Additional data directory to mount (read-only)"
+    echo "  --dry-run         Preview creation without executing"
+    echo "  --concepts        Show pre-run educational content"
+    echo "  --info            Show this detailed reference"
+    echo "  -h, --help        Show quick reference"
+    echo ""
+    echo -e "${BOLD}Framework Shortcuts:${NC}"
+    echo "  pytorch           Latest PyTorch from AIME catalog (default)"
+    echo "  tensorflow        Latest TensorFlow from AIME catalog"
+    echo ""
+    echo -e "${BOLD}Container Naming:${NC}"
+    echo "  Internal format:  <name>._.${USER_ID}"
+    echo "  Display format:   <name> (user-friendly)"
+    echo "  Example:          my-project → my-project._.1001"
+    echo ""
+    echo -e "${BOLD}Resource Allocation:${NC}"
+    echo "  Containers receive resources based on your user group:"
+    echo "  • CPUs, Memory, Shared Memory - Per-container limits"
+    echo "  • GPU/MIG instances - Allocated from available pool"
+    echo "  • Check your limits: ${GREEN}check-limits${NC}"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo ""
+    echo -e "  ${DIM}# Interactive wizard (recommended for first time)${NC}"
+    echo "  container-create"
+    echo ""
+    echo -e "  ${DIM}# Create with default PyTorch framework${NC}"
+    echo "  container-create my-project"
+    echo ""
+    echo -e "  ${DIM}# Create from a custom image you built${NC}"
+    echo "  container-create my-project ds01-${USER_ID}/my-project-image"
+    echo ""
+    echo -e "  ${DIM}# Create with TensorFlow framework${NC}"
+    echo "  container-create ml-project tensorflow"
+    echo ""
+    echo -e "  ${DIM}# CPU-only for preprocessing/data work${NC}"
+    echo "  container-create data-prep --cpu-only"
+    echo ""
+    echo -e "  ${DIM}# Custom workspace location${NC}"
+    echo "  container-create experiment --workspace ~/projects/experiment"
+    echo ""
+    echo -e "  ${DIM}# Mount additional data directory${NC}"
+    echo "  container-create training --data /shared/datasets"
+    echo ""
+    echo -e "  ${DIM}# Preview without creating${NC}"
+    echo "  container-create my-project --dry-run"
+    echo ""
+    echo -e "${BOLD}After Creation:${NC}"
+    echo -e "  ${GREEN}container-run <name>${NC}      Enter container"
+    echo -e "  ${GREEN}container-start <name>${NC}   Start container (background)"
+    echo -e "  ${GREEN}container-list${NC}           View your containers"
+    echo -e "  ${GREEN}container-stats${NC}          Check resource usage"
+    echo ""
+    echo -e "${BOLD}Related Commands:${NC}"
+    echo -e "  ${GREEN}container-deploy${NC}     Create + start (recommended workflow)"
+    echo -e "  ${GREEN}image-create${NC}         Build a custom image first"
+    echo -e "  ${GREEN}image-list${NC}           View available images"
+    echo ""
+}
+
+show_concepts() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Understanding Containers${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What is a Container?${NC}"
+    echo "  A container is an isolated computing environment with:"
+    echo "  • Operating system (Ubuntu Linux)"
+    echo "  • Pre-installed software (Python, frameworks, libraries)"
+    echo "  • GPU access for machine learning"
+    echo "  • Your workspace files mounted"
+    echo ""
+    echo -e "${BOLD}Key Terms:${NC}"
+    echo -e "  • ${CYAN}Image${NC} - Blueprint/template (static, reusable)"
+    echo -e "  • ${CYAN}Container${NC} - Running instance (where you work)"
+    echo -e "  • ${CYAN}Workspace${NC} - Your files (~/workspace/<project>/, always safe)"
+    echo ""
+    echo -e "${BOLD}Important:${NC} Your workspace files are SEPARATE from containers."
+    echo "  Containers can be deleted and recreated; your files remain."
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Container Lifecycle:${NC}"
+    echo ""
+    echo -e "  ${GREEN}Created${NC} → ${GREEN}Running${NC} → ${YELLOW}Stopped${NC} → ${RED}Removed${NC}"
+    echo ""
+    echo "  • Created: Container exists but not started"
+    echo "  • Running: Active, consuming resources, GPU allocated"
+    echo "  • Stopped: Paused, GPU released (after timeout)"
+    echo "  • Removed: Deleted (can be recreated from image)"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Resource Allocation:${NC}"
+    echo "  DS01 automatically assigns resources based on your group:"
+    echo "  • CPUs - Processing power"
+    echo "  • Memory (RAM) - Working memory"
+    echo "  • GPU/MIG - GPU instances for training"
+    echo "  • Shared memory - For fast data loading"
+    echo ""
+    echo -e "  Check your limits: ${GREEN}check-limits${NC}"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Recommended Workflow:${NC}"
+    echo ""
+    echo "  1. Build custom image:    ${GREEN}image-create my-project${NC}"
+    echo "  2. Deploy container:      ${GREEN}container-deploy my-project${NC}"
+    echo "  3. Work in container"
+    echo "  4. When done:             ${GREEN}container-retire my-project${NC}"
+    echo ""
+    echo -e "${DIM}Or use atomic commands for fine-grained control:${NC}"
+    echo "  container-create → container-start → container-stop → container-remove"
+    echo ""
+    echo -e "${BOLD}Ready to start?${NC}"
+    echo -e "  Run: ${GREEN}container-create${NC}            (interactive wizard)"
+    echo -e "  Run: ${GREEN}container-create --guided${NC}   (step-by-step explanations)"
+    echo ""
+}
+
 # Parse arguments
 CONTAINER_NAME=""
 IMAGE_OR_FRAMEWORK=""
@@ -114,8 +259,16 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
-        -h|--help|--info)
+        -h|--help)
             usage
+            exit 0
+            ;;
+        --info)
+            detailed_help
+            exit 0
+            ;;
+        --concepts)
+            show_concepts
             exit 0
             ;;
         -*)
@@ -165,7 +318,7 @@ if [ -z "$CONTAINER_NAME" ]; then
         echo -e "    2. ${BOLD}container-create${NC} → Create a container from that image"
         echo -e "    3. ${BOLD}container-run${NC} → Enter and use the container"
         echo ""
-        echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Press Enter to continue..." </dev/tty
         echo ""
 
@@ -202,6 +355,7 @@ if [ -z "$CONTAINER_NAME" ]; then
         echo "  These limits are based on your user group and ensure fair"
         echo "  resource sharing among all users."
         echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Press Enter to continue..." </dev/tty
         echo ""
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -219,6 +373,7 @@ if [ -z "$CONTAINER_NAME" ]; then
     echo -e "  ${BOLD}2) Use base framework${NC} (PyTorch/TensorFlow from AIME catalog)"
     echo "     Quick start with standard frameworks (no customisation)"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1-2, default: 1]: " IMAGE_CHOICE </dev/tty
     IMAGE_CHOICE=${IMAGE_CHOICE:-1}
     echo ""
@@ -245,6 +400,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                     done
                     echo ""
 
+                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                     read -p "Select image [1-$IMAGE_COUNT]: " IMG_SELECTION </dev/tty
 
                     # Default to 1 if empty (common case: only one image available)
@@ -267,6 +423,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                         echo ""
                         echo -e "Default container name based on image: ${CYAN}$CONTAINER_NAME${NC}"
                         echo ""
+                        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                         read -p "Use this name or enter a different one [$CONTAINER_NAME]: " CUSTOM_NAME </dev/tty
 
                         if [ -n "$CUSTOM_NAME" ]; then
@@ -290,6 +447,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                             echo -e "  ${GREEN}3${NC}) ${BOLD}Create with different name${NC}"
                             echo -e "     ${DIM}Keep existing, create new with another name${NC}"
                             echo ""
+                            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                             read -p "Choice [1-3]: " CHOICE </dev/tty
                             echo ""
 
@@ -349,6 +507,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                                 3)
                                     echo -e "${CYAN}Create with different name${NC}"
                                     echo ""
+                                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                                     read -p "New container name: " NEW_NAME </dev/tty
 
                                     if [ -z "$NEW_NAME" ]; then
@@ -431,6 +590,7 @@ if [ -z "$CONTAINER_NAME" ]; then
             echo -e "  ${BOLD}1)${NC} PyTorch (latest from AIME catalog) ${GREEN}(recommended)${NC}"
             echo -e "  ${BOLD}2)${NC} TensorFlow (latest from AIME catalog)"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Framework [1-2, default: 1]: " FW_CHOICE </dev/tty
             FW_CHOICE=${FW_CHOICE:-1}
 
@@ -444,6 +604,7 @@ if [ -z "$CONTAINER_NAME" ]; then
             # Ask for container name
             echo -e "${BOLD}Container Name${NC}"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Container name: " CONTAINER_NAME </dev/tty
             if [ -z "$CONTAINER_NAME" ]; then
                 echo -e "${RED}✗ Container name cannot be empty${NC}"
@@ -470,6 +631,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                 echo -e "  ${GREEN}3${NC}) ${BOLD}Create with different name${NC}"
                 echo -e "     ${DIM}Keep existing, create new with another name${NC}"
                 echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                 read -p "Choice [1-3]: " CHOICE </dev/tty
                 echo ""
 
@@ -522,6 +684,7 @@ if [ -z "$CONTAINER_NAME" ]; then
                     3)
                         echo -e "${CYAN}Create with different name${NC}"
                         echo ""
+                        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                         read -p "New container name: " NEW_NAME </dev/tty
 
                         if [ -z "$NEW_NAME" ]; then
@@ -575,6 +738,7 @@ if [ -z "$CONTAINER_NAME" ]; then
     echo -e "  ${BOLD}1)${NC} GPU enabled ${GREEN}(recommended for training)${NC}"
     echo -e "  ${BOLD}2)${NC} CPU only (for preprocessing/testing)"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1-2, default: 1]: " GPU_CHOICE </dev/tty
     GPU_CHOICE=${GPU_CHOICE:-1}
 
@@ -643,6 +807,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"
     echo ""
     echo -e "  ${GREEN}4${NC}) ${BOLD}Cancel${NC}"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1-4]: " -n 1 -r CHOICE </dev/tty
     echo ""
 
@@ -693,6 +858,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -q "^${CONTAINER_TAG}$"
         3)
             echo -e "${CYAN}Create with different name${NC}"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "New container name: " NEW_NAME </dev/tty
 
             # Validate new name
@@ -890,6 +1056,7 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${DIM}This may take 3-5 minutes on first run (downloading base image)${NC}"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to continue..." </dev/tty
     echo ""
 fi

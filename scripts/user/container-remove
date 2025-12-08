@@ -27,7 +27,7 @@ else
     exit 1
 fi
 
-BLUE='\033[94m'
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -161,7 +161,8 @@ prompt_image_volume_removal() {
         echo -e "   ${DIM}(Removes the blueprint, but you still have the Dockerfile)${NC}" >&2
     fi
     echo -e "   ${GREEN}Default: No${NC} - images are preserved" >&2
-    read -p "Remove image? [y/N]: " REMOVE_IMAGE
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+    read -p "Remove image? [y/N]: " REMOVE_IMAGE </dev/tty
     if [[ "$REMOVE_IMAGE" =~ ^[Yy]$ ]]; then
         remove_images=true
     fi
@@ -174,7 +175,8 @@ prompt_image_volume_removal() {
         echo -e "   ${DIM}(Your workspace files in ~/workspace/ are ALWAYS safe)${NC}" >&2
     fi
     echo -e "   ${GREEN}Default: No${NC} - volumes are preserved" >&2
-    read -p "Remove volumes? [y/N]: " REMOVE_VOLUMES
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+    read -p "Remove volumes? [y/N]: " REMOVE_VOLUMES </dev/tty
     if [[ "$REMOVE_VOLUMES" =~ ^[Yy]$ ]]; then
         remove_volumes=true
     fi
@@ -275,7 +277,8 @@ cleanup_container() {
         fi
 
         echo ""
-        read -p "Confirm removal? [y/N]: " CONFIRM
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Confirm removal? [y/N]: " CONFIRM </dev/tty
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             echo "Skipped."
             return 0
@@ -317,6 +320,7 @@ cleanup_container() {
             echo -e "   ${BOLD}Recommended:${NC} Update Dockerfile instead: ${GREEN}image-update $container_name --add \"package1 package2\"${NC}"
             echo -e "   ${DIM}Why? Dockerfile changes are reproducible, version-controlled, and team-shareable${NC}"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Save changes to image anyway? [y/N]: " SAVE_IMAGE </dev/tty
 
             if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
@@ -446,7 +450,8 @@ cleanup_all_stopped() {
     # Confirm
     if [ "$force" != "true" ]; then
         echo -e "${YELLOW}⚠ This will permanently remove these containers${NC}"
-        read -p "Continue? [y/N]: " CONFIRM
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Continue? [y/N]: " CONFIRM </dev/tty
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             echo "Cancelled."
             return 0
@@ -527,7 +532,8 @@ cleanup_images() {
     fi
 
     if [ "$force" != "true" ]; then
-        read -p "Remove dangling images? [y/N]: " CONFIRM
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Remove dangling images? [y/N]: " CONFIRM </dev/tty
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             echo "Skipped."
             return 0
@@ -561,7 +567,8 @@ cleanup_volumes() {
     fi
 
     if [ "$force" != "true" ]; then
-        read -p "Remove unused volumes? [y/N]: " CONFIRM
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Remove unused volumes? [y/N]: " CONFIRM </dev/tty
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
             echo "Skipped."
             return 0
@@ -633,6 +640,15 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Show banner only when NOT called from orchestrator
+if [[ -z "$DS01_ORCHESTRATOR" ]]; then
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Container Remove${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+fi
 
 if [ "$GUIDED" = true ]; then
     IFS='|' read -r idle_timeout max_runtime gpu_hold <<< "$(get_user_lifecycle_limits "$USERNAME")"

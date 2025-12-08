@@ -4,6 +4,24 @@ Commands for Docker image management.
 
 ---
 
+## Getting Help
+
+All image commands support these flags:
+
+| Flag | Purpose |
+|------|---------|
+| `--help` | Quick reference (usage, main options) |
+| `--info` | Full reference (all options, examples) |
+| `--concepts` | Pre-run education (what is an image?) |
+| `--guided` | Interactive learning (explanations during) |
+
+```bash
+image-create --concepts   # Learn about images before creating
+image-update --info       # See all update options
+```
+
+---
+
 ## Quick Reference
 
 ```bash

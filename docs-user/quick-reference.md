@@ -107,11 +107,22 @@ Host                          Container
 
 ---
 
-## Help
+## Getting Help
+
+Every command supports 4 help modes:
 
 ```bash
-<command> --help                        # Command help
-<command> --guided                      # Educational mode
+<command> --help        # Quick reference (usage, main options)
+<command> --info        # Full reference (all options, examples)
+<command> --concepts    # Pre-run education (what is X?)
+<command> --guided      # Interactive learning (explanations during)
+```
+
+**Examples:**
+```bash
+image-create --concepts   # Learn about images before creating one
+container-deploy --info   # See all deploy options
+container-stop --help     # Quick reminder of stop syntax
 ```
 
 ---

@@ -1,7 +1,13 @@
 #!/bin/bash
 # List Docker images for DS01 user
 
-BLUE='\033[94m'
+set -e
+
+# Source DS01 context library for conditional output
+[[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]] && \
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
@@ -30,6 +36,106 @@ usage() {
     echo "  image-list --detailed   # Show detailed info with Dockerfile locations"
     echo ""
     echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
+    echo ""
+}
+
+detailed_help() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Docker Image List - Full Reference${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  image-list [options]"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  --guided        Show explanations (educational)"
+    echo "  -a, --all       Show all images (including system/base images)"
+    echo "  -s, --size      Show image sizes"
+    echo "  -d, --detailed  Show detailed info (metadata, containers)"
+    echo "  --concepts      Show pre-run educational content"
+    echo "  --info          Show this detailed reference"
+    echo "  -h, --help      Show quick reference"
+    echo ""
+    echo -e "${BOLD}Output Columns:${NC}"
+    echo "  Repository      Image name (ds01-<uid>/<project>)"
+    echo "  Tag             Version label (usually 'latest')"
+    echo "  Size            Disk space used (with -s flag)"
+    echo "  Created         Time since image was built"
+    echo ""
+    echo -e "${BOLD}Naming Convention:${NC}"
+    echo "  DS01 images follow the pattern: ds01-<user-id>/<project-name>"
+    echo "  Example: ds01-1001/my-ml-project"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo ""
+    echo -e "  ${DIM}# List your images (default)${NC}"
+    echo "  image-list"
+    echo ""
+    echo -e "  ${DIM}# List with sizes${NC}"
+    echo "  image-list --size"
+    echo ""
+    echo -e "  ${DIM}# Detailed view (shows Dockerfile locations, containers)${NC}"
+    echo "  image-list --detailed"
+    echo ""
+    echo -e "  ${DIM}# Show all images on system (including base images)${NC}"
+    echo "  image-list --all"
+    echo ""
+    echo -e "${BOLD}Related Commands:${NC}"
+    echo -e "  ${GREEN}image-create${NC}    Create a new image"
+    echo -e "  ${GREEN}image-update${NC}    Modify/rebuild an image"
+    echo -e "  ${GREEN}image-delete${NC}    Remove an image"
+    echo ""
+}
+
+show_concepts() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Understanding Docker Images${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What is a Docker Image?${NC}"
+    echo "  A Docker image is a template/blueprint containing:"
+    echo "  • Operating system (Ubuntu Linux)"
+    echo "  • Programming languages (Python)"
+    echo "  • Frameworks (PyTorch, TensorFlow)"
+    echo "  • Your custom packages"
+    echo ""
+    echo -e "${BOLD}Key Terms:${NC}"
+    echo -e "  • ${CYAN}Image${NC} - Static blueprint (frozen, reusable)"
+    echo -e "  • ${CYAN}Container${NC} - Running instance from an image"
+    echo -e "  • ${CYAN}Tag${NC} - Version label (usually 'latest')"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Image vs Container:${NC}"
+    echo ""
+    echo "  One image can create multiple containers."
+    echo "  Think of it like:"
+    echo "  • Image = Recipe (same recipe, can cook many times)"
+    echo "  • Container = Cooked dish (actual running environment)"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}DS01 Naming Convention:${NC}"
+    echo ""
+    echo "  Format: ds01-<user-id>/<project-name>"
+    echo "  Example: ds01-1001/my-ml-project"
+    echo ""
+    echo "  This ensures images are organized by user and easily identifiable."
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Common Workflows:${NC}"
+    echo ""
+    echo -e "  ${GREEN}image-create${NC}    → Build new image from scratch"
+    echo -e "  ${GREEN}image-list${NC}      → See what images you have"
+    echo -e "  ${GREEN}image-update${NC}    → Add packages to existing image"
+    echo -e "  ${GREEN}image-delete${NC}    → Remove unused images"
+    echo ""
+    echo -e "${BOLD}Ready to view your images?${NC}"
+    echo -e "  Run: ${GREEN}image-list${NC}            (simple view)"
+    echo -e "  Run: ${GREEN}image-list --detailed${NC} (with metadata)"
     echo ""
 }
 
@@ -184,8 +290,16 @@ while [[ $# -gt 0 ]]; do
             DETAILED=true
             shift
             ;;
-        -h|--help|--info)
+        -h|--help)
             usage
+            exit 0
+            ;;
+        --info)
+            detailed_help
+            exit 0
+            ;;
+        --concepts)
+            show_concepts
             exit 0
             ;;
         *)

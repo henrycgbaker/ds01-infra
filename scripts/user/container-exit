@@ -2,12 +2,18 @@
 # Information about exiting containers - accurate for docker exec behavior
 # DS01 uses docker exec, not docker attach, so Ctrl+P, Ctrl+Q does NOT work
 
+set -e
+
+# Source DS01 context library for conditional output
+[[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]] && \
+    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+
 # Script paths
 SCRIPT_DIR="/opt/ds01-infra/scripts/user"
 INFRA_ROOT="/opt/ds01-infra"
 RESOURCE_PARSER="$INFRA_ROOT/scripts/docker/get_resource_limits.py"
 
-BLUE='\033[94m'
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -89,6 +95,7 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "  ${DIM}Note: Ctrl+P, Ctrl+Q does NOT work with docker exec${NC}"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to see exit options..." </dev/tty
 fi
 

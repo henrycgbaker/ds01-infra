@@ -18,7 +18,7 @@ export DS01_INTERFACE="orchestration"
 export DS01_ORCHESTRATOR=retire
 
 # Colors
-BLUE='\033[94m'
+BLUE='\033[0;34m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -114,6 +114,132 @@ usage() {
     echo ""
 }
 
+detailed_help() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Container Retire - Full Reference${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${DIM}L3 Orchestrator - Combines stop + remove in one command${NC}"
+    echo ""
+    echo -e "${BOLD}Usage:${NC}"
+    echo "  container-retire [name] [options]"
+    echo "  container-retire                  # Interactive selection"
+    echo ""
+    echo -e "${BOLD}Positional Arguments:${NC}"
+    echo "  name              Container to retire (optional - prompts if omitted)"
+    echo ""
+    echo -e "${BOLD}Options:${NC}"
+    echo "  --guided          Step-by-step with explanations"
+    echo "  -f, --force       Skip all confirmations"
+    echo "  --dry-run         Preview without executing"
+    echo "  --concepts        Show pre-run educational content"
+    echo "  --info            Show this detailed reference"
+    echo "  -h, --help        Show quick reference"
+    echo ""
+    echo -e "${BOLD}Workflow:${NC}"
+    echo "  container-retire performs:"
+    echo "  1. container-stop - Stops the container"
+    echo "  2. Optionally prompts to commit changes to image"
+    echo "  3. container-remove - Removes the container"
+    echo "  4. Releases GPU allocation immediately"
+    echo ""
+    echo -e "${BOLD}What's Preserved:${NC}"
+    echo -e "  ${GREEN}✓${NC} Workspace files (~/workspace/<project>/)"
+    echo -e "  ${GREEN}✓${NC} Dockerfiles (~/dockerfiles/)"
+    echo -e "  ${GREEN}✓${NC} Docker images"
+    echo ""
+    echo -e "${BOLD}What's Removed:${NC}"
+    echo -e "  ${RED}✗${NC} Container instance (easily recreated)"
+    echo -e "  ${RED}✗${NC} GPU allocation (freed for others)"
+    echo ""
+    echo -e "${BOLD}Examples:${NC}"
+    echo ""
+    echo -e "  ${DIM}# Interactive mode (select from list)${NC}"
+    echo "  container-retire"
+    echo ""
+    echo -e "  ${DIM}# Retire specific container${NC}"
+    echo "  container-retire my-project"
+    echo ""
+    echo -e "  ${DIM}# Quick retire (no prompts)${NC}"
+    echo "  container-retire my-project --force"
+    echo ""
+    echo -e "  ${DIM}# Preview what would happen${NC}"
+    echo "  container-retire my-project --dry-run"
+    echo ""
+    echo -e "${BOLD}Saving Changes:${NC}"
+    echo ""
+    echo -e "  ${CYAN}Recommended:${NC} Update Dockerfile + rebuild"
+    echo "    1. image-update <name> --add \"new-packages\""
+    echo "    2. container-retire <name>"
+    echo "    3. container-deploy <name>"
+    echo "    (Reproducible, version-controlled)"
+    echo ""
+    echo -e "  ${CYAN}Quick option:${NC} docker commit during retire"
+    echo "    Prompts to save container state to image"
+    echo "    (Fast but not in Dockerfile)"
+    echo ""
+    echo -e "${BOLD}Related Commands:${NC}"
+    echo -e "  ${GREEN}container-deploy${NC}    Create + start (opposite of retire)"
+    echo -e "  ${GREEN}container-list${NC}      View your containers"
+    echo ""
+}
+
+show_concepts() {
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Understanding Container Retirement${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${BOLD}What does container-retire do?${NC}"
+    echo "  Cleanly shuts down and removes a container:"
+    echo "  1. Stops the container (if running)"
+    echo "  2. Optionally saves changes to the image"
+    echo "  3. Removes the container"
+    echo "  4. Frees GPU for others immediately"
+    echo ""
+    echo -e "${BOLD}Key Terms:${NC}"
+    echo -e "  • ${CYAN}Retire${NC} - Stop + remove in one step"
+    echo -e "  • ${CYAN}GPU Release${NC} - GPU becomes available for others"
+    echo -e "  • ${CYAN}Commit${NC} - Save container changes to image"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Deploy vs Retire:${NC}"
+    echo ""
+    echo -e "  ${GREEN}container-deploy${NC}  = Create + Start"
+    echo -e "  ${YELLOW}container-retire${NC}  = Stop + Remove"
+    echo ""
+    echo "  They are opposites - deploy to start working,"
+    echo "  retire when you're done to free resources."
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}Your Data is Safe:${NC}"
+    echo ""
+    echo "  Retiring a container does NOT delete:"
+    echo -e "  ${GREEN}✓${NC} Your workspace files"
+    echo -e "  ${GREEN}✓${NC} Your Dockerfiles"
+    echo -e "  ${GREEN}✓${NC} Your Docker images"
+    echo ""
+    echo "  You can always recreate the container:"
+    echo -e "  ${GREEN}container-deploy my-project${NC}"
+    echo ""
+    echo -e "${CYAN}────────────────────────────────────────────────${NC}"
+    echo ""
+    echo -e "${BOLD}When to Retire:${NC}"
+    echo ""
+    echo "  • Done working for the day"
+    echo "  • Need to free GPU for others"
+    echo "  • Want a fresh container start"
+    echo "  • Switching to a different project"
+    echo ""
+    echo -e "${BOLD}Ready to retire a container?${NC}"
+    echo -e "  Run: ${GREEN}container-retire${NC}              (interactive selection)"
+    echo -e "  Run: ${GREEN}container-retire my-project${NC}   (specific container)"
+    echo ""
+}
+
 # Parse arguments
 CONTAINER_NAME=""
 GUIDED=false
@@ -141,8 +267,16 @@ while [[ $# -gt 0 ]]; do
             DRY_RUN=true
             shift
             ;;
-        -h|--help|--info)
+        -h|--help)
             usage
+            exit 0
+            ;;
+        --info)
+            detailed_help
+            exit 0
+            ;;
+        --concepts)
+            show_concepts
             exit 0
             ;;
         -*)
@@ -187,6 +321,7 @@ if [ "$GUIDED" = true ]; then
     echo ""
     echo -e "${YELLOW}💡 Think of it:${NC} Shutting down a laptop (container) but keeping your files (workspace)"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to continue..." </dev/tty
     echo ""
 fi
@@ -262,6 +397,7 @@ if [ "$FORCE" != "true" ] && [ "$SKIP_INITIAL_CONFIRM" != "true" ]; then
         echo ""
     fi
 
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Continue? [y/N]: " CONFIRM </dev/tty
     if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
         echo "Cancelled."
@@ -391,6 +527,7 @@ if "$CONTAINER_REMOVE" "$CONTAINER_NAME" "${REMOVE_ARGS[@]}"; then
             fi
             echo ""
             echo -e "  ${GREEN}Default: Keep image${NC} (faster next deploy)"
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Also remove the Docker image? [y/N]: " REMOVE_IMAGE </dev/tty
 
             if [[ "$REMOVE_IMAGE" =~ ^[Yy]$ ]]; then
