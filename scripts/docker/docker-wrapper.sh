@@ -2,9 +2,12 @@
 # /opt/ds01-infra/scripts/docker/docker-wrapper.sh
 # DS01 Docker Wrapper - Universal Resource Enforcement & Ownership Tracking
 #
-# This wrapper intercepts Docker commands and injects:
-# - Per-user cgroup-parent for resource limits
-# - Owner labels for permission enforcement
+# Phase A+B: Cgroup injection + Owner labels + Visibility filtering (Dec 2025)
+#
+# This wrapper intercepts Docker commands and:
+# - Injects per-user cgroup-parent for resource limits
+# - Injects owner labels (ds01.user, ds01.managed) for ownership tracking
+# - Filters 'docker ps' to show only user's containers (non-admins)
 #
 # Installation: Copy to /usr/local/bin/docker (takes precedence over /usr/bin/docker)
 #
@@ -14,9 +17,11 @@
 # 3. Ensures user's slice exists (ds01-{group}-{user}.slice)
 # 4. Injects --cgroup-parent if not already specified
 # 5. Injects --label ds01.user=<username> for ownership tracking
-# 6. Passes through to real Docker binary
+# 6. Filters 'docker ps' for non-admin users (ds01-admin group bypasses)
+# 7. Passes through to real Docker binary
 #
-# All other Docker commands pass through unchanged.
+# Admin users (in ds01-admin group) see all containers.
+# Non-admin users see only containers with their ds01.user label.
 
 # Real Docker binary
 REAL_DOCKER="/usr/bin/docker"
@@ -72,20 +77,19 @@ has_cgroup_parent() {
     return 1
 }
 
-# Check if ds01.user label is already specified
+# Check if ds01.user label is already specified in args
 has_owner_label() {
+    local prev_arg=""
     for arg in "$@"; do
-        case "$arg" in
-            --label=ds01.user=*|--label)
-                # Check next arg for ds01.user=
-                if [[ "$arg" == "--label" ]]; then
-                    continue
-                fi
-                if [[ "$arg" == ds01.user=* ]]; then
-                    return 0
-                fi
-                ;;
-        esac
+        # Check for --label=ds01.user=*
+        if [[ "$arg" == "--label=ds01.user="* ]]; then
+            return 0
+        fi
+        # Check for --label ds01.user=* (two separate args)
+        if [[ "$prev_arg" == "--label" ]] && [[ "$arg" == "ds01.user="* ]]; then
+            return 0
+        fi
+        prev_arg="$arg"
     done
     return 1
 }
@@ -113,20 +117,24 @@ ensure_user_slice() {
     fi
 }
 
+# Phase B: Container list filtering (Dec 2025)
+# Admins see all containers, non-admins see only their labeled containers
+
 # Check if user is an admin (ds01-admin group)
 is_admin() {
     groups "$CURRENT_USER" 2>/dev/null | grep -qE '\bds01-admin\b'
 }
 
 # Filter docker ps/container ls to show only user's containers (non-admins)
+# Note: Pre-existing containers without ds01.user label will be hidden from non-admins
 filter_container_list() {
-    # Admins see all containers
+    # Admins see all containers (including unlabeled legacy containers)
     if is_admin; then
         log_debug "Admin user - showing all containers"
         exec "$REAL_DOCKER" "$@"
     fi
 
-    # Non-admins: filter by ds01.user label
+    # Non-admins: filter by ds01.user label (only shows their labeled containers)
     log_debug "Filtering container list for user $CURRENT_USER"
     exec "$REAL_DOCKER" "$@" --filter "label=ds01.user=$CURRENT_USER"
 }
@@ -141,12 +149,12 @@ main() {
     # Get the Docker subcommand
     local subcommand="$1"
 
-    # Filter 'ps' command for non-admins
+    # Phase B: Filter 'ps' command for non-admins
     if [[ "$subcommand" == "ps" ]]; then
         filter_container_list "$@"
     fi
 
-    # Filter 'container ls' or 'container list' for non-admins
+    # Phase B: Filter 'container ls' or 'container list' for non-admins
     if [[ "$subcommand" == "container" ]] && [[ "${2:-}" == "ls" || "${2:-}" == "list" ]]; then
         filter_container_list "$@"
     fi

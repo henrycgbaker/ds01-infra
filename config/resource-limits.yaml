@@ -12,7 +12,7 @@ defaults:
   gpu_memory: null                  # GPU memory limit in GB (null = no limit, already enforced by MIG)
 
   # Compute limits (per container)
-  max_cpus: 16                      # CPU cores per container
+  max_cpus: 32                      # CPU cores per container (increased from 16)
   memory: 32g                       # RAM limit per container
   memory_swap: 32g                  # Swap limit (should match memory to prevent swap)
   shm_size: 16g                     # Shared memory (important for PyTorch DataLoader)
@@ -34,7 +34,7 @@ defaults:
   idle_timeout: 2h                  # Auto-stop after X hours of GPU inactivity - increased from 0.5h
   gpu_hold_after_stop: 0.25h        # How long to hold GPU after container stopped (null = indefinite)
   container_hold_after_stop: 0.5h   # Auto-remove container after X hours stopped (null = never auto-remove)
-  max_tasks: 512                    # Max tasks for systemd slice
+  max_tasks: 32768                  # Max tasks for systemd slice (increased from 512 - fixes libgomp thread creation)
 
 default_group: student
 
@@ -46,19 +46,19 @@ groups:
     max_gpus_per_container: 1       # 1 MIG per container
 
   researcher:
-    members: []
+    members: [s.kaiser@hertie-school.lan, 204214@hertie-school.lan, 204214, c.fusarbassini@hertie-school.lan, c.fusarbassini]
     allow_full_gpu: true            # Researchers CAN request full GPUs
     max_gpus_per_container: 2       # Up to 2 MIG/GPU per container
     max_mig_instances: 8            # Can use up to 8 MIG instances or equivalent
-    max_cpus: 32
-    memory: 64g
-    memory_swap: 64g
+    max_cpus: 64                    # Increased for CPU-heavy workloads (sklearn)
+    memory: 128g                    # Increased for large datasets
+    memory_swap: 128g
     shm_size: 32g
     storage_workspace: 500G
     storage_data: 1T
     max_runtime: 72h                # 3 days for LLM fine-tuning
     idle_timeout: 4h                # More lenient
-    max_tasks: 2048
+    max_tasks: 65536                # High for parallel workloads
     max_containers_per_user: 5
 
   admin:
