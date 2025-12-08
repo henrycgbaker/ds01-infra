@@ -154,6 +154,8 @@ DATA_DIR=""
 REQUESTED_GPU=""
 CPU_ONLY=false
 DRY_RUN=false
+NUM_MIGS=1              # Number of MIG-equivalents to request (default: 1)
+PREFER_FULL_GPU=false   # Prefer full GPU over MIGs
 
 # Parse container name
 CONTAINER_NAME="$1"
@@ -197,6 +199,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --cpu-only)
             CPU_ONLY=true
+            ;;
+        --num-migs=*)
+            NUM_MIGS="${1#*=}"
+            ;;
+        --prefer-full)
+            PREFER_FULL_GPU=true
             ;;
         --show-limits)
             CURRENT_USER=$(whoami)
@@ -342,9 +350,44 @@ else
     RESOURCE_LIMITS=$(echo "$RESOURCE_LIMITS" | sed "s/ds01-${USER_GROUP}-${SANITIZED_USER}.slice/ds01-${USER_GROUP}.slice/")
 fi
 
+# =============================================================================
+# CHECK CONTAINER LIMIT BEFORE GPU ALLOCATION
+# =============================================================================
+if [ -f "$RESOURCE_PARSER" ]; then
+    MAX_CONTAINERS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --max-containers 2>/dev/null || echo "3")
+
+    # Skip check if unlimited
+    if [ "$MAX_CONTAINERS" != "unlimited" ] && [ "$MAX_CONTAINERS" != "null" ] && [ -n "$MAX_CONTAINERS" ]; then
+        # Count user's current containers (including stopped ones)
+        CURRENT_CONTAINERS=$(docker ps -a --filter "label=aime.mlc.user_id=$USER_ID" --format "{{.ID}}" 2>/dev/null | wc -l)
+
+        if [ "$CURRENT_CONTAINERS" -ge "$MAX_CONTAINERS" ]; then
+            # Use friendly error messages
+            ERROR_MESSAGES="$SCRIPT_DIR/../lib/error-messages.sh"
+            echo ""
+            if [ -f "$ERROR_MESSAGES" ]; then
+                source "$ERROR_MESSAGES"
+                show_limit_error "CONTAINER_LIMIT ($CURRENT_CONTAINERS/$MAX_CONTAINERS)" "$CURRENT_USER" "$CONTAINER_TAG"
+            else
+                log_error "Container limit reached: You have $CURRENT_CONTAINERS containers (limit: $MAX_CONTAINERS)"
+                echo ""
+                echo "To create a new container, first remove an existing one:"
+                echo "  container-list           # See your containers"
+                echo "  container-retire <name>  # Remove one"
+            fi
+            exit 1
+        fi
+    fi
+fi
+
+# =============================================================================
+# GPU ALLOCATION
+# =============================================================================
 # GPU allocation via gpu_allocator_v2.py (DS01 priority-based, stateless)
 GPU_ARG=""
 ALLOCATED_GPU=""
+ALLOCATED_SLOTS=""   # Comma-separated list of GPU slots
+MIG_EQUIV=0          # Total MIG-equivalents allocated
 
 if [ "$CPU_ONLY" = true ]; then
     log_info "Creating CPU-only container (no GPU)"
@@ -359,7 +402,7 @@ else
 
         if [ -f "$GPU_ALLOCATOR" ] && [ -f "$RESOURCE_PARSER" ]; then
             # Get user's GPU limits and priority
-            MAX_GPUS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --max-gpus 2>/dev/null || echo "1")
+            MAX_GPUS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --max-gpus 2>/dev/null || echo "2")
             PRIORITY=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --priority 2>/dev/null || echo "10")
 
             # Convert "unlimited" to a large number for allocator
@@ -367,57 +410,113 @@ else
                 MAX_GPUS=999
             fi
 
-            log_info "Allocating GPU via gpu_allocator_v2.py (priority: $PRIORITY, max: $MAX_GPUS)..."
+            # Determine allocation method based on NUM_MIGS and PREFER_FULL_GPU
+            if [ "$NUM_MIGS" -gt 1 ] || [ "$PREFER_FULL_GPU" = true ]; then
+                # Multi-GPU allocation
+                log_info "Allocating $NUM_MIGS MIG-equivalents via gpu_allocator_v2.py..."
 
-            # Allocate GPU
-            ALLOC_OUTPUT=$(python3 "$GPU_ALLOCATOR" allocate "$CURRENT_USER" "$CONTAINER_TAG" "$MAX_GPUS" "$PRIORITY" 2>&1)
-            ALLOC_EXIT=$?
+                ALLOC_CMD="python3 $GPU_ALLOCATOR allocate-multi $CURRENT_USER $CONTAINER_TAG $NUM_MIGS"
+                if [ "$PREFER_FULL_GPU" = true ]; then
+                    ALLOC_CMD="$ALLOC_CMD --prefer-full"
+                fi
 
-            if [ $ALLOC_EXIT -eq 0 ] && echo "$ALLOC_OUTPUT" | grep -q "✓ Allocated"; then
-                # Extract friendly GPU ID (for logging: "1.1", "2.0", etc.)
-                ALLOCATED_GPU=$(echo "$ALLOC_OUTPUT" | grep -oP '(?<=GPU/MIG )\S+(?= to)')
+                ALLOC_OUTPUT=$($ALLOC_CMD 2>&1)
+                ALLOC_EXIT=$?
 
-                # Extract Docker ID (MIG UUID for MIG instances, gpu index for full GPUs)
-                DOCKER_ID=$(echo "$ALLOC_OUTPUT" | grep "^DOCKER_ID=" | cut -d= -f2)
+                if [ $ALLOC_EXIT -eq 0 ] && echo "$ALLOC_OUTPUT" | grep -q "✓ Allocated"; then
+                    # Extract GPU slots and Docker IDs
+                    ALLOCATED_SLOTS=$(echo "$ALLOC_OUTPUT" | grep "^GPU_SLOTS=" | cut -d= -f2)
+                    DOCKER_IDS=$(echo "$ALLOC_OUTPUT" | grep "^DOCKER_IDS=" | cut -d= -f2)
+                    MIG_EQUIV=$(echo "$ALLOC_OUTPUT" | grep "^MIG_EQUIV=" | cut -d= -f2)
 
-                if [ -n "$ALLOCATED_GPU" ] && [ -n "$DOCKER_ID" ]; then
-                    # Use Docker ID (UUID for MIG) instead of friendly ID
-                    GPU_ARG="-g=device=$DOCKER_ID"
-                    log_success "GPU $ALLOCATED_GPU allocated successfully"
-
-                    # Check soft limits (warn at 80%+)
-                    CURRENT_GPU_COUNT=$(python3 "$SCRIPT_DIR/gpu-state-reader.py" user "$CURRENT_USER" 2>/dev/null | grep -c "gpu_slot" || echo "0")
-                    # Ensure CURRENT_GPU_COUNT is a valid integer
-                    CURRENT_GPU_COUNT="${CURRENT_GPU_COUNT//[^0-9]/}"
-                    CURRENT_GPU_COUNT="${CURRENT_GPU_COUNT:-0}"
-                    if [ "$MAX_GPUS" != "999" ] && [ "$MAX_GPUS" -gt 0 ] 2>/dev/null; then
-                        GPU_PERCENT=$((CURRENT_GPU_COUNT * 100 / MAX_GPUS))
-                        if [ "$GPU_PERCENT" -ge 100 ]; then
-                            log_warning "GPU limit reached ($CURRENT_GPU_COUNT/$MAX_GPUS). This is your last available GPU."
-                        elif [ "$GPU_PERCENT" -ge 80 ]; then
-                            log_warning "GPU usage high ($CURRENT_GPU_COUNT/$MAX_GPUS, ${GPU_PERCENT}%). Consider retiring idle containers."
-                        fi
+                    if [ -n "$ALLOCATED_SLOTS" ] && [ -n "$DOCKER_IDS" ]; then
+                        # Build comma-separated device list for Docker
+                        # Format: device=UUID1,device=UUID2
+                        DEVICE_LIST=""
+                        IFS=',' read -ra UUID_ARRAY <<< "$DOCKER_IDS"
+                        for uuid in "${UUID_ARRAY[@]}"; do
+                            if [ -n "$DEVICE_LIST" ]; then
+                                DEVICE_LIST="$DEVICE_LIST,$uuid"
+                            else
+                                DEVICE_LIST="$uuid"
+                            fi
+                        done
+                        GPU_ARG="-g=device=$DEVICE_LIST"
+                        ALLOCATED_GPU="$ALLOCATED_SLOTS"
+                        log_success "Allocated $MIG_EQUIV MIG-equivalents (slots: $ALLOCATED_SLOTS)"
+                    else
+                        log_error "GPU allocator returned success but couldn't parse GPU IDs"
+                        log_error "Output: $ALLOC_OUTPUT"
+                        exit 1
                     fi
                 else
-                    log_error "GPU allocator returned success but couldn't parse GPU ID"
-                    log_error "Output: $ALLOC_OUTPUT"
+                    # Use friendly error messages
+                    ERROR_MESSAGES="$SCRIPT_DIR/../lib/error-messages.sh"
+                    echo ""  # Blank line before error
+                    if [ -f "$ERROR_MESSAGES" ]; then
+                        source "$ERROR_MESSAGES"
+                        show_limit_error "$ALLOC_OUTPUT" "$CURRENT_USER" "$CONTAINER_TAG"
+                    else
+                        log_error "GPU allocation failed: $ALLOC_OUTPUT"
+                        echo ""
+                        echo "Your allocation may have been rejected due to resource limits."
+                        echo "Run 'check-limits' to see your current usage."
+                    fi
                     exit 1
                 fi
             else
-                # Use friendly error messages
-                ERROR_MESSAGES="$SCRIPT_DIR/../lib/error-messages.sh"
-                echo ""  # Blank line before error
-                if [ -f "$ERROR_MESSAGES" ]; then
-                    source "$ERROR_MESSAGES"
-                    show_limit_error "$ALLOC_OUTPUT" "$CURRENT_USER" "$CONTAINER_TAG"
+                # Single GPU allocation (original behavior)
+                log_info "Allocating GPU via gpu_allocator_v2.py (priority: $PRIORITY, max: $MAX_GPUS)..."
+
+                ALLOC_OUTPUT=$(python3 "$GPU_ALLOCATOR" allocate "$CURRENT_USER" "$CONTAINER_TAG" "$MAX_GPUS" "$PRIORITY" 2>&1)
+                ALLOC_EXIT=$?
+
+                if [ $ALLOC_EXIT -eq 0 ] && echo "$ALLOC_OUTPUT" | grep -q "✓ Allocated"; then
+                    # Extract friendly GPU ID (for logging: "1.1", "2.0", etc.)
+                    ALLOCATED_GPU=$(echo "$ALLOC_OUTPUT" | grep -oP '(?<=GPU/MIG )\S+(?= to)')
+
+                    # Extract Docker ID (MIG UUID for MIG instances, gpu index for full GPUs)
+                    DOCKER_ID=$(echo "$ALLOC_OUTPUT" | grep "^DOCKER_ID=" | cut -d= -f2)
+                    MIG_EQUIV=1
+
+                    if [ -n "$ALLOCATED_GPU" ] && [ -n "$DOCKER_ID" ]; then
+                        # Use Docker ID (UUID for MIG) instead of friendly ID
+                        GPU_ARG="-g=device=$DOCKER_ID"
+                        ALLOCATED_SLOTS="$ALLOCATED_GPU"
+                        log_success "GPU $ALLOCATED_GPU allocated successfully"
+
+                        # Check soft limits (warn at 80%+)
+                        CURRENT_MIG_TOTAL=$(python3 "$SCRIPT_DIR/gpu-state-reader.py" user-mig-total "$CURRENT_USER" 2>/dev/null || echo "0")
+                        CURRENT_MIG_TOTAL="${CURRENT_MIG_TOTAL//[^0-9]/}"
+                        CURRENT_MIG_TOTAL="${CURRENT_MIG_TOTAL:-0}"
+                        if [ "$MAX_GPUS" != "999" ] && [ "$MAX_GPUS" -gt 0 ] 2>/dev/null; then
+                            GPU_PERCENT=$((CURRENT_MIG_TOTAL * 100 / MAX_GPUS))
+                            if [ "$GPU_PERCENT" -ge 100 ]; then
+                                log_warning "MIG limit reached ($CURRENT_MIG_TOTAL/$MAX_GPUS). This is your last available MIG."
+                            elif [ "$GPU_PERCENT" -ge 80 ]; then
+                                log_warning "MIG usage high ($CURRENT_MIG_TOTAL/$MAX_GPUS, ${GPU_PERCENT}%). Consider retiring idle containers."
+                            fi
+                        fi
+                    else
+                        log_error "GPU allocator returned success but couldn't parse GPU ID"
+                        log_error "Output: $ALLOC_OUTPUT"
+                        exit 1
+                    fi
                 else
-                    # Fallback if error-messages.sh not found
-                    log_error "GPU allocation failed: $ALLOC_OUTPUT"
-                    echo ""
-                    echo "Your allocation may have been rejected due to resource limits."
-                    echo "Run 'check-limits' to see your current usage."
+                    # Use friendly error messages
+                    ERROR_MESSAGES="$SCRIPT_DIR/../lib/error-messages.sh"
+                    echo ""  # Blank line before error
+                    if [ -f "$ERROR_MESSAGES" ]; then
+                        source "$ERROR_MESSAGES"
+                        show_limit_error "$ALLOC_OUTPUT" "$CURRENT_USER" "$CONTAINER_TAG"
+                    else
+                        log_error "GPU allocation failed: $ALLOC_OUTPUT"
+                        echo ""
+                        echo "Your allocation may have been rejected due to resource limits."
+                        echo "Run 'check-limits' to see your current usage."
+                    fi
+                    exit 1
                 fi
-                exit 1
             fi
         else
             # Fallback if allocator not available
@@ -499,7 +598,20 @@ if [ -n "$ALLOCATED_GPU" ]; then
     MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.allocated=$ALLOCATED_GPU"
     MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.allocated_at=$ALLOCATED_AT"
 
-    if [ -n "$DOCKER_ID" ]; then
+    # Store all GPU slots for multi-GPU containers
+    if [ -n "$ALLOCATED_SLOTS" ]; then
+        MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.slots=$ALLOCATED_SLOTS"
+    fi
+
+    # Store MIG-equivalent count
+    if [ -n "$MIG_EQUIV" ] && [ "$MIG_EQUIV" -gt 0 ] 2>/dev/null; then
+        MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.mig_equiv=$MIG_EQUIV"
+    fi
+
+    # Store Docker IDs (UUIDs) for all GPUs
+    if [ -n "$DOCKER_IDS" ]; then
+        MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.uuids=$DOCKER_IDS"
+    elif [ -n "$DOCKER_ID" ]; then
         MLC_ARGS="$MLC_ARGS --ds01-label ds01.gpu.uuid=$DOCKER_ID"
     fi
 

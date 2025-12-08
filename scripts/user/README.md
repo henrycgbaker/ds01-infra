@@ -149,12 +149,23 @@ Single-purpose, reusable commands that work standalone or orchestrated.
 
 **container-create** - Create container with resource limits
 ```bash
-container-create [--guided] [--image <image>]
+container-create [--guided] [--image <image>] [--num-migs=N] [--prefer-full]
 
 # Interactive prompts for:
 # - Container name
 # - Docker image selection
+# - GPU allocation (MIG count selection for researchers/admins)
 # - Resource allocation confirmation
+
+# Multi-GPU options (researchers/admins only):
+#   --num-migs=N     Request N MIG partitions (default: 1)
+#   --prefer-full    Request full GPU instead of MIGs when N >= mig_per_gpu
+
+# Examples:
+#   container-create                      # Interactive wizard
+#   container-create my-project           # Create with defaults (1 MIG)
+#   container-create thesis --num-migs=2  # Request 2 MIG partitions
+#   container-create thesis --num-migs=4 --prefer-full  # Request 1 full GPU
 
 # Calls: mlc-create-wrapper.sh → get_resource_limits.py → gpu_allocator.py → mlc-patched.py
 ```

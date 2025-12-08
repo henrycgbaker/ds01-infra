@@ -139,9 +139,9 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 
 **What's Persistent (always safe):**
 - Workspace files (`~/workspace/<project>/`)
-- Dockerfiles (`~/dockerfiles/`)
+- Dockerfiles (`~/workspace/<project>/Dockerfile`)
 - Docker images (blueprints for recreation)
-- Project configuration
+- Project configuration (`pyproject.toml`, `requirements.txt`)
 
 **Benefits:**
 - **Resource Efficiency**: GPUs freed immediately, no stale allocations
@@ -164,7 +164,7 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 **Naming conventions:**
 - Images: `ds01-{user-id}/{project-name}:latest`
 - Containers: `{project-name}._.{user-id}` (AIME convention)
-- Dockerfiles: `~/workspace/{project}/Dockerfile` (per-project) or `~/dockerfiles/{project}.Dockerfile` (centralized)
+- Dockerfiles: `~/workspace/{project}/Dockerfile` (standard location)
 
 **Project metadata (pyproject.toml):**
 ```toml
@@ -210,6 +210,7 @@ container retire my-thesis           # Cleanup
 **Module-specific READMEs (detailed docs):**
 - `scripts/docker/README.md` - Resource management, GPU allocation, container creation
 - `scripts/user/README.md` - User commands, workflows, tier system details
+- `scripts/lib/README.md` - Shared libraries (dockerfile-generator, context, utilities)
 - `scripts/system/README.md` - System administration, deployment, user management
 - `scripts/monitoring/README.md` - Monitoring tools, dashboards, metrics collection
 - `scripts/maintenance/README.md` - Cleanup automation, cron jobs, lifecycle management
@@ -223,7 +224,7 @@ container retire my-thesis           # Cleanup
 - Scripts: `/opt/ds01-infra/scripts/`
 - State: `/var/lib/ds01/` (gpu-state.json, container-metadata/)
 - Logs: `/var/log/ds01/` (gpu-allocations.log, cron logs)
-- User dockerfiles: `~/dockerfiles/`
+- User projects: `~/workspace/{project}/` (includes Dockerfile, requirements.txt)
 
 **Base system:**
 - AIME MLC: `/opt/aime-ml-containers`
@@ -421,12 +422,17 @@ scripts/
 │   ├── L3 (Orchestrators): container-{deploy|retire}
 │   ├── L4 (Wizards): user-setup, project-init, project-launch, *-dispatcher.sh
 │   └── v1-backup/       # Backup of container workflow scripts before refactor
-├── lib/                 # Shared libraries
-│   ├── ds01-context.sh       # Context detection for conditional output
-│   ├── interactive-select.sh # Container selection UI
-│   ├── container-session.sh  # Unified handler for start/run/attach
-│   ├── container-logger.sh   # Centralized event logging wrapper
-│   └── error-messages.sh     # User-friendly error messages
+├── lib/                 # Shared libraries (see scripts/lib/README.md)
+│   ├── dockerfile-generator.sh  # Shared Dockerfile generation (used by project-init, image-create)
+│   ├── ds01-context.sh          # Context detection for conditional output
+│   ├── interactive-select.sh    # Container selection UI
+│   ├── container-session.sh     # Unified handler for start/run/attach
+│   ├── container-logger.sh      # Centralized event logging wrapper
+│   ├── error-messages.sh        # User-friendly error messages
+│   ├── aime-images.sh           # AIME base image resolution
+│   ├── project-metadata.sh      # pyproject.toml parsing/creation
+│   ├── username-utils.sh        # Username sanitization for systemd
+│   └── validate-resource-limits.sh  # Resource limit validation
 ├── system/              # System administration
 │   ├── setup-docker-cgroups.sh, setup-opa-authz.sh  # Universal enforcement
 │   ├── setup-resource-slices.sh, create-user-slice.sh

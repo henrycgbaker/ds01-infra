@@ -746,6 +746,86 @@ if [ -z "$CONTAINER_NAME" ]; then
         CPU_ONLY=true
     fi
     echo ""
+
+    # MIG/GPU Count Selection (only if GPU mode and user has multi-GPU permissions)
+    NUM_MIGS=1
+    PREFER_FULL=false
+
+    if [ "$GPU_CHOICE" != "2" ]; then
+        # Get user's max_mig_per_container and allow_full_gpu
+        MAX_MIG_PER_CONTAINER=$(python3 "$RESOURCE_PARSER" "$USERNAME" --max-mig-per-container 2>/dev/null || echo "1")
+        ALLOW_FULL_GPU=$(python3 "$RESOURCE_PARSER" "$USERNAME" --allow-full-gpu 2>/dev/null || echo "false")
+        MIG_PER_GPU=$(python3 "$RESOURCE_PARSER" "$USERNAME" --mig-instances-per-gpu 2>/dev/null || echo "4")
+
+        # Only show MIG selection if user can have more than 1 MIG per container
+        if [ "$MAX_MIG_PER_CONTAINER" != "1" ] && [ "$MAX_MIG_PER_CONTAINER" != "" ]; then
+            # Determine max option to show
+            if [ "$MAX_MIG_PER_CONTAINER" = "unlimited" ] || [ "$MAX_MIG_PER_CONTAINER" = "null" ]; then
+                MAX_OPTION=4
+            else
+                MAX_OPTION=$MAX_MIG_PER_CONTAINER
+                [ "$MAX_OPTION" -gt 4 ] && MAX_OPTION=4
+            fi
+
+            echo -e "${BOLD}GPU Allocation:${NC}"
+            echo ""
+            echo "Your account allows up to $MAX_MIG_PER_CONTAINER MIG partitions per container."
+            echo ""
+            echo "How many MIG partitions do you need?"
+            echo ""
+            echo -e "  ${BOLD}1)${NC} 1 MIG ${GREEN}(recommended for most tasks)${NC}"
+            [ "$MAX_OPTION" -ge 2 ] && echo -e "  ${BOLD}2)${NC} 2 MIGs (medium workloads)"
+            [ "$MAX_OPTION" -ge 3 ] && echo -e "  ${BOLD}3)${NC} 3 MIGs (larger models)"
+            [ "$MAX_OPTION" -ge 4 ] && echo -e "  ${BOLD}4)${NC} 4 MIGs (distributed training)"
+            echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+            read -p "Choice [1-$MAX_OPTION, default: 1]: " MIG_CHOICE </dev/tty
+            MIG_CHOICE=${MIG_CHOICE:-1}
+
+            # Validate choice
+            if [[ "$MIG_CHOICE" =~ ^[0-9]+$ ]] && [ "$MIG_CHOICE" -ge 1 ] && [ "$MIG_CHOICE" -le "$MAX_OPTION" ]; then
+                NUM_MIGS=$MIG_CHOICE
+            else
+                NUM_MIGS=1
+            fi
+            echo ""
+
+            # Full GPU option (only if user has allow_full_gpu and requesting 4+ MIGs)
+            if [ "$ALLOW_FULL_GPU" = "true" ] && [ "$NUM_MIGS" -ge "$MIG_PER_GPU" ]; then
+                echo -e "${BOLD}GPU Type Preference:${NC}"
+                echo ""
+                echo "You requested $NUM_MIGS MIG partitions. Would you prefer a full GPU instead?"
+                echo ""
+                echo -e "  ${BOLD}1)${NC} $NUM_MIGS MIG partitions ${GREEN}(default - better for shared resources)${NC}"
+                echo -e "  ${BOLD}2)${NC} 1 Full GPU (better memory bandwidth, NVLink)"
+                echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Choice [1-2, default: 1]: " FULL_CHOICE </dev/tty
+                FULL_CHOICE=${FULL_CHOICE:-1}
+
+                if [ "$FULL_CHOICE" = "2" ]; then
+                    PREFER_FULL=true
+                    echo -e "${GREEN}✓${NC} Using full GPU"
+                fi
+                echo ""
+            fi
+
+            # Warning for multi-GPU requests
+            if [ "$NUM_MIGS" -gt 1 ]; then
+                echo -e "${YELLOW}⚠ Multi-GPU containers consume shared resources.${NC}"
+                echo -e "  Requesting: ${BOLD}$NUM_MIGS MIG partitions${NC}"
+                echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Proceed? [Y/n]: " CONFIRM </dev/tty
+                CONFIRM=${CONFIRM:-Y}
+                if [[ "${CONFIRM,,}" != "y" && "${CONFIRM,,}" != "yes" ]]; then
+                    echo -e "${CYAN}Cancelled${NC}"
+                    exit 0
+                fi
+                echo ""
+            fi
+        fi
+    fi
 fi
 
 # Sanitize container name
@@ -994,7 +1074,15 @@ echo -e "${BOLD}Workspace:${NC}  $WORKSPACE_DIR"
 if [ "$CPU_ONLY" = true ]; then
     echo -e "${BOLD}GPU:${NC}        ${YELLOW}CPU only${NC}"
 else
-    echo -e "${BOLD}GPU:${NC}        ${GREEN}Enabled (auto-allocated)${NC}"
+    if [ -n "$NUM_MIGS" ] && [ "$NUM_MIGS" -gt 1 ] 2>/dev/null; then
+        if [ "$PREFER_FULL" = true ]; then
+            echo -e "${BOLD}GPU:${NC}        ${GREEN}Full GPU preferred (${NUM_MIGS} MIG-equiv)${NC}"
+        else
+            echo -e "${BOLD}GPU:${NC}        ${GREEN}${NUM_MIGS} MIG partitions${NC}"
+        fi
+    else
+        echo -e "${BOLD}GPU:${NC}        ${GREEN}Enabled (auto-allocated)${NC}"
+    fi
 fi
 echo ""
 
@@ -1029,6 +1117,15 @@ fi
 # Add custom image flag (CRITICAL: tells wrapper to use custom image instead of AIME base)
 if [ -n "$IMAGE_NAME" ]; then
     WRAPPER_ARGS+=("--image=$IMAGE_NAME")
+fi
+
+# Add multi-GPU allocation flags (distributed containers)
+if [ -n "$NUM_MIGS" ] && [ "$NUM_MIGS" -gt 1 ] 2>/dev/null; then
+    WRAPPER_ARGS+=("--num-migs=$NUM_MIGS")
+fi
+
+if [ "$PREFER_FULL" = true ]; then
+    WRAPPER_ARGS+=("--prefer-full")
 fi
 
 # Show what we're doing

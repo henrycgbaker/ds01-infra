@@ -88,7 +88,7 @@ detailed_help() {
     echo ""
     echo -e "${BOLD}What's Preserved:${NC}"
     echo -e "  ${GREEN}✓${NC} Workspace files (~/workspace/<project>/)"
-    echo -e "  ${GREEN}✓${NC} Dockerfile backed up to ~/ds01-config/images/deleted/"
+    echo -e "  ${GREEN}✓${NC} Dockerfile (with --keep-dockerfile flag)"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo ""
@@ -398,41 +398,39 @@ if [ "$FORCE" = false ]; then
     echo ""
 fi
 
-# Remove image
+# Remove image by ID (more reliable than name which may have non-standard tags)
 echo "Removing image..."
-if docker rmi "$IMAGE_NAME"; then
+if docker rmi "$IMAGE_ID"; then
     echo -e "${GREEN}✓ Image removed${NC}\n"
 
     # Handle Dockerfile
-    DOCKERFILES_DIR="$HOME/dockerfiles"
     # Extract project name from image (ds01-1001/my-project → my-project)
     PROJECT_NAME="${IMAGE_NAME##*/}"
-    DOCKERFILE="$DOCKERFILES_DIR/${PROJECT_NAME}.Dockerfile"
 
     # Sanitize metadata filename (replace / with _)
     METADATA_FILE=$(echo "$IMAGE_NAME" | tr '/' '_')
     INFO_FILE="$HOME/ds01-config/images/${METADATA_FILE}.info"
 
-    # Check info file for custom Dockerfile location
+    # Check for Dockerfile in order of preference:
+    # 1. Info file (explicit location)
+    # 2. Project workspace (~/workspace/{project}/Dockerfile)
+    # 3. Centralized (~/dockerfiles/{project}.Dockerfile)
+    DOCKERFILE=""
     if [ -f "$INFO_FILE" ]; then
         CUSTOM_DF=$(grep "^Dockerfile:" "$INFO_FILE" | cut -d: -f2- | xargs)
-        [ -n "$CUSTOM_DF" ] && DOCKERFILE="$CUSTOM_DF"
+        [ -n "$CUSTOM_DF" ] && [ -f "$CUSTOM_DF" ] && DOCKERFILE="$CUSTOM_DF"
+    fi
+    if [ -z "$DOCKERFILE" ] && [ -f "$HOME/workspace/${PROJECT_NAME}/Dockerfile" ]; then
+        DOCKERFILE="$HOME/workspace/${PROJECT_NAME}/Dockerfile"
+    fi
+    if [ -z "$DOCKERFILE" ] && [ -f "$HOME/dockerfiles/${PROJECT_NAME}.Dockerfile" ]; then
+        DOCKERFILE="$HOME/dockerfiles/${PROJECT_NAME}.Dockerfile"
     fi
 
     if [ "$KEEP_DOCKERFILE" = false ]; then
         if [ -f "$DOCKERFILE" ]; then
-            # Create backup (sanitize filename)
-            BACKUP_DIR="$HOME/ds01-config/images/deleted"
-            mkdir -p "$BACKUP_DIR"
-            BACKUP_NAME=$(echo "$IMAGE_NAME" | tr '/' '_')
-            BACKUP_FILE="$BACKUP_DIR/${BACKUP_NAME}-$(date +%Y%m%d-%H%M%S).Dockerfile"
-
-            cp "$DOCKERFILE" "$BACKUP_FILE"
             rm "$DOCKERFILE"
-
-            echo -e "${YELLOW}📄 Dockerfile backed up to:${NC}"
-            echo -e "   ${BLUE}$BACKUP_FILE${NC}"
-            echo ""
+            echo -e "${DIM}Dockerfile removed${NC}"
         fi
 
         # Remove metadata

@@ -82,10 +82,29 @@ user_overrides:
 
 ### Resource Limits
 
-**max_mig_instances** - Maximum GPUs/MIG instances
+**max_mig_instances** - Maximum GPUs/MIG instances (total across all containers)
 ```yaml
-max_mig_instances: 2        # Max 2 GPUs
+max_mig_instances: 2        # Max 2 GPUs total
 max_mig_instances: null     # Unlimited (admin only)
+```
+
+**max_mig_per_container** - Maximum MIG-equivalents per single container
+```yaml
+max_mig_per_container: 1    # 1 MIG per container (default for students)
+max_mig_per_container: 4    # 4 MIGs per container (= 1 full GPU)
+max_mig_per_container: null # Unlimited (admin only)
+```
+
+**allow_full_gpu** - Can user request full GPUs (vs MIG partitions only)
+```yaml
+allow_full_gpu: false       # Students: MIG only
+allow_full_gpu: true        # Researchers/admins: can use full GPUs
+```
+
+**mig_instances_per_gpu** - How many MIGs equal one full GPU (in gpu_allocation section)
+```yaml
+gpu_allocation:
+  mig_instances_per_gpu: 4  # 1 full GPU = 4 MIG-equivalents
 ```
 
 **max_cpus** - CPU cores per container
