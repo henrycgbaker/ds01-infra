@@ -154,7 +154,9 @@ if [ "$GUIDED" = true ]; then
         echo ""
     fi
 
-    read -p "Press Enter to create the directory structure..." </dev/tty
+    if [ -t 0 ] || [ -e /dev/tty ]; then
+        read -p "Press Enter to create the directory structure..." </dev/tty 2>/dev/null || true
+    fi
     echo ""
 fi
 

@@ -29,6 +29,15 @@ fi
 # Source shared Dockerfile generator
 if [[ -f "/opt/ds01-infra/scripts/lib/dockerfile-generator.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/dockerfile-generator.sh
+else
+    echo "Error: dockerfile-generator.sh not found at /opt/ds01-infra/scripts/lib/" >&2
+    exit 1
+fi
+
+# Verify the function was loaded
+if ! type generate_dockerfile &>/dev/null; then
+    echo "Error: generate_dockerfile function not available after sourcing library" >&2
+    exit 1
 fi
 
 # Set orchestration context - suppresses atomic command "Next steps" output
@@ -489,15 +498,28 @@ if [ ! -f "$PROJECT_DIR/Dockerfile" ]; then
     echo -e "  Creating Dockerfile..."
     AIME_BASE_IMAGE=$(get_base_image "pytorch")
 
-    generate_dockerfile \
+    if [ -z "$AIME_BASE_IMAGE" ]; then
+        echo -e "  ${RED}Error: Could not determine base image${NC}" >&2
+        exit 1
+    fi
+
+    set +e  # Temporarily disable exit on error to capture failure
+    DOCKERFILE_OUTPUT=$(generate_dockerfile \
         --output "$PROJECT_DIR/Dockerfile" \
         --base-image "$AIME_BASE_IMAGE" \
         --project "$PROJECT_NAME" \
         --user-id "$USER_ID" \
         --username "$USERNAME" \
         --framework "pytorch" \
-        --requirements "$PROJECT_DIR/requirements.txt" \
-        > /dev/null
+        --requirements "$PROJECT_DIR/requirements.txt" 2>&1)
+    DOCKERFILE_EXIT=$?
+    set -e
+
+    if [ $DOCKERFILE_EXIT -ne 0 ]; then
+        echo -e "  ${RED}Error creating Dockerfile:${NC}" >&2
+        echo "$DOCKERFILE_OUTPUT" >&2
+        exit 1
+    fi
 
     echo -e "  ${GREEN}Created${NC} Dockerfile"
     echo -e "  ${DIM}Base image: $AIME_BASE_IMAGE${NC}"

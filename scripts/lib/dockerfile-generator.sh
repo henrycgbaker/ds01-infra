@@ -8,6 +8,39 @@
 # This library provides a single source of truth for Dockerfile generation,
 # used by both project-init and image-create.
 
+# Read packages from requirements.txt file
+# Args: $1 = file path
+# Outputs: space-separated package list (preserving version specifiers)
+read_requirements_packages() {
+    local req_file="$1"
+    local packages=""
+
+    while IFS= read -r line; do
+        # Skip comments
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        # Skip empty lines
+        [[ -z "${line// }" ]] && continue
+        # Skip -r/-e/--requirement/--editable (recursive requirements, editable installs)
+        [[ "$line" =~ ^[[:space:]]*- ]] && continue
+
+        # Strip inline comments (everything after #)
+        line=$(echo "$line" | sed 's/#.*//')
+
+        # Trim leading/trailing whitespace and normalize version specifiers
+        # Handles "torch >= 2.0.1" → "torch>=2.0.1"
+        local pkg
+        pkg=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
+              sed 's/[[:space:]]*\([><=!~]\+\)[[:space:]]*/\1/g')
+
+        if [ -n "$pkg" ]; then
+            packages="$packages $pkg"
+        fi
+    done < "$req_file"
+
+    # Trim leading space
+    echo "${packages# }"
+}
+
 # Generate a DS01 Dockerfile
 #
 # Required parameters:
@@ -19,7 +52,7 @@
 #
 # Optional parameters:
 #   --framework NAME       Framework name (pytorch, tensorflow, etc.) [default: pytorch]
-#   --requirements FILE    Path to requirements.txt (uses COPY + pip install -r)
+#   --requirements FILE    Path to requirements.txt (unpacks packages inline)
 #   --system-packages PKG  Space-separated system packages
 #   --python-packages PKG  Space-separated Python packages (inline RUN pip install)
 #   --skip-system          Skip system packages section
@@ -119,14 +152,19 @@ EOF
     fi
 
     # === PYTHON PACKAGES ===
-    if [ -n "$requirements" ]; then
-        # Requirements.txt mode - use COPY + pip install -r
-        cat >> "$output" << 'EOF'
-# Python packages from requirements.txt
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+    if [ -n "$requirements" ] && [ -f "$requirements" ]; then
+        # Requirements.txt mode - unpack packages inline (not COPY)
+        local req_packages
+        req_packages=$(read_requirements_packages "$requirements")
 
-EOF
+        if [ -n "$req_packages" ]; then
+            # Show source path (abbreviated)
+            local short_req="${requirements/#$HOME/~}"
+            echo "# Packages from requirements.txt" >> "$output"
+            echo "# Source: $short_req" >> "$output"
+            _write_pip_install "$output" "$req_packages"
+            echo "" >> "$output"
+        fi
     elif [ -n "$python_packages" ]; then
         # Inline packages mode
         echo "# Python packages" >> "$output"
