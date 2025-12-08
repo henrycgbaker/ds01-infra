@@ -230,9 +230,9 @@ show_simple() {
 
     # Tips
     echo -e "${YELLOW}💡 For More Info:${NC}"
-    echo -e "   Also stopped:           ${GREEN}container list -all${NC}"
-    echo -e "   Detailed metadata:      ${GREEN}container list -detailed${NC}"
-    echo -e "   With walkthrough:       ${GREEN}container list -guided${NC}"
+    echo -e "   Also stopped:           ${GREEN}container list --all${NC}"
+    echo -e "   Detailed metadata:      ${GREEN}container list --detailed${NC}"
+    echo -e "   With walkthrough:       ${GREEN}container list --guided${NC}"
     echo ""
 
     if [ "$GUIDED" = true ]; then
