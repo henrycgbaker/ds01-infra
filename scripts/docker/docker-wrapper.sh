@@ -94,6 +94,28 @@ has_owner_label() {
     return 1
 }
 
+# Extract owner from devcontainer.local_folder label if present
+# VS Code dev containers set this label to the project path: /home/USER/...
+get_devcontainer_owner() {
+    local prev_arg=""
+    for arg in "$@"; do
+        # Check for --label=devcontainer.local_folder=/home/USER/...
+        if [[ "$arg" == "--label=devcontainer.local_folder=/home/"* ]]; then
+            local path="${arg#--label=devcontainer.local_folder=}"
+            echo "$path" | cut -d/ -f3
+            return 0
+        fi
+        # Check for --label devcontainer.local_folder=/home/USER/... (two separate args)
+        if [[ "$prev_arg" == "--label" ]] && [[ "$arg" == "devcontainer.local_folder=/home/"* ]]; then
+            local path="${arg#devcontainer.local_folder=}"
+            echo "$path" | cut -d/ -f3
+            return 0
+        fi
+        prev_arg="$arg"
+    done
+    return 1
+}
+
 # Get user's group from resource-limits.yaml
 get_user_group() {
     local user="$1"
@@ -188,9 +210,20 @@ main() {
 
         # Inject owner label if not already specified
         if ! has_owner_label "$@"; then
-            INJECT_ARGS+=("--label" "ds01.user=$CURRENT_USER")
-            INJECT_ARGS+=("--label" "ds01.managed=true")
-            log_debug "Injecting owner label: ds01.user=$CURRENT_USER"
+            # Check if this is a VS Code devcontainer with a local_folder path
+            local devcontainer_owner
+            devcontainer_owner=$(get_devcontainer_owner "$@")
+            if [ -n "$devcontainer_owner" ]; then
+                # VS Code container - extract owner from devcontainer.local_folder path
+                INJECT_ARGS+=("--label" "ds01.user=$devcontainer_owner")
+                INJECT_ARGS+=("--label" "ds01.managed=devcontainer")
+                log_debug "Injecting owner label from devcontainer: ds01.user=$devcontainer_owner"
+            else
+                # Regular container - use current user
+                INJECT_ARGS+=("--label" "ds01.user=$CURRENT_USER")
+                INJECT_ARGS+=("--label" "ds01.managed=true")
+                log_debug "Injecting owner label: ds01.user=$CURRENT_USER"
+            fi
         fi
 
         # Remove subcommand from args

@@ -32,6 +32,8 @@ from typing import Dict, List, Optional, Tuple
 
 # Configuration
 INFRA_ROOT = Path('/opt/ds01-infra')
+# Use real docker binary directly (bypass wrapper filtering for dashboard)
+DOCKER_BIN = '/usr/bin/docker'
 sys.path.insert(0, str(INFRA_ROOT / "scripts" / "docker"))
 sys.path.insert(0, str(INFRA_ROOT / "scripts" / "monitoring"))
 
@@ -145,7 +147,7 @@ class DashboardData:
         """Get CPU/memory stats for a container"""
         try:
             result = subprocess.run(
-                ['docker', 'stats', container, '--no-stream', '--format',
+                [DOCKER_BIN, 'stats', container, '--no-stream', '--format',
                  '{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'],
                 capture_output=True, text=True, timeout=3
             )
@@ -260,14 +262,38 @@ class DashboardData:
 
         return list(reversed(allocations))[:limit]
 
+    @staticmethod
+    def extract_owner(ds01_user: str, aime_user_upper: str, aime_username: str, devcontainer_path: str) -> str:
+        """Extract container owner from labels, prioritized.
+
+        Checks multiple label sources for robust ownership detection:
+        1. ds01.user - explicit DS01 label
+        2. aime.mlc.USER - AIME uppercase label
+        3. aime.mlc.username - AIME lowercase label
+        4. devcontainer.local_folder - VS Code path extraction
+        """
+        if ds01_user:
+            return ds01_user
+        if aime_user_upper:
+            return aime_user_upper
+        if aime_username:
+            return aime_username
+        if devcontainer_path and devcontainer_path.startswith('/home/'):
+            parts = devcontainer_path.split('/')
+            if len(parts) >= 3:
+                return parts[2]  # /home/<username>/...
+        return "(other)"
+
     def get_user_summary(self) -> Dict:
         """Get per-user resource usage summary"""
         users = {}
 
         try:
-            # Get all containers with JSON output for reliable label parsing
+            # Get all containers with labels for owner identification
+            # Check multiple label sources for robust detection
             result = subprocess.run(
-                ['docker', 'ps', '-a', '--format', '{{.Names}}\t{{.Status}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "ds01.user"}}'],
+                [DOCKER_BIN, 'ps', '-a', '--format',
+                 '{{.Names}}\t{{.Status}}\t{{.Label "ds01.user"}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "aime.mlc.username"}}\t{{.Label "devcontainer.local_folder"}}'],
                 capture_output=True, text=True
             )
 
@@ -279,12 +305,12 @@ class DashboardData:
                 parts = line.split('\t')
                 if len(parts) >= 2:
                     name, status = parts[0], parts[1]
-                    # Try different labels for user identification
-                    user = parts[2] if len(parts) > 2 and parts[2] else None
-                    if not user and len(parts) > 3:
-                        user = parts[3]
-                    if not user:
-                        user = "(unknown)"
+                    # Extract owner from multiple label sources (prioritized)
+                    ds01_user = parts[2] if len(parts) > 2 else ''
+                    aime_user_upper = parts[3] if len(parts) > 3 else ''
+                    aime_username = parts[4] if len(parts) > 4 else ''
+                    devcontainer_path = parts[5] if len(parts) > 5 else ''
+                    user = self.extract_owner(ds01_user, aime_user_upper, aime_username, devcontainer_path)
 
                     if user not in users:
                         users[user] = {'containers': 0, 'running': 0, 'gpus': []}
@@ -308,7 +334,7 @@ class DashboardData:
         # Check for idle containers
         try:
             result = subprocess.run(
-                ['docker', 'stats', '--no-stream', '--format', '{{.Name}}\t{{.CPUPerc}}'],
+                [DOCKER_BIN, 'stats', '--no-stream', '--format', '{{.Name}}\t{{.CPUPerc}}'],
                 capture_output=True, text=True, timeout=10
             )
             for line in result.stdout.strip().split('\n'):
@@ -653,8 +679,10 @@ class DashboardRenderer:
             if len(stats['gpus']) > 3:
                 gpu_str += f" +{len(stats['gpus']) - 3}"
 
+            # Truncate long usernames to fit column
+            user_display = user[:18] if len(user) > 18 else user
             running_color = Colors.GREEN if stats['running'] > 0 else Colors.GRAY
-            line = f"{user:<20} {stats['containers']:<12} {Colors.c(str(stats['running']), running_color):<19} {gpu_str:<20}"
+            line = f"{user_display:<20} {stats['containers']:<12} {Colors.c(str(stats['running']), running_color):<19} {gpu_str:<20}"
             lines.append(line)
 
         lines.append("")
@@ -697,10 +725,10 @@ class DashboardRenderer:
         lines.append("")
 
         try:
-            # Get ALL containers (not just AIME ones)
+            # Get ALL containers with owner labels (multiple sources for robust detection)
             result = subprocess.run(
-                ['docker', 'ps', '-a', '--format',
-                 '{{.Names}}\t{{.Status}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "ds01.user"}}'],
+                [DOCKER_BIN, 'ps', '-a', '--format',
+                 '{{.Names}}\t{{.Status}}\t{{.Label "ds01.user"}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "aime.mlc.username"}}\t{{.Label "devcontainer.local_folder"}}'],
                 capture_output=True, text=True
             )
 
@@ -714,13 +742,12 @@ class DashboardRenderer:
                 parts = line.split('\t')
                 if len(parts) >= 2:
                     name, status = parts[0][:28], parts[1]
-                    # Try different labels for user identification
-                    user = parts[2] if len(parts) > 2 and parts[2] else None
-                    if not user and len(parts) > 3:
-                        user = parts[3]
-                    if not user:
-                        user = "-"
-                    user = user[:13]
+                    # Extract owner from multiple label sources (prioritized)
+                    ds01_user = parts[2] if len(parts) > 2 else ''
+                    aime_user_upper = parts[3] if len(parts) > 3 else ''
+                    aime_username = parts[4] if len(parts) > 4 else ''
+                    devcontainer_path = parts[5] if len(parts) > 5 else ''
+                    user = self.data.extract_owner(ds01_user, aime_user_upper, aime_username, devcontainer_path)[:13]
 
                     # Get stats if running
                     if 'Up' in status:

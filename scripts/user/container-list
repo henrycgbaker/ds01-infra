@@ -78,43 +78,55 @@ format_uptime() {
     echo "$status" | sed 's/Up //' | sed 's/Exited.*/stopped/'
 }
 
-get_container_list_via_mlc() {
+# Real docker binary (bypass wrapper filtering to see all containers)
+DOCKER_BIN="/usr/bin/docker"
+
+get_user_containers() {
     local show_all="$1"
 
-    # Check if mlc-list exists
-    if [ ! -f "$MLC_LIST" ]; then
-        # Fallback to docker directly if mlc-list not available
-        local filter_args=""
-        if [ "$show_all" != "true" ]; then
-            filter_args="--filter status=running"
+    # Get all containers with multiple owner label sources
+    # Then filter for current user using robust multi-label detection
+    local status_filter=""
+    if [ "$show_all" != "true" ]; then
+        status_filter="--filter status=running"
+    fi
+
+    # Query containers with all relevant owner labels
+    # Format: name|ds01.user|aime.mlc.USER|aime.mlc.username|devcontainer.local_folder
+    $DOCKER_BIN ps -a $status_filter --format \
+        '{{.Names}}|{{.Label "ds01.user"}}|{{.Label "aime.mlc.USER"}}|{{.Label "aime.mlc.username"}}|{{.Label "devcontainer.local_folder"}}' 2>/dev/null | \
+    while IFS='|' read -r name ds01_user aime_user_upper aime_username devcontainer_path; do
+        [ -z "$name" ] && continue
+
+        # Check ds01.user label
+        if [ "$ds01_user" = "$USERNAME" ]; then
+            echo "$name"
+            continue
         fi
-        docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null
-        return
-    fi
 
-    # Call mlc-list to get containers
-    # mlc-list automatically filters by current user via aime.mlc.USER label
-    local mlc_output
-    if [ "$show_all" = "true" ]; then
-        mlc_output=$(bash "$MLC_LIST" 2>/dev/null || true)
-    else
-        # mlc-list shows all by default, we filter for running only
-        mlc_output=$(bash "$MLC_LIST" 2>/dev/null || true)
-    fi
-
-    # Parse mlc-list output to extract container names
-    # mlc-list output format typically shows container names with ._.UID suffix
-    # We extract the full container name (with ._.UID)
-    echo "$mlc_output" | grep "._.$USER_ID" | awk '{print $1}' | grep -v "^$" || true
-
-    # If mlc-list failed or returned nothing, fallback to docker
-    if [ -z "$mlc_output" ] || [ "$(echo "$mlc_output" | grep -c "._.$USER_ID" || true)" -eq 0 ]; then
-        local filter_args=""
-        if [ "$show_all" != "true" ]; then
-            filter_args="--filter status=running"
+        # Check aime.mlc.USER label (uppercase)
+        if [ "$aime_user_upper" = "$USERNAME" ]; then
+            echo "$name"
+            continue
         fi
-        docker ps -a $filter_args --format "{{.Names}}" --filter "name=._.$USER_ID" 2>/dev/null || true
-    fi
+
+        # Check aime.mlc.username label (lowercase)
+        if [ "$aime_username" = "$USERNAME" ]; then
+            echo "$name"
+            continue
+        fi
+
+        # Check devcontainer.local_folder path for /home/USERNAME/
+        if [[ "$devcontainer_path" == "/home/$USERNAME/"* ]]; then
+            echo "$name"
+            continue
+        fi
+    done
+}
+
+# Legacy function name for compatibility
+get_container_list_via_mlc() {
+    get_user_containers "$1"
 }
 
 show_simple() {

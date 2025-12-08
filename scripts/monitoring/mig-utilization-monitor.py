@@ -26,6 +26,8 @@ STATE_DIR = Path("/var/lib/ds01")
 LOG_DIR = Path("/var/log/ds01")
 UTILIZATION_LOG = LOG_DIR / "mig-utilization.jsonl"
 EVENT_LOGGER = INFRA_ROOT / "scripts/docker/event-logger.py"
+# Use real docker binary directly (bypass wrapper filtering)
+DOCKER_BIN = "/usr/bin/docker"
 
 # Thresholds
 WASTE_THRESHOLD = 5  # GPU utilization below this % is considered "wasted"
@@ -178,7 +180,7 @@ def get_container_mig_allocations():
     try:
         result = subprocess.run(
             [
-                "docker", "ps",
+                DOCKER_BIN, "ps",
                 "--filter", "label=ds01.gpu.allocated",
                 "--format", "{{.Names}}|{{.Label \"ds01.user\"}}|{{.Label \"ds01.gpu.allocated\"}}|{{.Label \"ds01.gpu.uuid\"}}"
             ],
