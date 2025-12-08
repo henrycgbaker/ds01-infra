@@ -143,7 +143,7 @@ show_detailed() {
     local filter="$1"
 
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${CYAN}${BOLD}Your Docker Images${NC}"
+    echo -e "${BOLD}Your Docker Images${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
     local images
@@ -231,7 +231,7 @@ show_simple() {
         fi
     else
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${CYAN}${BOLD}Your Docker Images${NC}"
+        echo -e "${BOLD}Your Docker Images${NC}"
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
         # Filter by DS01 naming pattern: ds01-{user-id}/*

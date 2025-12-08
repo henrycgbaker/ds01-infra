@@ -82,8 +82,9 @@ select_image_interactive() {
     while true; do
         # All display output goes to stderr so it's visible to user
         echo "" >&2
-        echo -e "${CYAN}━━━ Your Docker Images ━━━${NC}" >&2
-        echo "" >&2
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
+        echo -e "${BOLD}Your Docker Images${NC}" >&2
+        echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
 
         # Get list of user's images - filter by DS01 naming pattern
         local images=()
