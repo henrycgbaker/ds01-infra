@@ -54,6 +54,7 @@ usage() {
     echo "  --guided          Show detailed explanations for beginners"
     echo "  --cpu-only        Create CPU-only container (no GPU)"
     echo "  -w, --workspace   Workspace directory (default: ~/workspace/<name>)"
+    echo "  --project=NAME    Mount ~/workspace/NAME as workspace"
     echo "  -d, --data        Additional data directory to mount"
     echo "  --background      Start in background (don't open terminal)"
     echo "  --open            Start and open terminal immediately"
@@ -217,11 +218,77 @@ show_concepts() {
     echo ""
 }
 
+# Source project metadata library for workspace selection
+if [[ -f "/opt/ds01-infra/scripts/lib/project-metadata.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/project-metadata.sh
+fi
+
+# Workspace selection function for interactive mode
+select_workspace() {
+    echo -e ""
+    echo -e "${BOLD}Select workspace to mount:${NC}"
+    echo -e ""
+
+    local options=()
+    local i=1
+
+    # Option 1: User's root workspace
+    echo -e "  ${BOLD}$i)${NC} User root workspace ${DIM}(~/workspace)${NC} ${GREEN}(Default)${NC}"
+    options+=("root")
+    ((i++))
+
+    # Scan for project directories
+    if [[ -d "$HOME/workspace" ]]; then
+        for project_dir in "$HOME/workspace"/*/; do
+            [[ -d "$project_dir" ]] || continue
+            local name
+            name=$(basename "$project_dir")
+            [[ "$name" == .* ]] && continue
+
+            options+=("$name")
+            echo -e "  ${BOLD}$i)${NC} $name ${DIM}(~/workspace/$name)${NC}"
+            ((i++))
+        done
+    fi
+
+    # Option for custom path
+    echo -e ""
+    echo -e "  ${BOLD}$i)${NC} Custom path ${DIM}(enter manually)${NC}"
+    options+=("custom")
+    echo -e ""
+
+    read -p "Choice [1-$i, default: 1]: " CHOICE </dev/tty
+    CHOICE=${CHOICE:-1}
+
+    if [[ "$CHOICE" == "$i" ]]; then
+        # Custom path
+        read -p "Enter workspace path: " CUSTOM_PATH </dev/tty
+        # Expand ~ and validate
+        CUSTOM_PATH="${CUSTOM_PATH/#\~/$HOME}"
+        if [[ ! -d "$CUSTOM_PATH" ]]; then
+            echo -e "${YELLOW}Directory doesn't exist, creating: $CUSTOM_PATH${NC}"
+            mkdir -p "$CUSTOM_PATH"
+        fi
+        SELECTED_WORKSPACE="$CUSTOM_PATH"
+    elif [[ "$CHOICE" =~ ^[0-9]+$ ]] && [[ "$CHOICE" -ge 1 ]] && [[ "$CHOICE" -lt "$i" ]]; then
+        local selected="${options[$((CHOICE-1))]}"
+        if [[ "$selected" == "root" ]]; then
+            SELECTED_WORKSPACE=""  # Use default (container name determines workspace)
+        else
+            SELECTED_WORKSPACE="$HOME/workspace/$selected"
+        fi
+    else
+        SELECTED_WORKSPACE=""  # Invalid, use default
+    fi
+}
+
 # Parse arguments
 CREATE_ARGS=()
 START_MODE=""  # "background", "open", or "" (prompt)
 CONTAINER_NAME=""
 GUIDED=false
+PROJECT_ARG=""
+WORKSPACE_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -236,6 +303,14 @@ while [[ $# -gt 0 ]]; do
         --guided)
             GUIDED=true
             CREATE_ARGS+=("$1")
+            shift
+            ;;
+        --project=*)
+            PROJECT_ARG="${1#*=}"
+            shift
+            ;;
+        --workspace=*)
+            WORKSPACE_ARG="${1#*=}"
             shift
             ;;
         -h|--help)
@@ -261,6 +336,20 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+# Handle --project and --workspace flags
+if [[ -n "$PROJECT_ARG" ]]; then
+    WORKSPACE_ARG="$HOME/workspace/$PROJECT_ARG"
+    if [[ -z "$CONTAINER_NAME" ]]; then
+        CONTAINER_NAME="$PROJECT_ARG"
+    fi
+fi
+
+if [[ -n "$WORKSPACE_ARG" ]]; then
+    # Expand ~ in workspace path
+    WORKSPACE_ARG="${WORKSPACE_ARG/#\~/$HOME}"
+    CREATE_ARGS+=("-w" "$WORKSPACE_ARG")
+fi
 
 echo ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"

@@ -32,7 +32,8 @@ DS01 uses a **5-layer implementation hierarchy** with **4 user-facing interfaces
 ├─────────────────────────────────────────────────────────────────────────────┤
 │   L4: WIZARDS (Complete Guided Workflows)                                   │
 │   ├── user-setup           # SSH → project-init → vscode                    │
-│   └── project-init         # dir → git → readme → image → deploy            │
+│   ├── project-init         # pyproject.toml → Dockerfile → requirements.txt │
+│   └── project launch       # check image → image-create → container deploy  │
 │                                                                             │
 │   L3: ORCHESTRATORS (Multi-Step Container Sequences)                        │
 │   ├── container deploy     # create + start                                 │
@@ -53,7 +54,7 @@ DS01 uses a **5-layer implementation hierarchy** with **4 user-facing interfaces
 ### User-Facing Interfaces
 
 **DS01 ORCHESTRATION INTERFACE (DEFAULT)** - For all users
-- L4 Wizards: `user-setup`, `project-init`
+- L4 Wizards: `user-setup`, `project-init`, `project launch`
 - L3 Orchestrators: `container deploy`, `container retire`
 - Shared L2: `image-*`, `container-list`, `container-stats`
 - Binary state model: containers are `running` or `removed` (no intermediate states)
@@ -163,9 +164,28 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 **Naming conventions:**
 - Images: `ds01-{user-id}/{project-name}:latest`
 - Containers: `{project-name}._.{user-id}` (AIME convention)
-- Dockerfiles: `~/dockerfiles/{project-name}.Dockerfile`
+- Dockerfiles: `~/workspace/{project}/Dockerfile` (per-project) or `~/dockerfiles/{project}.Dockerfile` (centralized)
 
-**Workflow:** image-create (4 phases) → builds custom image → container-deploy (create + start) → mlc-patched.py → resource limits → GPU allocation
+**Project metadata (pyproject.toml):**
+```toml
+[project]
+name = "my-thesis"
+description = "Computer vision thesis project"
+
+[tool.ds01]
+type = "cv"  # ml, cv, nlp, rl, audio, ts, llm, custom
+created = "2025-12-08"
+author = "h_baker"
+image = "ds01-12345/my-thesis:latest"
+```
+
+**Project-centric workflow:**
+```
+project init my-thesis --type=cv     # Creates pyproject.toml, Dockerfile, requirements.txt
+project launch my-thesis             # Builds image (if needed) → deploys container
+# ... work in container ...
+container retire my-thesis           # Cleanup
+```
 
 ### Core Components
 
@@ -230,13 +250,26 @@ DS01 embraces the **ephemeral container model** inspired by HPC, cloud platforms
 
 ### User Commands (Recommended)
 
-**L3 Orchestrators (Default - Ephemeral Model):**
+**L4 Wizards (Complete guided workflows):**
 ```bash
-# Deploy container (create + start)
+user-setup                                     # Full user onboarding
+project init my-thesis                         # Create new project
+project init my-thesis --type=cv               # With use-case preset
+project init --guided                          # With explanations
+
+# Launch project (smart: builds image if needed, deploys container)
+project launch my-project                      # Interactive project selection
+project launch my-project --open               # Launch and open terminal
+project launch my-project --rebuild            # Force rebuild image
+```
+
+**L3 Orchestrators (Multi-step sequences):**
+```bash
+# Deploy container (direct: requires image to exist)
 container deploy my-project                    # Interactive mode
 container deploy my-project --open             # Create and open terminal
-container deploy my-project --background       # Create and start in background
-container deploy my-project --guided           # Beginner mode with explanations
+container deploy my-project --project=NAME     # Mount specific project workspace
+container deploy my-project --workspace=/path  # Mount custom path
 
 # Retire container (stop + remove + free GPU)
 container retire my-project                    # Interactive mode
@@ -256,12 +289,6 @@ container-remove my-project                    # Remove only
 # Container inspection (shared with L3)
 container-list                                 # View all containers
 container-stats                                # Resource usage
-```
-
-**L4 Wizards (Complete onboarding):**
-```bash
-user-setup                                     # Full user onboarding
-project-init                                   # Create new project + deploy
 ```
 
 **Shell Configuration:**
@@ -392,7 +419,7 @@ scripts/
 │   ├── L2 (Atomic): image-{create|list|update|delete}
 │   ├── L2 (Atomic): {dir|git|readme|ssh|vscode}-*
 │   ├── L3 (Orchestrators): container-{deploy|retire}
-│   ├── L4 (Wizards): user-setup, project-init, *-dispatcher.sh
+│   ├── L4 (Wizards): user-setup, project-init, project-launch, *-dispatcher.sh
 │   └── v1-backup/       # Backup of container workflow scripts before refactor
 ├── lib/                 # Shared libraries
 │   ├── ds01-context.sh       # Context detection for conditional output

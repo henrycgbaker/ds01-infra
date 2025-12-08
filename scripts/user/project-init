@@ -1,7 +1,8 @@
 #!/bin/bash
 # DS01 Project Init - L4 Wizard
 # Complete project initialization workflow
-# Usage: project-init [project-name] [--guided]
+# Creates: pyproject.toml, requirements.txt, Dockerfile, directory structure
+# Usage: project-init [project-name] [--type=TYPE] [--guided]
 
 set -e
 
@@ -13,6 +14,16 @@ fi
 # Source skill assessment library for helper functions
 if [[ -f "/opt/ds01-infra/scripts/lib/skill-assessment.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/skill-assessment.sh
+fi
+
+# Source project metadata library
+if [[ -f "/opt/ds01-infra/scripts/lib/project-metadata.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/project-metadata.sh
+fi
+
+# Source AIME images library
+if [[ -f "/opt/ds01-infra/scripts/lib/aime-images.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/aime-images.sh
 fi
 
 # Set orchestration context - suppresses atomic command "Next steps" output
@@ -32,37 +43,182 @@ USERNAME=$(whoami)
 USER_ID=$(id -u)
 GROUP_ID=$(id -g)
 
-# Parse command line arguments
+# Get AIME base image (from shared library)
+AIME_BASE_IMAGE=$(get_base_image "pytorch")
+
+# =============================================================================
+# HELP FUNCTIONS (4-tier system)
+# =============================================================================
+
+show_help() {
+    echo -e ""
+    echo -e "${BOLD}DS01 Project Init${NC}"
+    echo -e "${DIM}Create a new data science project with all required files${NC}"
+    echo -e ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo -e "  project init [project-name] [options]"
+    echo -e ""
+    echo -e "${CYAN}Options:${NC}"
+    echo -e "  --type=TYPE     Project type: ml, cv, nlp, rl, audio, ts, llm, custom"
+    echo -e "  --guided        Include detailed explanations for beginners"
+    echo -e "  -h, --help      Quick reference (this message)"
+    echo -e "  --info          Full reference with all options"
+    echo -e "  --concepts      Learn about projects before running"
+    echo -e ""
+    echo -e "${CYAN}Examples:${NC}"
+    echo -e "  project init                          # Interactive setup"
+    echo -e "  project init my-thesis                # Create 'my-thesis' project"
+    echo -e "  project init my-thesis --type=cv     # Computer vision project"
+    echo -e "  project init --guided                 # With explanations"
+    echo -e ""
+}
+
+show_info() {
+    echo -e ""
+    echo -e "${BOLD}DS01 Project Init - Full Reference${NC}"
+    echo -e "${DIM}L4 Wizard: Complete project initialization${NC}"
+    echo -e ""
+    echo -e "${CYAN}Usage:${NC}"
+    echo -e "  project init [project-name] [options]"
+    echo -e ""
+    echo -e "${CYAN}Arguments:${NC}"
+    echo -e "  project-name    Name for your project (lowercase, hyphens allowed)"
+    echo -e "                  Auto-converted: 'My Thesis' -> 'my-thesis'"
+    echo -e ""
+    echo -e "${CYAN}Options:${NC}"
+    echo -e "  --type=TYPE     Project type (determines packages in requirements.txt):"
+    echo -e "                    ml     - General ML (xgboost, lightgbm, optuna)"
+    echo -e "                    cv     - Computer Vision (timm, albumentations, opencv)"
+    echo -e "                    nlp    - NLP (transformers, datasets, tokenizers)"
+    echo -e "                    rl     - Reinforcement Learning (gymnasium, stable-baselines3)"
+    echo -e "                    audio  - Audio/Speech (librosa, soundfile, torchaudio)"
+    echo -e "                    ts     - Time Series (statsmodels, prophet, darts)"
+    echo -e "                    llm    - LLM/GenAI (vllm, bitsandbytes, langchain)"
+    echo -e "                    custom - No preset packages"
+    echo -e ""
+    echo -e "  --desc=TEXT     Project description (optional)"
+    echo -e "  --guided        Step-by-step with explanations"
+    echo -e "  --no-git        Skip Git initialization"
+    echo -e "  --blank         Create blank directory (no structure)"
+    echo -e ""
+    echo -e "${CYAN}Created Files:${NC}"
+    echo -e "  ~/workspace/<project>/"
+    echo -e "    pyproject.toml      Project metadata (DS01 integration)"
+    echo -e "    requirements.txt    Python packages (read by image-create)"
+    echo -e "    Dockerfile          Container definition"
+    echo -e "    README.md           Project documentation"
+    echo -e "    data/, notebooks/   Directory structure (if not --blank)"
+    echo -e ""
+    echo -e "${CYAN}Workflow:${NC}"
+    echo -e "  project init my-thesis --type=cv"
+    echo -e "    -> project launch my-thesis        # Build image & deploy"
+    echo -e "    -> container retire my-thesis      # Cleanup when done"
+    echo -e ""
+}
+
+show_concepts() {
+    echo -e ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Understanding DS01 Projects${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e ""
+    echo -e "${BOLD}What is a Project?${NC}"
+    echo -e ""
+    echo -e "A project is a self-contained workspace for your ML/DS work:"
+    echo -e "  ~/workspace/my-thesis/"
+    echo -e "    data/           Your datasets"
+    echo -e "    notebooks/      Jupyter notebooks"
+    echo -e "    src/            Python source code"
+    echo -e "    outputs/        Results, figures, trained models"
+    echo -e "    requirements.txt   Package dependencies"
+    echo -e "    Dockerfile      Container definition"
+    echo -e ""
+    echo -e "${BOLD}The Project-Centric Workflow${NC}"
+    echo -e ""
+    echo -e "DS01 organizes everything around your project:"
+    echo -e ""
+    echo -e "  ${GREEN}project init${NC}         Create project structure"
+    echo -e "       |"
+    echo -e "       v"
+    echo -e "  ${GREEN}project launch${NC}       Build image (if needed) & start container"
+    echo -e "       |"
+    echo -e "       v"
+    echo -e "  [Work in container] - Edit code, train models"
+    echo -e "       |"
+    echo -e "       v"
+    echo -e "  ${GREEN}container retire${NC}    Stop & remove container (workspace is safe)"
+    echo -e ""
+    echo -e "${BOLD}What Gets Created?${NC}"
+    echo -e ""
+    echo -e "  ${CYAN}pyproject.toml${NC}   - Project metadata (name, type, author)"
+    echo -e "                     Read by DS01 tools for automation"
+    echo -e ""
+    echo -e "  ${CYAN}requirements.txt${NC} - Python packages for your project"
+    echo -e "                     Automatically includes packages for your use-case"
+    echo -e "                     Read by image-create when building Docker image"
+    echo -e ""
+    echo -e "  ${CYAN}Dockerfile${NC}       - Instructions to build your container"
+    echo -e "                     Based on AIME ML Container (PyTorch, CUDA)"
+    echo -e ""
+    echo -e "${BOLD}Project Types${NC}"
+    echo -e ""
+    echo -e "  ${BOLD}ml${NC}     General ML       - xgboost, lightgbm, optuna, hyperopt"
+    echo -e "  ${BOLD}cv${NC}     Computer Vision  - timm, albumentations, opencv, kornia"
+    echo -e "  ${BOLD}nlp${NC}    NLP              - transformers, datasets, tokenizers"
+    echo -e "  ${BOLD}rl${NC}     Reinforcement    - gymnasium, stable-baselines3"
+    echo -e "  ${BOLD}audio${NC}  Audio/Speech     - librosa, soundfile, torchaudio"
+    echo -e "  ${BOLD}ts${NC}     Time Series      - statsmodels, prophet, darts"
+    echo -e "  ${BOLD}llm${NC}    LLM/GenAI        - vllm, bitsandbytes, langchain"
+    echo -e ""
+    echo -e "${DIM}Ready to create a project? Run: project init [name]${NC}"
+    echo -e ""
+}
+
+# =============================================================================
+# PARSE ARGUMENTS
+# =============================================================================
+
 PROJECT_NAME_ARG=""
+PROJECT_TYPE_ARG=""
+PROJECT_DESC_ARG=""
 GUIDED=false
 INTERACTIVE=true
+SKIP_GIT=false
+BLANK_STRUCTURE=false
 
 for arg in "$@"; do
     case $arg in
         --guided)
             GUIDED=true
-            shift
+            ;;
+        --type=*)
+            PROJECT_TYPE_ARG="${arg#*=}"
+            ;;
+        --desc=*)
+            PROJECT_DESC_ARG="${arg#*=}"
+            ;;
+        --no-git)
+            SKIP_GIT=true
+            ;;
+        --blank)
+            BLANK_STRUCTURE=true
             ;;
         -h|--help)
-            echo -e ""
-            echo -e "${BOLD}DS01 Project Init${NC}"
-            echo -e "${DIM}Part of workflow: user-setup → project-init → image-create → container-deploy${NC}"
-            echo -e ""
-            echo -e "${CYAN}Usage:${NC}"
-            echo -e "  project-init [project-name] [--guided]"
-            echo -e ""
-            echo -e "${CYAN}Options:${NC}"
-            echo -e "  --guided    Include detailed explanations for beginners"
-            echo -e "  -h, --help  Show this help message"
-            echo -e ""
-            echo -e "${CYAN}Examples:${NC}"
-            echo -e "  project-init                    # Quick interactive setup"
-            echo -e "  project-init --guided           # Beginner-friendly with explanations"
-            echo -e "  project-init my-thesis          # Create 'my-thesis' project"
-            echo -e ""
-            echo -e "${DIM}Run 'help' or 'commands' anytime to see available commands.${NC}"
-            echo -e ""
+            show_help
             exit 0
+            ;;
+        --info)
+            show_info
+            exit 0
+            ;;
+        --concepts)
+            show_concepts
+            exit 0
+            ;;
+        -*)
+            echo -e "${RED}Unknown option: $arg${NC}"
+            show_help
+            exit 1
             ;;
         *)
             if [ -z "$PROJECT_NAME_ARG" ]; then
@@ -72,18 +228,17 @@ for arg in "$@"; do
     esac
 done
 
-# Check if project name was provided
+# Check if project name was provided (non-interactive mode)
 if [ -n "$PROJECT_NAME_ARG" ]; then
     INTERACTIVE=false
 fi
 
 # Use skill level if set (from user-setup's skill assessment)
-# DS01_SKILL_HPC: 0=beginner, 2=expert
 if [[ "${DS01_SKILL_HPC:-}" == "0" ]]; then
     GUIDED=true
 fi
 
-# Helper functions for skill-aware output (if not already defined)
+# Helper functions for skill-aware output
 if ! type is_beginner &>/dev/null; then
     is_beginner() {
         local area="${1:-HPC}"
@@ -95,7 +250,10 @@ if ! type is_beginner &>/dev/null; then
     }
 fi
 
-# Header
+# =============================================================================
+# HEADER
+# =============================================================================
+
 echo -e ""
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 if [ "$GUIDED" = true ]; then
@@ -103,7 +261,7 @@ if [ "$GUIDED" = true ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e ""
     echo -e "${GREEN}${BOLD}Welcome to DS01!${NC}"
-    echo -e "  This wizard will walk you through creating a complete ML project."
+    echo -e "  This wizard will create a complete ML project with all required files."
     echo -e "  ${DIM}For experienced users: run without --guided flag${NC}"
 else
     echo -e "  ${BOLD}DS01 Project Init${NC}"
@@ -112,39 +270,39 @@ fi
 
 if [ "$INTERACTIVE" = true ] && [ "$GUIDED" = false ]; then
     echo -e ""
-    echo -e "${BOLD}Project Setup${NC}"
-    echo -e "${DIM}Tip: Add --guided flag for detailed explanations${NC}"
+    echo -e "${DIM}Tip: Add --guided for detailed explanations, --concepts to learn first${NC}"
 fi
 
-# Step 1: Project Name and Type
+# =============================================================================
+# STEP 1: PROJECT NAME
+# =============================================================================
+
 echo -e ""
 echo -e "${BOLD}Step 1: Project Information${NC}"
 
 if [ "$GUIDED" = true ]; then
     echo -e ""
     echo -e "A project is your workspace directory containing:"
-    echo -e "  • Your code ${DIM}(scripts, notebooks)${NC}"
-    echo -e "  • Your data ${DIM}(datasets, trained models)${NC}"
-    echo -e "  • Configuration files"
-    echo -e "  • Research outputs ${DIM}(visualisations, outputs)${NC}"
+    echo -e "  - Your code ${DIM}(scripts, notebooks)${NC}"
+    echo -e "  - Your data ${DIM}(datasets, trained models)${NC}"
+    echo -e "  - Configuration files ${DIM}(pyproject.toml, requirements.txt)${NC}"
+    echo -e "  - Docker setup ${DIM}(Dockerfile)${NC}"
     echo -e ""
-    echo -e "${YELLOW}💡 Everything persists across container restarts${NC}"
+    echo -e "${YELLOW}Everything persists across container restarts${NC}"
 fi
 echo -e ""
 
 if [ -n "$PROJECT_NAME_ARG" ]; then
     PROJECT_NAME="$PROJECT_NAME_ARG"
-    PROJECT_NAME=$(echo -e "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+    PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
     echo -e "Project name: ${CYAN}$PROJECT_NAME${NC}"
 else
-    # Loop until valid project name is provided
     while true; do
-        read -p "Project name (e.g., thesis, cv-experiments, nlp-project): " PROJECT_NAME </dev/tty
-        PROJECT_NAME=$(echo -e "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
+        read -p "Project name (e.g., thesis, cv-experiments): " PROJECT_NAME </dev/tty
+        PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
 
         if [ -z "$PROJECT_NAME" ]; then
-            echo -e "${RED}✗ Project name cannot be empty${NC}"
-            echo -e ""
+            echo -e "${RED}Project name cannot be empty${NC}"
             continue
         fi
         break
@@ -155,8 +313,9 @@ PROJECT_DIR="$HOME/workspace/$PROJECT_NAME"
 
 # Check if exists
 if [ -d "$PROJECT_DIR" ]; then
-    echo -e "${YELLOW}⚠  Project directory already exists: $PROJECT_DIR${NC}"
-    read -p "Use existing directory? [Y/n]: " USE_EXISTING
+    echo -e "${YELLOW}Project directory already exists: $PROJECT_DIR${NC}"
+    read -p "Use existing directory? [Y/n]: " USE_EXISTING </dev/tty
+    USE_EXISTING=${USE_EXISTING:-Y}
     if [[ ! "$USE_EXISTING" =~ ^[Yy] ]]; then
         exit 1
     fi
@@ -165,23 +324,52 @@ else
     EXISTING_PROJECT=false
 fi
 
-# Project type selection
-if [ "$INTERACTIVE" = true ]; then
+# =============================================================================
+# STEP 2: PROJECT TYPE (Use-case selection)
+# =============================================================================
+
+echo -e ""
+echo -e "${BOLD}Step 2: Project Type${NC}"
+
+if [ "$GUIDED" = true ]; then
     echo -e ""
+    echo -e "The project type determines which packages are included in requirements.txt"
+    echo -e "You can always modify requirements.txt later."
+fi
+echo -e ""
+
+if [ -n "$PROJECT_TYPE_ARG" ]; then
+    PROJECT_TYPE="$PROJECT_TYPE_ARG"
+    # Validate
+    case $PROJECT_TYPE in
+        ml|cv|nlp|rl|audio|ts|llm|custom) ;;
+        *)
+            echo -e "${YELLOW}Unknown type '$PROJECT_TYPE', using 'ml'${NC}"
+            PROJECT_TYPE="ml"
+            ;;
+    esac
+    echo -e "Project type: ${CYAN}$PROJECT_TYPE${NC}"
+elif [ "$INTERACTIVE" = true ]; then
     echo -e "Select project type:"
-    echo -e "  ${BOLD}1)${NC} General ML ${DIM}(just the basics) ${GREEN}(Default)${NC}"
+    echo -e "  ${BOLD}1)${NC} General ML ${DIM}(xgboost, lightgbm, optuna)${NC} ${GREEN}(Default)${NC}"
     echo -e "  ${BOLD}2)${NC} Computer Vision ${DIM}(timm, albumentations, opencv)${NC}"
     echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, datasets, tokenizers)${NC}"
     echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
-    echo -e "  ${BOLD}5)${NC} Custom ${DIM}(specify packages manually)${NC}"
+    echo -e "  ${BOLD}5)${NC} Audio/Speech ${DIM}(librosa, soundfile, torchaudio)${NC}"
+    echo -e "  ${BOLD}6)${NC} Time Series ${DIM}(statsmodels, prophet, darts)${NC}"
+    echo -e "  ${BOLD}7)${NC} LLM/GenAI ${DIM}(vllm, bitsandbytes, langchain)${NC}"
+    echo -e "  ${BOLD}8)${NC} Custom ${DIM}(specify packages manually later)${NC}"
     echo -e ""
-    read -p "Choice [1-5, default: 1]: " TYPE_CHOICE
+    read -p "Choice [1-8, default: 1]: " TYPE_CHOICE </dev/tty
 
     case $TYPE_CHOICE in
         2) PROJECT_TYPE="cv" ;;
         3) PROJECT_TYPE="nlp" ;;
         4) PROJECT_TYPE="rl" ;;
-        5) PROJECT_TYPE="custom" ;;
+        5) PROJECT_TYPE="audio" ;;
+        6) PROJECT_TYPE="ts" ;;
+        7) PROJECT_TYPE="llm" ;;
+        8) PROJECT_TYPE="custom" ;;
         *) PROJECT_TYPE="ml" ;;
     esac
 else
@@ -189,46 +377,48 @@ else
 fi
 
 # Project description
-if [ "$INTERACTIVE" = true ]; then
+if [ -n "$PROJECT_DESC_ARG" ]; then
+    PROJECT_DESC="$PROJECT_DESC_ARG"
+elif [ "$INTERACTIVE" = true ]; then
     echo -e ""
-    read -p "Project description (optional, press Enter to skip): " PROJECT_DESC
+    read -p "Project description (optional, Enter to skip): " PROJECT_DESC </dev/tty
 else
     PROJECT_DESC=""
 fi
 
-# Step 2: Create Project Directory Structure
+# =============================================================================
+# STEP 3: CREATE DIRECTORY STRUCTURE
+# =============================================================================
+
 if [ "$EXISTING_PROJECT" = false ]; then
     echo -e ""
-    echo -e "${BOLD}Step 2: Creating Project Structure${NC}"
+    echo -e "${BOLD}Step 3: Creating Project Structure${NC}"
 
-    # Show guided introduction
     if [ "$GUIDED" = true ]; then
         echo -e ""
-        echo -e "Why use a standardised DS/ML template structure?"
-        echo -e "  • Collaborate with others easily"
-        echo -e "  • Follow ML/DS best practices"
-        echo -e "  • Keep raw data separate from processed data"
-        echo -e "  • Track experiments and results"
-        echo -e ""
-        read -p "Press Enter to create the directory structure..." </dev/tty
+        echo -e "A standard data science structure helps you:"
+        echo -e "  - Collaborate with others easily"
+        echo -e "  - Keep raw data separate from processed data"
+        echo -e "  - Track experiments and results"
     fi
     echo -e ""
 
-    if [ "$INTERACTIVE" = true ]; then
-        # Directory structure choice
-        echo -e "${BOLD}Choose directory structure:${NC}"
-        echo -e "  ${BOLD}1)${NC} Data Science structure ${GREEN}(recommended)${NC}"
-        echo -e "     ${DIM}Organized folders: data/, models/, notebooks/, scripts/, outputs/${NC}"
-        echo -e "  ${BOLD}2)${NC} Blank directory"
-        echo -e "     ${DIM}Empty project folder - set up your own structure${NC}"
-        echo -e ""
-        read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE
-    else
-        STRUCTURE_CHOICE="1"
-    fi
-
-    if [ "$STRUCTURE_CHOICE" = "2" ]; then
+    if [ "$BLANK_STRUCTURE" = true ]; then
         STRUCTURE_TYPE="blank"
+    elif [ "$INTERACTIVE" = true ]; then
+        echo -e "Choose directory structure:"
+        echo -e "  ${BOLD}1)${NC} Data Science structure ${GREEN}(recommended)${NC}"
+        echo -e "     ${DIM}data/, notebooks/, src/, outputs/, models/${NC}"
+        echo -e "  ${BOLD}2)${NC} Blank directory"
+        echo -e "     ${DIM}Empty folder - set up your own structure${NC}"
+        echo -e ""
+        read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE </dev/tty
+
+        if [ "$STRUCTURE_CHOICE" = "2" ]; then
+            STRUCTURE_TYPE="blank"
+        else
+            STRUCTURE_TYPE="data-science"
+        fi
     else
         STRUCTURE_TYPE="data-science"
     fi
@@ -242,42 +432,108 @@ if [ "$EXISTING_PROJECT" = false ]; then
     dir-create "$PROJECT_NAME" --type="$STRUCTURE_TYPE" $GUIDED_FLAG
 else
     echo -e ""
-    echo -e "${BOLD}Step 2: Using Existing Project${NC}"
-    echo -e "${GREEN}✓ Using existing directory${NC}"
+    echo -e "${BOLD}Step 3: Using Existing Project${NC}"
+    echo -e "${GREEN}Using existing directory${NC}"
     STRUCTURE_TYPE="existing"
 fi
 
-# Step 3: Git Setup
+# =============================================================================
+# STEP 4: CREATE PROJECT FILES (pyproject.toml, requirements.txt, Dockerfile)
+# =============================================================================
+
 echo -e ""
-echo -e "${BOLD}Step 3: Git Version Control${NC}"
+echo -e "${BOLD}Step 4: Creating Project Files${NC}"
 
-SKIP_GIT=false
+if [ "$GUIDED" = true ]; then
+    echo -e ""
+    echo -e "Creating configuration files:"
+    echo -e "  ${CYAN}pyproject.toml${NC}   - Project metadata for DS01"
+    echo -e "  ${CYAN}requirements.txt${NC} - Python packages"
+    echo -e "  ${CYAN}Dockerfile${NC}       - Container definition"
+fi
+echo -e ""
 
-if [ "$INTERACTIVE" = true ]; then
-    read -p "Initialize Git repository? [Y/n]: " INIT_GIT
-    INIT_GIT=${INIT_GIT:-Y}
-else
-    INIT_GIT="Y"
+# 4a. Create pyproject.toml
+echo -e "  Creating pyproject.toml..."
+create_project_pyproject "$PROJECT_DIR" "$PROJECT_NAME" "$PROJECT_TYPE" "$PROJECT_DESC"
+echo -e "  ${GREEN}Created${NC} pyproject.toml"
+
+# 4b. Create requirements.txt with use-case packages
+if [ ! -f "$PROJECT_DIR/requirements.txt" ] || [ "$EXISTING_PROJECT" = false ]; then
+    echo -e "  Creating requirements.txt..."
+    create_project_requirements "$PROJECT_DIR" "$PROJECT_TYPE"
+    echo -e "  ${GREEN}Created${NC} requirements.txt"
 fi
 
-if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
-    # Call L2 atomic module: git-init (handles remote setup in guided mode)
+# 4c. Create basic Dockerfile
+if [ ! -f "$PROJECT_DIR/Dockerfile" ]; then
+    echo -e "  Creating Dockerfile..."
+    cat > "$PROJECT_DIR/Dockerfile" << DOCKERFILE
+# DS01 Project Dockerfile
+# This file defines the container environment for your project.
+# Customize as needed - image-create will build from this.
+
+# Base image: AIME Machine Learning Container (PyTorch + CUDA)
+# Change this if you need a different framework (tensorflow, jax)
+ARG BASE_IMAGE=$AIME_BASE_IMAGE
+FROM \${BASE_IMAGE}
+
+# Build arguments (set by DS01)
+ARG DS01_USER_ID=1000
+ARG DS01_GROUP_ID=1000
+ARG DS01_USERNAME=user
+
+# Install Python packages from requirements.txt
+COPY requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]
+DOCKERFILE
+    echo -e "  ${GREEN}Created${NC} Dockerfile"
+fi
+
+# =============================================================================
+# STEP 5: GIT SETUP
+# =============================================================================
+
+echo -e ""
+echo -e "${BOLD}Step 5: Git Version Control${NC}"
+
+if [ "$SKIP_GIT" = true ]; then
+    echo -e "  ${DIM}Skipping Git setup (--no-git)${NC}"
+elif [ "$INTERACTIVE" = true ]; then
+    read -p "Initialize Git repository? [Y/n]: " INIT_GIT </dev/tty
+    INIT_GIT=${INIT_GIT:-Y}
+
+    if [[ "$INIT_GIT" =~ ^[Yy] ]]; then
+        GUIDED_FLAG=""
+        if [ "$GUIDED" = true ]; then
+            GUIDED_FLAG="--guided"
+        fi
+        git-init "$PROJECT_NAME" $GUIDED_FLAG
+    else
+        SKIP_GIT=true
+    fi
+else
     GUIDED_FLAG=""
     if [ "$GUIDED" = true ]; then
         GUIDED_FLAG="--guided"
     fi
-
     git-init "$PROJECT_NAME" $GUIDED_FLAG
-else
-    SKIP_GIT=true
 fi
 
-# Step 4: Create README and requirements.txt
+# =============================================================================
+# STEP 6: README (optional)
+# =============================================================================
+
 if [ "$EXISTING_PROJECT" = false ]; then
     echo -e ""
-    echo -e "${BOLD}Step 4: Creating Project Files${NC}"
+    echo -e "${BOLD}Step 6: Creating README${NC}"
 
-    # Call L2 atomic module: readme-create
     GUIDED_FLAG=""
     COMMIT_FLAG=""
     if [ "$GUIDED" = true ]; then
@@ -293,28 +549,31 @@ if [ "$EXISTING_PROJECT" = false ]; then
         --desc="$PROJECT_DESC" \
         $COMMIT_FLAG \
         $GUIDED_FLAG
-else
-    echo -e ""
-    echo -e "${BOLD}Step 4: File Creation${NC}"
-    echo -e "${GREEN}Using existing project files${NC}"
 fi
 
-
-if [ -f "$PROJECT_DIR/README.md" ]; then
-    echo -e "${YELLOW}📖 Read your project README:${NC} ${CYAN}cat $PROJECT_DIR/README.md${NC}"
-fi
-
-# ============================================================================
+# =============================================================================
 # FINAL SUMMARY
-# ============================================================================
+# =============================================================================
 
 echo -e ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Project Setup Complete!${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}${BOLD}Project Setup Complete!${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e ""
-
-echo -e "${BOLD}Next Steps:${NC}"
-echo -e "  1. Create a Docker image:        ${GREEN}image-create --guided${NC}"
-echo -e "  2. Deploy a container:           ${GREEN}container-deploy --guided${NC}"
+echo -e "${BOLD}Project:${NC} ${CYAN}$PROJECT_NAME${NC}"
+echo -e "${BOLD}Type:${NC}    $PROJECT_TYPE"
+echo -e "${BOLD}Path:${NC}    $PROJECT_DIR"
+echo -e ""
+echo -e "${BOLD}Created Files:${NC}"
+echo -e "  pyproject.toml     ${DIM}(project metadata)${NC}"
+echo -e "  requirements.txt   ${DIM}(Python packages)${NC}"
+echo -e "  Dockerfile         ${DIM}(container definition)${NC}"
+echo -e "  README.md          ${DIM}(documentation)${NC}"
+echo -e ""
+echo -e "${BOLD}Next Step:${NC}"
+echo -e "  ${GREEN}project launch $PROJECT_NAME${NC}   ${DIM}# Build image & deploy container${NC}"
+echo -e ""
+echo -e "${DIM}Or step-by-step:${NC}"
+echo -e "  ${DIM}1. Edit requirements.txt if needed${NC}"
+echo -e "  ${DIM}2. project launch $PROJECT_NAME    # Build Docker image > deploy container${NC}"
 echo -e ""

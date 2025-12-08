@@ -113,6 +113,7 @@ echo ""
 echo -e "${BOLD}Onboarding:${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/user-setup" "user-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/project-init" "project-init" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/project-launch" "project-launch" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/shell-setup" "shell-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/ssh-setup" "ssh-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/user/vscode-setup" "vscode-setup" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))

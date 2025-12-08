@@ -54,21 +54,25 @@ try:
     from username_utils import sanitize_username_for_slice as sanitize_username_for_container
 except ImportError:
     # Fallback if library not available
+    # IMPORTANT: Must match username_utils.py - use UNDERSCORES not hyphens
+    # Systemd interprets hyphens as hierarchy separators in slice names
     def sanitize_username_for_container(username: str) -> str:
         if not username:
             return username
         # Strip domain part (everything after @)
         sanitized = username.split('@')[0] if '@' in username else username
-        sanitized = sanitized.replace('.', '-')
-        sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', sanitized)
-        sanitized = re.sub(r'-+', '-', sanitized)
-        sanitized = sanitized.strip('-')
+        # Replace dots with underscores (NOT hyphens - systemd compatibility)
+        sanitized = sanitized.replace('.', '_')
+        # Replace invalid characters with underscores (match username_utils.py)
+        sanitized = re.sub(r'[^a-zA-Z0-9_:]', '_', sanitized)
+        sanitized = re.sub(r'_+', '_', sanitized)
+        sanitized = sanitized.strip('_')
         # Truncate to 32 characters (Linux username/groupname limit)
         # Use hash suffix to avoid collisions when truncating
         if len(sanitized) > 32:
             import hashlib
             hash_suffix = hashlib.md5(username.encode()).hexdigest()[:4]
-            sanitized = sanitized[:27].rstrip('-') + '-' + hash_suffix
+            sanitized = sanitized[:27].rstrip('_') + '_' + hash_suffix
         return sanitized
 
 # Set Default values  AIME mlc
@@ -1625,6 +1629,8 @@ def build_docker_create_command(
         # ========== DS01 PATCH: DS01 Management Labels ==========
         '--label', f'{container_label}.DS01_MANAGED=true',
         '--label', f'{container_label}.CUSTOM_IMAGE={"" if selected_docker_image.startswith("aimehub/") else selected_docker_image}',
+        # VS Code Dev Containers integration - sets workspace folder when attaching
+        '--label', f'devcontainer.workspaceFolder={workspace}',
         # ========== END DS01 PATCH ==========
         '--user', f'{user_id}:{group_id}',
         '--tty',

@@ -18,6 +18,11 @@ if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/ds01-context.sh
 fi
 
+# Source AIME images library (detect_cuda_arch, get_base_image)
+if [[ -f "/opt/ds01-infra/scripts/lib/aime-images.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/aime-images.sh
+fi
+
 USERNAME=$(whoami)
 USER_ID=$(id -u)
 GROUP_ID=$(id -g)
@@ -47,6 +52,7 @@ usage() {
     echo "  -p, --packages PACKAGES    Additional Python packages (space-separated)"
     echo "  -s, --system PACKAGES      System packages via apt (space-separated)"
     echo "  -r, --requirements PATH    Import packages from requirements.txt file"
+    echo "  --dockerfile PATH          Use existing Dockerfile (skip creation)"
     echo "  --project-dockerfile       Store Dockerfile in project dir (~/workspace/<project>/)"
     echo "  --no-build                 Create Dockerfile only, don't build image"
     echo "  --guided                   Show detailed explanations for beginners"
@@ -208,85 +214,7 @@ show_base_image_packages() {
     fi
 }
 
-detect_cuda_arch() {
-    # Auto-detect appropriate CUDA architecture based on host driver
-    # Driver 535+ supports CUDA 12.x, older drivers use CUDA 11.8
-    local driver_major
-    driver_major=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)
-
-    if [ -n "$driver_major" ] && [ "$driver_major" -ge 535 ] 2>/dev/null; then
-        echo "CUDA_ADA"
-    else
-        echo "CUDA_AMPERE"
-    fi
-}
-
-get_base_image() {
-    local framework="$1"
-    local custom_image="$2"
-    local version="$3"  # Optional version parameter
-
-    # Handle custom base image (bypass catalog)
-    if [ "$framework" = "custom" ]; then
-        echo "$custom_image"
-        return 0
-    fi
-
-    # Look up in AIME v2 catalog (150+ pre-built framework images)
-    local AIME_REPO="/opt/ds01-infra/aime-ml-containers/ml_images.repo"
-
-    if [ -f "$AIME_REPO" ]; then
-        # Capitalize framework name (AIME uses Pytorch, Tensorflow)
-        local framework_capital=$(echo "$framework" | sed 's/tf/tensorflow/; s/\b\(.\)/\u\1/g')
-
-        # Determine GPU architecture based on host driver (auto-detect if not specified)
-        # Driver 535+ supports CUDA 12.x (CUDA_ADA), older drivers use CUDA 11.8 (CUDA_AMPERE)
-        local arch="${MLC_ARCH:-$(detect_cuda_arch)}"
-
-        # Look up specific version or latest
-        local image=""
-        if [ -n "$version" ]; then
-            # Find exact version match (architecture in brackets: [CUDA_ADA])
-            image=$(awk -F', ' -v fw="$framework_capital" -v ver="$version" -v arch="[$arch]" \
-                '$1 == fw && $2 == ver && $3 == arch {print $4; exit}' "$AIME_REPO")
-        fi
-
-        # If no version specified or not found, get latest for this architecture
-        if [ -z "$image" ]; then
-            image=$(awk -F', ' -v fw="$framework_capital" -v arch="[$arch]" \
-                '$1 == fw && $3 == arch {print $4; exit}' "$AIME_REPO")
-        fi
-
-        if [ -n "$image" ]; then
-            echo "$image"
-            [ -n "$VERBOSE" ] && echo -e "${GREEN}✓${NC} Using AIME v2 catalog image: ${YELLOW}$image${NC}" >&2
-            return 0
-        fi
-    fi
-
-    # Fallback: AIME catalog not found or framework not in catalog
-    [ -n "$VERBOSE" ] && echo -e "${YELLOW}⚠${NC} AIME catalog not available, using Docker Hub fallback" >&2
-
-    case $framework in
-        tensorflow|tf)
-            echo "tensorflow/tensorflow:2.14.0-gpu"
-            ;;
-        jax)
-            echo "nvcr.io/nvidia/jax:23.10-py3"
-            ;;
-        pytorch-cpu)
-            echo "pytorch/pytorch:2.5.1-cpu"
-            ;;
-        *)
-            # Match fallback to auto-detected architecture
-            if [ "$(detect_cuda_arch)" = "CUDA_ADA" ]; then
-                echo "pytorch/pytorch:2.5.1-cuda12.1-cudnn9-runtime"
-            else
-                echo "pytorch/pytorch:2.5.1-cuda11.8-cudnn9-runtime"
-            fi
-            ;;
-    esac
-}
+# detect_cuda_arch() and get_base_image() now sourced from /opt/ds01-infra/scripts/lib/aime-images.sh
 
 get_jupyter_packages() {
     # Jupyter and interactive tools
@@ -1541,6 +1469,7 @@ CUSTOM_USECASE_PACKAGES=""
 SKIP_BASE_PACKAGES=false
 NO_BUILD=false
 GUIDED=false
+EXISTING_DOCKERFILE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -1573,6 +1502,15 @@ while [[ $# -gt 0 ]]; do
         --project-dockerfile)
             PROJECT_DOCKERFILE=true
             shift
+            ;;
+        --dockerfile|--dockerfile=*)
+            if [[ "$1" == --dockerfile=* ]]; then
+                EXISTING_DOCKERFILE="${1#*=}"
+                shift
+            else
+                EXISTING_DOCKERFILE="$2"
+                shift 2
+            fi
             ;;
         --no-build)
             NO_BUILD=true
@@ -1704,8 +1642,21 @@ if [ "$GUIDED" = true ]; then
     echo ""
 fi
 
-# Interactive mode if missing info
-if [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
+# Interactive mode if missing info (skip framework/usecase prompts if using existing Dockerfile)
+if [ -n "$EXISTING_DOCKERFILE" ]; then
+    # Using existing Dockerfile - only need image name
+    if [ -z "$IMAGE_NAME" ]; then
+        echo -e "${RED}Error:${NC} Image name required when using --dockerfile"
+        echo "Usage: image-create <image-name> --dockerfile <path>"
+        exit 1
+    fi
+    # Sanitize image name
+    IMAGE_NAME=$(echo "$IMAGE_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]//g' | sed 's/^[._-]*//; s/[._-]*$//')
+    FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
+    # Set defaults for metadata (not used for build but needed for info file)
+    [ -z "$FRAMEWORK" ] && FRAMEWORK="custom"
+    [ -z "$USECASE" ] && USECASE="custom"
+elif [ -z "$IMAGE_NAME" ] || [ -z "$FRAMEWORK" ] || [ -z "$USECASE" ]; then
     interactive_mode
 else
     # Non-interactive: sanitize image name - lowercase, spaces to hyphens, remove invalid chars, strip leading/trailing separators
@@ -1728,16 +1679,29 @@ fi
 # Check user's resource limits and provide helpful info
 check_user_limits
 
-# Create Dockerfile
-echo -e "${CYAN}Creating Dockerfile...${NC}\n"
+# Create or use existing Dockerfile
+if [ -n "$EXISTING_DOCKERFILE" ]; then
+    # Expand ~ if present
+    EXISTING_DOCKERFILE="${EXISTING_DOCKERFILE/#\~/$HOME}"
 
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Phase 1/2: Complete${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
+    if [ ! -f "$EXISTING_DOCKERFILE" ]; then
+        echo -e "${RED}Error:${NC} Dockerfile not found: $EXISTING_DOCKERFILE"
+        exit 1
+    fi
 
-DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$JUPYTER_CHOICE" "$CUSTOM_JUPYTER_PACKAGES" "$DATA_SCIENCE_CHOICE" "$CUSTOM_DS_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES" "$REQUIREMENTS_FILE")
-echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
+    DOCKERFILE="$EXISTING_DOCKERFILE"
+    echo -e "${GREEN}✓${NC} Using existing Dockerfile: ${BLUE}$DOCKERFILE${NC}\n"
+else
+    echo -e "${CYAN}Creating Dockerfile...${NC}\n"
+
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✓ Phase 1/2: Complete${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+
+    DOCKERFILE=$(create_dockerfile "$FULL_IMAGE_NAME" "$FRAMEWORK" "$USECASE" "$ADDITIONAL_PACKAGES" "$SYSTEM_PACKAGES" "$CUSTOM_BASE_IMAGE" "$JUPYTER_CHOICE" "$CUSTOM_JUPYTER_PACKAGES" "$DATA_SCIENCE_CHOICE" "$CUSTOM_DS_PACKAGES" "$CUSTOM_USECASE_PACKAGES" "$SKIP_BASE_PACKAGES" "$REQUIREMENTS_FILE")
+    echo -e "${GREEN}✓${NC} Dockerfile created: ${BLUE}$DOCKERFILE${NC}\n"
+fi
 
 
 # Guided explanation of Dockerfile
