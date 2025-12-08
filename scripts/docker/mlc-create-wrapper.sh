@@ -359,7 +359,8 @@ if [ -f "$RESOURCE_PARSER" ]; then
     # Skip check if unlimited
     if [ "$MAX_CONTAINERS" != "unlimited" ] && [ "$MAX_CONTAINERS" != "null" ] && [ -n "$MAX_CONTAINERS" ]; then
         # Count user's current containers (including stopped ones)
-        CURRENT_CONTAINERS=$(docker ps -a --filter "label=aime.mlc.user_id=$USER_ID" --format "{{.ID}}" 2>/dev/null | wc -l)
+        # Use aime.mlc.USER label which contains the username
+        CURRENT_CONTAINERS=$(docker ps -a --filter "label=aime.mlc.USER=$CURRENT_USER" --format "{{.ID}}" 2>/dev/null | wc -l)
 
         if [ "$CURRENT_CONTAINERS" -ge "$MAX_CONTAINERS" ]; then
             # Use friendly error messages
