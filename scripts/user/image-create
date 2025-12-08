@@ -800,7 +800,7 @@ interactive_mode() {
         fi
 
         if [ "$GUIDED" = false ]; then
-            echo -e "${CYAN}━━━━ Choose Defaults ━━━━${NC}"
+            echo -e "${CYAN}━━━━ Add Additional Defaults (recommended) ━━━━${NC}"
             echo ""
         fi
 
