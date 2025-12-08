@@ -63,6 +63,194 @@ check_duplicate_packages() {
     return 0
 }
 
+# ============================================================================
+# Requirements.txt Import Functions
+# ============================================================================
+
+scan_requirements_files() {
+    # Scans ~/workspace/*/ and ~/ for requirements.txt files
+    # Outputs: "path|display_name" for each entry, one per line
+
+    local workspace_dir="$HOME/workspace"
+
+    # Scan ~/workspace/*/requirements.txt (direct children only)
+    if [ -d "$workspace_dir" ]; then
+        for project_dir in "$workspace_dir"/*/; do
+            if [ -d "$project_dir" ]; then
+                local req_file="${project_dir}requirements.txt"
+                if [ -f "$req_file" ] && [ -r "$req_file" ]; then
+                    local project_name=$(basename "$project_dir")
+                    echo "$req_file|$project_name"
+                fi
+            fi
+        done
+    fi
+
+    # Check ~/requirements.txt (global)
+    local global_req="$HOME/requirements.txt"
+    if [ -f "$global_req" ] && [ -r "$global_req" ]; then
+        echo "$global_req|Global (home directory)"
+    fi
+}
+
+validate_requirements_file() {
+    # Validates requirements.txt file
+    # Args: $1 = file path
+    # Returns: 0 on success, 1 on failure
+
+    local req_file="$1"
+
+    if [ ! -f "$req_file" ]; then
+        echo -e "${RED}Error: File not found: $req_file${NC}" >&2
+        return 1
+    fi
+
+    if [ ! -r "$req_file" ]; then
+        echo -e "${RED}Error: Cannot read file: $req_file${NC}" >&2
+        return 1
+    fi
+
+    # Check file is not empty (excluding comments and blank lines)
+    local line_count
+    line_count=$(grep -v '^#' "$req_file" | grep -v '^[[:space:]]*$' | wc -l)
+    if [ "$line_count" -eq 0 ]; then
+        echo -e "${YELLOW}Warning: requirements.txt appears to be empty${NC}" >&2
+    fi
+
+    return 0
+}
+
+read_requirements_packages() {
+    # Reads packages from requirements.txt file
+    # Args: $1 = file path
+    # Outputs: space-separated package list
+
+    local req_file="$1"
+    local packages=""
+
+    while IFS= read -r line; do
+        # Skip comments
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        # Skip empty lines
+        [[ -z "${line// }" ]] && continue
+        # Skip -r/-e/--requirement/--editable
+        [[ "$line" =~ ^[[:space:]]*- ]] && continue
+
+        # Trim whitespace and normalize version specifiers
+        local pkg
+        pkg=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
+              sed 's/[[:space:]]*\([><=!~]\+\)[[:space:]]*/\1/g')
+
+        if [ -n "$pkg" ]; then
+            packages="$packages $pkg"
+        fi
+    done < "$req_file"
+
+    echo "${packages# }"
+}
+
+select_requirements_file() {
+    # Interactive selection of requirements.txt file
+    # Sets SELECTED_REQ_FILE global variable
+    # Returns: 0 on success, 1 on cancel
+
+    echo ""
+    echo -e "${CYAN}━━━ Import from requirements.txt ━━━${NC}"
+    echo ""
+
+    local file_paths=()
+    local display_names=()
+
+    while IFS='|' read -r path name; do
+        [ -z "$path" ] && continue
+        file_paths+=("$path")
+        display_names+=("$name")
+    done < <(scan_requirements_files)
+
+    if [ ${#file_paths[@]} -eq 0 ]; then
+        echo -e "${YELLOW}No requirements.txt files found in:${NC}"
+        echo "  - ~/workspace/*/"
+        echo "  - ~/"
+        echo ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Enter path to requirements.txt (or press Enter to cancel): " MANUAL_PATH </dev/tty
+
+        if [ -z "$MANUAL_PATH" ]; then
+            return 1
+        fi
+
+        # Expand ~ if present
+        MANUAL_PATH="${MANUAL_PATH/#\~/$HOME}"
+
+        if validate_requirements_file "$MANUAL_PATH"; then
+            SELECTED_REQ_FILE="$MANUAL_PATH"
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    echo -e "${BOLD}Found requirements.txt files:${NC}"
+    echo ""
+
+    local i=1
+    for name in "${display_names[@]}"; do
+        local short_path="${file_paths[$((i-1))]/#$HOME/~}"
+        echo -e "  ${BOLD}$i)${NC} $name"
+        echo -e "     ${DIM}$short_path${NC}"
+        ((i++))
+    done
+    echo -e "  ${BOLD}$i)${NC} Enter path manually"
+    ((i++))
+    echo -e "  ${BOLD}$i)${NC} Cancel"
+    echo ""
+
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+    read -p "Choice [1-$i]: " CHOICE </dev/tty
+
+    # Cancel option
+    if [ "$CHOICE" = "$i" ]; then
+        return 1
+    fi
+
+    # Manual entry option
+    if [ "$CHOICE" = "$((i-1))" ]; then
+        echo ""
+        read -p "Enter path to requirements.txt: " MANUAL_PATH </dev/tty
+        MANUAL_PATH="${MANUAL_PATH/#\~/$HOME}"
+
+        if [ -z "$MANUAL_PATH" ]; then
+            return 1
+        fi
+
+        if validate_requirements_file "$MANUAL_PATH"; then
+            SELECTED_REQ_FILE="$MANUAL_PATH"
+            return 0
+        else
+            return 1
+        fi
+    fi
+
+    # Validate selection
+    if ! [[ "$CHOICE" =~ ^[0-9]+$ ]] || [ "$CHOICE" -lt 1 ] || [ "$CHOICE" -gt "${#file_paths[@]}" ]; then
+        echo -e "${RED}Invalid selection${NC}"
+        return 1
+    fi
+
+    local selected_path="${file_paths[$((CHOICE-1))]}"
+
+    if validate_requirements_file "$selected_path"; then
+        SELECTED_REQ_FILE="$selected_path"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# ============================================================================
+# End Requirements.txt Import Functions
+# ============================================================================
+
 # Find available text editor
 find_editor() {
     # Try these editors in order
@@ -163,12 +351,13 @@ usage() {
     echo "  image-update <image-name>                    # Interactive mode (default)"
     echo ""
     echo -e "${CYAN}Options:${NC}"
-    echo "  --add \"pkg1 pkg2\"    Add packages directly (quick mode)"
-    echo "  --add-system \"pkg1\"  Add system packages directly"
-    echo "  --edit               Edit Dockerfile manually (advanced)"
-    echo "  --guided             Show detailed explanations (educational)"
-    echo "  --no-cache           Build without using cache (clean rebuild)"
-    echo "  -h, --help           Show this help message"
+    echo "  --add \"pkg1 pkg2\"       Add packages directly (quick mode)"
+    echo "  -r, --requirements FILE  Import packages from requirements.txt"
+    echo "  --add-system \"pkg1\"     Add system packages directly"
+    echo "  --edit                  Edit Dockerfile manually (advanced)"
+    echo "  --guided                Show detailed explanations (educational)"
+    echo "  --no-cache              Build without using cache (clean rebuild)"
+    echo "  -h, --help              Show this help message"
     echo ""
     echo -e "${CYAN}Modes:${NC}"
     echo -e "  ${BOLD}Interactive${NC} (default)  - User-friendly GUI for package management"
@@ -182,6 +371,9 @@ usage() {
     echo ""
     echo -e "  ${DIM}# Quick add packages without interaction${NC}"
     echo "  image-update my-project --add \"wandb optuna pytorch-lightning\""
+    echo ""
+    echo -e "  ${DIM}# Import from requirements.txt${NC}"
+    echo "  image-update my-project -r ~/workspace/my-project/requirements.txt"
     echo ""
     echo -e "  ${DIM}# Add system packages${NC}"
     echo "  image-update my-project --add-system \"tmux htop\""
@@ -217,14 +409,15 @@ detailed_help() {
     echo "                    Full: ds01-\${USER_ID}/my-project"
     echo ""
     echo -e "${BOLD}Options:${NC}"
-    echo "  --add \"pkg1 pkg2\"     Add Python packages (space-separated)"
-    echo "  --add-system \"pkg1\"   Add system packages (apt packages)"
-    echo "  --edit                Open Dockerfile in editor"
-    echo "  --guided              Educational mode with explanations"
-    echo "  --no-cache            Full rebuild without Docker cache"
-    echo "  --concepts            Show pre-run educational content"
-    echo "  --info                Show this detailed reference"
-    echo "  -h, --help            Show quick reference"
+    echo "  --add \"pkg1 pkg2\"        Add Python packages (space-separated)"
+    echo "  -r, --requirements FILE   Import packages from requirements.txt"
+    echo "  --add-system \"pkg1\"      Add system packages (apt packages)"
+    echo "  --edit                   Open Dockerfile in editor"
+    echo "  --guided                 Educational mode with explanations"
+    echo "  --no-cache               Full rebuild without Docker cache"
+    echo "  --concepts               Show pre-run educational content"
+    echo "  --info                   Show this detailed reference"
+    echo "  -h, --help               Show quick reference"
     echo ""
     echo -e "${BOLD}Modes:${NC}"
     echo ""
@@ -797,14 +990,15 @@ interactive_mode() {
         echo -e "${BOLD}What would you like to do?${NC}"
         echo ""
         echo -e "  ${BOLD}1)${NC} Add Python packages (pip)"
-        echo -e "  ${BOLD}2)${NC} Add system packages (apt)"
-        echo -e "  ${BOLD}3)${NC} Remove packages"
-        echo -e "  ${BOLD}4)${NC} Edit Dockerfile directly ${DIM}(advanced)${NC}"
-        echo -e "  ${BOLD}5)${NC} Continue to rebuild ${BOLD}${YELLOW}(necessary to apply changes!)${NC}"
-        echo -e "  ${BOLD}6)${NC} Cancel"
+        echo -e "  ${BOLD}2)${NC} Import from requirements.txt"
+        echo -e "  ${BOLD}3)${NC} Add system packages (apt)"
+        echo -e "  ${BOLD}4)${NC} Remove packages"
+        echo -e "  ${BOLD}5)${NC} Edit Dockerfile directly ${DIM}(advanced)${NC}"
+        echo -e "  ${BOLD}6)${NC} Continue to rebuild ${BOLD}${YELLOW}(necessary to apply changes!)${NC}"
+        echo -e "  ${BOLD}7)${NC} Cancel"
         echo ""
         read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-        read -p "Choice [1-6]: " CHOICE </dev/tty
+        read -p "Choice [1-7]: " CHOICE </dev/tty
 
         case $CHOICE in
             1)
@@ -875,6 +1069,42 @@ interactive_mode() {
                 ;;
 
             2)
+                # Import from requirements.txt
+                if select_requirements_file; then
+                    local req_packages=$(read_requirements_packages "$SELECTED_REQ_FILE")
+                    local pkg_count=$(echo "$req_packages" | wc -w)
+                    local short_path="${SELECTED_REQ_FILE/#$HOME/~}"
+
+                    echo ""
+                    echo -e "${GREEN}✓${NC} Will install ${BOLD}$pkg_count${NC} packages from: ${CYAN}$short_path${NC}"
+                    echo ""
+                    echo -e "${DIM}Packages: $req_packages${NC}"
+                    echo ""
+                    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                    read -p "Add these packages? [Y/n]: " CONFIRM </dev/tty
+                    CONFIRM=${CONFIRM:-Y}
+
+                    if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+                        echo ""
+                        echo -e "${CYAN}Adding packages...${NC}"
+                        add_python_packages "$dockerfile" $req_packages
+                        echo ""
+                        echo -e "${GREEN}✓${NC} Packages from requirements.txt added to Dockerfile"
+                        echo ""
+                        echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image.${NC}"
+                        echo ""
+                        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                        read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
+                        REBUILD_NOW=${REBUILD_NOW:-Y}
+                        if [[ "$REBUILD_NOW" =~ ^[Yy]$ ]]; then
+                            echo ""
+                            return 0
+                        fi
+                    fi
+                fi
+                ;;
+
+            3)
                 echo ""
                 echo -e "${BOLD}Add System Packages${NC}"
                 echo ""
@@ -906,7 +1136,7 @@ interactive_mode() {
                 fi
                 ;;
 
-            3)
+            4)
                 echo ""
                 echo -e "${BOLD}Remove Packages${NC}"
                 echo ""
@@ -938,7 +1168,7 @@ interactive_mode() {
                 fi
                 ;;
 
-            4)
+            5)
                 echo ""
                 EDITOR_CMD=$(find_editor)
                 if [ "$EDITOR_CMD" = "cat" ]; then
@@ -962,12 +1192,12 @@ interactive_mode() {
                 fi
                 ;;
 
-            5)
+            6)
                 echo ""
                 return 0
                 ;;
 
-            6)
+            7)
                 echo ""
                 echo "Cancelled."
                 exit 0
@@ -1029,10 +1259,10 @@ guided_mode() {
     echo ""
     echo -e "${BOLD}Package Versions:${NC}"
     echo ""
-    echo "  • ${CYAN}Without version${NC}: 'pandas' → installs latest stable"
-    echo "  • ${CYAN}Exact version${NC}: 'pandas==1.5.3' → installs 1.5.3"
-    echo "  • ${CYAN}Minimum version${NC}: 'pandas>=2.0.0' → installs latest ≥2.0.0"
-    echo "  • ${CYAN}Compatible${NC}: 'pandas~=1.5.0' → installs latest 1.5.x"
+    echo -e "  • ${CYAN}Without version${NC}: 'pandas' → installs latest stable"
+    echo -e "  • ${CYAN}Exact version${NC}: 'pandas==1.5.3' → installs 1.5.3"
+    echo -e "  • ${CYAN}Minimum version${NC}: 'pandas>=2.0.0' → installs latest ≥2.0.0"
+    echo -e "  • ${CYAN}Compatible${NC}: 'pandas~=1.5.0' → installs latest 1.5.x"
     echo ""
     read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to continue..." </dev/tty
@@ -1048,12 +1278,17 @@ EDIT_FIRST=false
 NO_CACHE=false
 QUICK_ADD_PACKAGES=""
 QUICK_ADD_SYSTEM=""
+REQUIREMENTS_FILE=""
 GUIDED=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --add)
             QUICK_ADD_PACKAGES="$2"
+            shift 2
+            ;;
+        -r|--requirements)
+            REQUIREMENTS_FILE="$2"
             shift 2
             ;;
         --add-system)
@@ -1222,6 +1457,35 @@ elif [ -n "$QUICK_ADD_PACKAGES" ]; then
     echo -e "${BOLD}Adding Python packages:${NC}"
     echo ""
     add_python_packages "$DOCKERFILE" $QUICK_ADD_PACKAGES
+    if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
+        echo ""
+        echo -e "${GREEN}✓${NC} $PACKAGES_ADDED_COUNT package(s) added to Dockerfile"
+    fi
+    echo ""
+
+elif [ -n "$REQUIREMENTS_FILE" ]; then
+    # Requirements.txt mode: import packages from file
+    echo ""
+    echo -e "${CYAN}Requirements Import Mode${NC}"
+    echo ""
+
+    # Expand ~ if present
+    REQUIREMENTS_FILE="${REQUIREMENTS_FILE/#\~/$HOME}"
+
+    if ! validate_requirements_file "$REQUIREMENTS_FILE"; then
+        exit 1
+    fi
+
+    req_packages=$(read_requirements_packages "$REQUIREMENTS_FILE")
+    pkg_count=$(echo "$req_packages" | wc -w)
+    short_path="${REQUIREMENTS_FILE/#$HOME/~}"
+
+    echo -e "${GREEN}✓${NC} Will install ${BOLD}$pkg_count${NC} packages from: ${CYAN}$short_path${NC}"
+    echo ""
+    echo -e "${DIM}Packages: $req_packages${NC}"
+    echo ""
+
+    add_python_packages "$DOCKERFILE" $req_packages
     if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
         echo ""
         echo -e "${GREEN}✓${NC} $PACKAGES_ADDED_COUNT package(s) added to Dockerfile"
