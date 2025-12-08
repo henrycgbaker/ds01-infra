@@ -58,11 +58,14 @@ usage() {
     echo "  jax          JAX + CUDA"
     echo ""
     echo -e "${CYAN}Use Case Types:${NC}"
-    echo -e "  cv       Computer Vision ${DIM}(incl: timm, albumentations, opencv)${NC}"
-    echo -e "  nlp      Natural Language Processing ${DIM}(incl: transformers, datasets)${NC}"
-    echo -e "  rl       Reinforcement Learning ${DIM}(incl: gymnasium, stable-baselines3)${NC}"
-    echo -e "  ml       General ML ${DIM}(incl scikit-learn, xgboost, lightgbm)${NC}"
-    echo -e "  custom   Specify all packages manually"
+    echo -e "  ml       General ML ${DIM}(xgboost, lightgbm, shap, optuna)${NC}"
+    echo -e "  cv       Computer Vision ${DIM}(timm, ultralytics, kornia)${NC}"
+    echo -e "  nlp      NLP ${DIM}(transformers, peft, safetensors)${NC}"
+    echo -e "  rl       Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
+    echo -e "  audio    Audio/Speech ${DIM}(librosa, soundfile, audiomentations)${NC}"
+    echo -e "  ts       Time Series ${DIM}(statsmodels, prophet, darts)${NC}"
+    echo -e "  llm      LLM/GenAI ${DIM}(vllm, bitsandbytes, langchain)${NC}"
+    echo -e "  custom   Specify packages manually"
     echo ""
     echo -e "${CYAN}Examples:${NC}"
     echo "  image-create my-cv-project                    # Interactive mode"
@@ -89,7 +92,7 @@ extended_usage() {
     echo ""
     echo -e "${BOLD}Base Image Selection:${NC}"
     echo "  --framework <name>     PyTorch, TensorFlow, or JAX"
-    echo "  --usecase <name>       cv, nlp, rl, ml, or custom"
+    echo "  --usecase <name>       ml, cv, nlp, rl, audio, ts, llm, or custom"
     echo "  --skip-base-packages   Don't install use-case packages"
     echo ""
     echo -e "${BOLD}Package Installation:${NC}"
@@ -412,16 +415,38 @@ get_usecase_packages() {
     local usecase="$1"
     case $usecase in
         cv)
-            echo "timm albumentations opencv-python-headless torchvision"
+            # timm: pretrained models, albumentations: augmentation, kornia: differentiable CV
+            # ultralytics: YOLOv8, opencv: image processing (torchvision already in AIME base)
+            echo "timm albumentations opencv-python-headless kornia ultralytics"
             ;;
         nlp)
-            echo "transformers datasets tokenizers accelerate sentencepiece"
+            # transformers: models, datasets: data loading, tokenizers: fast tokenization
+            # accelerate: distributed training, sentencepiece: subword tokenization
+            # peft: LoRA fine-tuning, safetensors: fast weights, evaluate: metrics
+            echo "transformers datasets tokenizers accelerate sentencepiece peft safetensors evaluate"
             ;;
         rl)
-            echo "gymnasium stable-baselines3 tensorboard"
+            # gymnasium: environments, stable-baselines3: algorithms
+            echo "gymnasium stable-baselines3"
             ;;
         ml)
-            echo "xgboost lightgbm catboost optuna"
+            # Gradient boosting: xgboost, lightgbm, catboost
+            # optuna: hyperparameter tuning, shap: model explainability
+            echo "xgboost lightgbm catboost optuna shap"
+            ;;
+        audio)
+            # librosa: audio analysis, soundfile: audio I/O, audiomentations: augmentation
+            # (torchaudio already in AIME base)
+            echo "librosa soundfile audiomentations"
+            ;;
+        ts)
+            # statsmodels: classical stats, prophet: forecasting, darts: unified forecasting
+            echo "statsmodels prophet darts"
+            ;;
+        llm)
+            # vllm: fast LLM inference, bitsandbytes: quantization
+            # langchain: LLM pipelines, einops: tensor operations
+            echo "vllm bitsandbytes langchain einops"
             ;;
         *)
             echo ""
@@ -629,9 +654,11 @@ read_requirements_packages() {
         # Skip -r/-e/--requirement/--editable (recursive requirements, editable installs)
         [[ "$line" =~ ^[[:space:]]*- ]] && continue
 
-        # Trim whitespace
+        # Trim leading/trailing whitespace and normalize version specifiers
+        # Handles "torch >= 2.0.1" → "torch>=2.0.1"
         local pkg
-        pkg=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        pkg=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
+              sed 's/[[:space:]]*\([><=!~]\+\)[[:space:]]*/\1/g')
 
         if [ -n "$pkg" ]; then
             packages="$packages $pkg"
@@ -693,11 +720,11 @@ interactive_mode() {
         fi
     fi
 
-    echo -e "${BOLD}Image repo will be named: ${CYAN}${IMAGE_NAME}${NC}"
-    echo -e "${BOLD}Image namespace will be: ${CYAN}ds01-${USER_ID}${NC}"
+    echo -e "${BOLD}Image namespace: ${CYAN}ds01-${USER_ID}${NC}"
+    echo -e "${BOLD}Image name: ${CYAN}${IMAGE_NAME}${NC}"
+    echo -e "${DIM}Full reference: ds01-${USER_ID}/${IMAGE_NAME}:latest${NC}"
     if [ "$GUIDED" = true ]; then
-        echo -e "${DIM}Full image reference: ${CYAN}${FULL_IMAGE_NAME}:latest${NC}"
-        echo -e "${DIM}Format: {namespace}/{repo_name}:{tag} where namespace = ds01-{user-id}${NC}"
+        echo -e "${DIM}Format: {namespace}/{name}:{tag} where namespace = ds01-{user-id}${NC}"
     fi
     echo ""
 
@@ -981,21 +1008,33 @@ interactive_mode() {
             echo ""
             echo "This determines which specialised packages get installed:"
             echo ""
-            echo -e "• ${CYAN}General ML${NC} - Advanced ML with boosting algorithms"
-            echo "  Packages: xgboost, lightgbm, catboost, optuna"
+            echo -e "• ${CYAN}General ML${NC} - Gradient boosting & explainability"
+            echo "  Packages: xgboost, lightgbm, catboost, optuna, shap"
             echo "  Example: Classification, regression, hyperparameter tuning"
             echo ""
-            echo -e "• ${CYAN}Computer Vision (CV)${NC} - Images, videos, object detection"
-            echo "  Packages: timm, albumentations, opencv, torchvision"
-            echo "  Example: Image classification, object detection, segmentation"
+            echo -e "• ${CYAN}Computer Vision${NC} - Images, videos, object detection"
+            echo "  Packages: timm, albumentations, opencv, kornia, ultralytics"
+            echo "  Example: Image classification, YOLOv8, segmentation"
             echo ""
             echo -e "• ${CYAN}NLP${NC} - Text, language models, transformers"
-            echo "  Packages: transformers, datasets, tokenizers, accelerate"
-            echo "  Example: Text classification, translation, chatbots"
+            echo "  Packages: transformers, datasets, peft, safetensors, evaluate"
+            echo "  Example: Text classification, LoRA fine-tuning, chatbots"
             echo ""
-            echo -e "• ${CYAN}Reinforcement Learning${NC} - Agents, environments, decision making"
+            echo -e "• ${CYAN}Reinforcement Learning${NC} - Agents, environments"
             echo "  Packages: gymnasium, stable-baselines3"
             echo "  Example: Game AI, robotics, optimization"
+            echo ""
+            echo -e "• ${CYAN}Audio/Speech${NC} - Audio processing & analysis"
+            echo "  Packages: librosa, soundfile, audiomentations"
+            echo "  Example: Speech recognition, music analysis, audio classification"
+            echo ""
+            echo -e "• ${CYAN}Time Series${NC} - Forecasting & temporal data"
+            echo "  Packages: statsmodels, prophet, darts"
+            echo "  Example: Demand forecasting, stock prediction, anomaly detection"
+            echo ""
+            echo -e "• ${CYAN}LLM/GenAI${NC} - Large language model inference & fine-tuning"
+            echo "  Packages: vllm, bitsandbytes, langchain, einops"
+            echo "  Example: LLM serving, quantization, RAG pipelines"
             echo ""
             echo -e "• ${CYAN}Custom${NC} - Skip use case packages or specify manually"
             echo ""
@@ -1005,20 +1044,26 @@ interactive_mode() {
         fi
 
         echo -e "${BOLD}Select use case (additional domain-specific packages):${NC}"
-        echo -e "  ${BOLD}1)${NC} General ML ${DIM}(xgboost, lightgbm, catboost, optuna)${NC} (${GREEN}default${NC})"
-        echo -e "  ${BOLD}2)${NC} Computer Vision ${DIM}(timm, albumentations, opencv)${NC}"
-        echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, datasets, tokenizers)${NC}"
+        echo -e "  ${BOLD}1)${NC} General ML ${DIM}(xgboost, lightgbm, shap, optuna)${NC} (${GREEN}default${NC})"
+        echo -e "  ${BOLD}2)${NC} Computer Vision ${DIM}(timm, ultralytics, kornia)${NC}"
+        echo -e "  ${BOLD}3)${NC} NLP ${DIM}(transformers, peft, safetensors)${NC}"
         echo -e "  ${BOLD}4)${NC} Reinforcement Learning ${DIM}(gymnasium, stable-baselines3)${NC}"
-        echo -e "  ${BOLD}5)${NC} Custom (${DIM}specify packages manually${NC}"
+        echo -e "  ${BOLD}5)${NC} Audio/Speech ${DIM}(librosa, soundfile, audiomentations)${NC}"
+        echo -e "  ${BOLD}6)${NC} Time Series ${DIM}(statsmodels, prophet, darts)${NC}"
+        echo -e "  ${BOLD}7)${NC} LLM/GenAI ${DIM}(vllm, bitsandbytes, langchain)${NC}"
+        echo -e "  ${BOLD}8)${NC} Custom ${DIM}(specify packages manually)${NC}"
         echo ""
         read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-        read -p "Choice [1-5, default: 1]: " UC_CHOICE </dev/tty
+        read -p "Choice [1-8, default: 1]: " UC_CHOICE </dev/tty
 
         case $UC_CHOICE in
             2) USECASE="cv" ;;
             3) USECASE="nlp" ;;
             4) USECASE="rl" ;;
-            5)
+            5) USECASE="audio" ;;
+            6) USECASE="ts" ;;
+            7) USECASE="llm" ;;
+            8)
                 USECASE="custom"
                 echo ""
                 echo -e "${BOLD}Custom Use Case Packages${NC}"
