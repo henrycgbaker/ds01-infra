@@ -7,7 +7,7 @@
 defaults:
   # GPU limits
   max_mig_instances: 2              # Max MIG/GPU instances user can have allocated (across all containers)
-  max_gpus_per_container: 1         # Max MIG/GPU instances per single container
+  max_mig_per_container: 1          # Max MIG-equivalents per single container
   allow_full_gpu: false             # Can user request full (non-MIG) GPU? Default: no
   gpu_memory: null                  # GPU memory limit in GB (null = no limit, already enforced by MIG)
 
@@ -43,12 +43,12 @@ groups:
   student:
     members: []  # TO DO: autopopulate from LDAP group 'ds01-students'
     allow_full_gpu: false           # Students can ONLY use MIG instances
-    max_gpus_per_container: 1       # 1 MIG per container
+    max_mig_per_container: 1        # 1 MIG per container
 
   researcher:
     members: [s.kaiser@hertie-school.lan, 204214@hertie-school.lan, 204214, c.fusarbassini@hertie-school.lan, c.fusarbassini]
     allow_full_gpu: true            # Researchers CAN request full GPUs
-    max_gpus_per_container: 2       # Up to 2 MIG/GPU per container
+    max_mig_per_container: 4        # Up to 4 MIG-equivalents per container (= 1 full GPU)
     max_mig_instances: 8            # Can use up to 8 MIG instances or equivalent
     max_cpus: 64                    # Increased for CPU-heavy workloads (sklearn)
     memory: 128g                    # Increased for large datasets
@@ -64,7 +64,7 @@ groups:
   admin:
     members: [datasciencelab]
     allow_full_gpu: true            # Admins CAN request full GPUs
-    max_gpus_per_container: null    # Unlimited GPUs per container
+    max_mig_per_container: null     # Unlimited MIG-equivalents per container
     max_mig_instances: null         # Unlimited (can use all GPUs)
     max_cpus: 64
     memory: 128g
@@ -99,6 +99,7 @@ gpu_allocation:
 
   # MIG (Multi-Instance GPU) configuration for A100s
   enable_mig: true                  # Enable MIG partitioning
+  mig_instances_per_gpu: 4          # How many MIG instances per physical GPU (1 full GPU = 4 MIG-equivalents)
   mig_strategy: auto                # auto, manual, disabled
   mig_profile: 2g.20gb              # MIG profile (3 instances per A100)
                                     # Options: 1g.10gb (7 instances), 2g.20gb (3 instances), 3g.40gb (2 instances)

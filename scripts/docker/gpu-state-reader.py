@@ -32,8 +32,31 @@ INTERFACE_OTHER = "other"
 
 
 class GPUStateReader:
-    def __init__(self):
+    def __init__(self, config_path="/opt/ds01-infra/config/resource-limits.yaml"):
         self._mig_uuid_to_slot_cache = None
+        self.config_path = config_path
+        self._config = None
+
+    def _load_config(self):
+        """Load resource-limits.yaml if not already loaded"""
+        if self._config is None:
+            try:
+                import yaml
+                with open(self.config_path) as f:
+                    self._config = yaml.safe_load(f)
+            except Exception:
+                self._config = {}
+        return self._config
+
+    def _get_mig_instances_per_gpu(self) -> int:
+        """Get mig_instances_per_gpu from config (default: 4)"""
+        config = self._load_config()
+        gpu_config = config.get('gpu_allocation', {})
+        return gpu_config.get('mig_instances_per_gpu', 4)
+
+    def _is_full_gpu(self, gpu_slot: str) -> bool:
+        """Check if a GPU slot is a full GPU (not MIG instance)"""
+        return '.' not in str(gpu_slot)
 
     def _get_mig_uuid_to_slot_mapping(self) -> Dict[str, str]:
         """
@@ -174,6 +197,7 @@ class GPUStateReader:
         """
         Extract GPU assignment from Docker container inspect data.
         Returns dict with gpu_uuid, gpu_slot, interface, etc. or None if no GPU.
+        Now supports multiple GPU devices per container.
         """
         try:
             # Get HostConfig.DeviceRequests
@@ -190,12 +214,27 @@ class GPUStateReader:
                 # Might be using 'all' GPUs - not supported in DS01
                 return None
 
-            # Get the first (and usually only) GPU UUID
-            gpu_uuid = device_ids[0]
-
-            # Map UUID to slot ID (e.g., MIG-xxx -> "1.2")
+            # Map all UUIDs to slot IDs
             uuid_to_slot = self._get_mig_uuid_to_slot_mapping()
-            gpu_slot = uuid_to_slot.get(gpu_uuid, gpu_uuid)  # Fallback to UUID if not found
+            mig_per_gpu = self._get_mig_instances_per_gpu()
+
+            gpu_slots = []
+            gpu_uuids = []
+            mig_equiv = 0
+
+            for uuid in device_ids:
+                slot = uuid_to_slot.get(uuid, uuid)  # Fallback to UUID if not found
+                gpu_slots.append(slot)
+                gpu_uuids.append(uuid)
+                # Full GPU counts as mig_per_gpu equivalents
+                if self._is_full_gpu(slot):
+                    mig_equiv += mig_per_gpu
+                else:
+                    mig_equiv += 1
+
+            # Primary GPU info (for backward compatibility)
+            gpu_uuid = device_ids[0]
+            gpu_slot = gpu_slots[0] if gpu_slots else gpu_uuid
 
             # Extract from Docker labels if available
             labels = container_data.get('Config', {}).get('Labels', {}) or {}
@@ -214,8 +253,11 @@ class GPUStateReader:
 
             return {
                 'container_name': container_name,
-                'gpu_uuid': gpu_uuid,
-                'gpu_slot': gpu_slot,
+                'gpu_uuid': gpu_uuid,           # Primary GPU UUID (backward compat)
+                'gpu_slot': gpu_slot,           # Primary GPU slot (backward compat)
+                'gpu_uuids': gpu_uuids,         # All GPU UUIDs
+                'gpu_slots': gpu_slots,         # All GPU slots
+                'mig_equiv': mig_equiv,         # Total MIG-equivalents
                 'allocated_at': allocated_at,
                 'priority': priority,
                 'user': user,
@@ -391,6 +433,7 @@ class GPUStateReader:
         """
         Get all GPU allocations for a specific user.
         Now tracks all containers from all interfaces.
+        Includes MIG-equivalent count for multi-GPU containers.
         """
         user_allocations = []
 
@@ -426,14 +469,24 @@ class GPUStateReader:
 
             user_allocations.append({
                 'container': container_name,
-                'gpu_slot': gpu_info['gpu_slot'],
-                'gpu_uuid': gpu_info['gpu_uuid'],
+                'gpu_slot': gpu_info['gpu_slot'],           # Primary slot (backward compat)
+                'gpu_uuid': gpu_info['gpu_uuid'],           # Primary UUID (backward compat)
+                'gpu_slots': gpu_info.get('gpu_slots', [gpu_info['gpu_slot']]),  # All slots
+                'gpu_uuids': gpu_info.get('gpu_uuids', [gpu_info['gpu_uuid']]),  # All UUIDs
+                'mig_equiv': gpu_info.get('mig_equiv', 1),  # MIG-equivalents
                 'status': status,
                 'running': is_running,
                 'interface': interface
             })
 
         return user_allocations
+
+    def get_user_mig_total(self, username: str) -> int:
+        """
+        Get total MIG-equivalents allocated to a user across all containers.
+        """
+        allocations = self.get_user_allocations(username)
+        return sum(alloc.get('mig_equiv', 1) for alloc in allocations)
 
 
 def main():
@@ -446,7 +499,8 @@ def main():
         print("  all                    - Show all GPU allocations")
         print("  by-interface           - Show containers grouped by interface")
         print("  container <name>       - Show GPU for specific container")
-        print("  user <username>        - Show user's GPU allocations")
+        print("  user <username>        - Show user's GPU allocations (with MIG-equiv)")
+        print("  user-mig-total <user>  - Get total MIG-equivalents for user")
         print("  json                   - Output all allocations as JSON")
         print("  json-by-interface      - Output containers by interface as JSON")
         sys.exit(1)
@@ -502,11 +556,21 @@ def main():
     elif command == "user" and len(sys.argv) > 2:
         username = sys.argv[2]
         allocations = reader.get_user_allocations(username)
-        print(f"GPU allocations for {username}:")
+        total_mig = reader.get_user_mig_total(username)
+        print(f"GPU allocations for {username} (total: {total_mig} MIG-equiv):")
         for alloc in allocations:
             status = "🟢" if alloc['running'] else "○"
             interface = f"[{alloc.get('interface', '?')}]"
-            print(f"  {status} {alloc['container']}: GPU {alloc['gpu_slot']} {interface}")
+            mig_equiv = alloc.get('mig_equiv', 1)
+            gpu_slots = alloc.get('gpu_slots', [alloc['gpu_slot']])
+            slots_str = ','.join(gpu_slots) if len(gpu_slots) > 1 else alloc['gpu_slot']
+            mig_info = f"({mig_equiv} MIG-equiv)" if mig_equiv > 1 else ""
+            print(f"  {status} {alloc['container']}: GPU {slots_str} {mig_info} {interface}")
+
+    elif command == "user-mig-total" and len(sys.argv) > 2:
+        username = sys.argv[2]
+        total = reader.get_user_mig_total(username)
+        print(total)
 
     else:
         print(f"Unknown command: {command}")

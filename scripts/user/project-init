@@ -26,6 +26,11 @@ if [[ -f "/opt/ds01-infra/scripts/lib/aime-images.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/aime-images.sh
 fi
 
+# Source shared Dockerfile generator
+if [[ -f "/opt/ds01-infra/scripts/lib/dockerfile-generator.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/dockerfile-generator.sh
+fi
+
 # Set orchestration context - suppresses atomic command "Next steps" output
 export DS01_CONTEXT="orchestration"
 export DS01_INTERFACE="orchestration"
@@ -479,35 +484,21 @@ if [ ! -f "$PROJECT_DIR/requirements.txt" ] || [ "$EXISTING_PROJECT" = false ]; 
     echo -e "  ${GREEN}Created${NC} requirements.txt"
 fi
 
-# 4c. Create basic Dockerfile
+# 4c. Create Dockerfile using shared generator
 if [ ! -f "$PROJECT_DIR/Dockerfile" ]; then
     echo -e "  Creating Dockerfile..."
-    # Get the actual AIME base image (not a placeholder)
     AIME_BASE_IMAGE=$(get_base_image "pytorch")
-    cat > "$PROJECT_DIR/Dockerfile" << DOCKERFILE
-# DS01 Project Dockerfile
-# This file defines the container environment for your project.
-# Customize as needed - image-create will build from this.
 
-# Base image: AIME Machine Learning Container (PyTorch + CUDA)
-# To change framework, run: image-create --framework=tensorflow
-FROM $AIME_BASE_IMAGE
+    generate_dockerfile \
+        --output "$PROJECT_DIR/Dockerfile" \
+        --base-image "$AIME_BASE_IMAGE" \
+        --project "$PROJECT_NAME" \
+        --user-id "$USER_ID" \
+        --username "$USERNAME" \
+        --framework "pytorch" \
+        --requirements "$PROJECT_DIR/requirements.txt" \
+        > /dev/null
 
-# Build arguments (set by DS01)
-ARG DS01_USER_ID=1000
-ARG DS01_GROUP_ID=1000
-ARG DS01_USERNAME=user
-
-# Install Python packages from requirements.txt
-COPY requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
-
-# Set working directory
-WORKDIR /workspace
-
-# Default command
-CMD ["/bin/bash"]
-DOCKERFILE
     echo -e "  ${GREEN}Created${NC} Dockerfile"
     echo -e "  ${DIM}Base image: $AIME_BASE_IMAGE${NC}"
 fi

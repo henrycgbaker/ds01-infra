@@ -129,16 +129,19 @@ read_requirements_packages() {
     local packages=""
 
     while IFS= read -r line; do
-        # Skip comments
+        # Skip full-line comments
         [[ "$line" =~ ^[[:space:]]*# ]] && continue
         # Skip empty lines
         [[ -z "${line// }" ]] && continue
         # Skip -r/-e/--requirement/--editable
         [[ "$line" =~ ^[[:space:]]*- ]] && continue
 
-        # Trim whitespace and normalize version specifiers
+        # Strip inline comments (e.g., "pandas # data analysis" -> "pandas")
+        # Then trim whitespace and normalize version specifiers
         local pkg
-        pkg=$(echo "$line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
+        pkg=$(echo "$line" | \
+              sed 's/[[:space:]]*#.*//' | \
+              sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | \
               sed 's/[[:space:]]*\([><=!~]\+\)[[:space:]]*/\1/g')
 
         if [ -n "$pkg" ]; then
@@ -274,10 +277,10 @@ select_image_interactive() {
         echo -e "${BOLD}Your Docker Images${NC}" >&2
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}" >&2
 
-        # Get list of user's images - filter by DS01 naming pattern
+        # Get list of user's images - filter by DS01 naming pattern and de-duplicate
         local images=()
         local user_id=$(id -u)
-        mapfile -t images < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$user_id/" | grep -v "REPOSITORY")
+        mapfile -t images < <(docker images --format "{{.Repository}}" 2>/dev/null | grep "^ds01-$user_id/" | grep -v "REPOSITORY" | sort -u)
 
         # Show only DS01 images in table format (use awk to preserve table formatting)
         docker images --format "table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}" | \
@@ -646,6 +649,105 @@ parse_system_packages() {
     ' "$dockerfile" | sort -u
 }
 
+# Detect Dockerfile format
+# Returns: "custom-section" or "requirements-txt" or "unknown"
+detect_dockerfile_format() {
+    local dockerfile="$1"
+
+    # Check for image-create style: has "# Custom additional packages"
+    if grep -q "^# Custom additional packages" "$dockerfile"; then
+        echo "custom-section"
+        return 0
+    fi
+
+    # Check for project-init style: uses requirements.txt
+    if grep -q "pip install.*-r.*/tmp/requirements.txt\|COPY requirements.txt" "$dockerfile"; then
+        echo "requirements-txt"
+        return 0
+    fi
+
+    echo "unknown"
+    return 0
+}
+
+# Find requirements.txt path from Dockerfile location
+find_requirements_file() {
+    local dockerfile="$1"
+    local dockerfile_dir=$(dirname "$dockerfile")
+
+    if [ -f "$dockerfile_dir/requirements.txt" ]; then
+        echo "$dockerfile_dir/requirements.txt"
+        return 0
+    fi
+
+    return 1
+}
+
+# Add packages to requirements.txt file
+add_packages_to_requirements() {
+    local req_file="$1"
+    shift
+    local packages=("$@")
+    PACKAGES_ADDED_COUNT=0
+
+    # Create backup
+    cp "$req_file" "${req_file}.bak"
+
+    # Check if "# Custom" section exists, if not add it
+    local custom_section_exists=false
+    if grep -qi "^# Custom" "$req_file"; then
+        custom_section_exists=true
+    fi
+
+    for pkg in "${packages[@]}"; do
+        local pkg_base=$(echo "$pkg" | sed 's/[=><!~].*//')
+
+        # Check for duplicates (also strip inline comments from existing entries)
+        if grep -v '^#' "$req_file" | sed 's/#.*//' | grep -qi "^[[:space:]]*${pkg_base}\([=><!~[:space:]]\|$\)"; then
+            echo -e "${YELLOW}  ⚠ $pkg_base already in requirements.txt, skipping${NC}"
+            continue
+        fi
+
+        # Add custom section header if this is the first custom package
+        if [ "$custom_section_exists" = false ] && [ "$PACKAGES_ADDED_COUNT" -eq 0 ]; then
+            echo "" >> "$req_file"
+            echo "# Custom packages (added via image-update)" >> "$req_file"
+            custom_section_exists=true
+        fi
+
+        echo "$pkg" >> "$req_file"
+        echo -e "${GREEN}  ✓${NC} Added: $pkg"
+        PACKAGES_ADDED_COUNT=$((PACKAGES_ADDED_COUNT + 1))
+    done
+
+    if [ "$PACKAGES_ADDED_COUNT" -gt 0 ]; then
+        echo ""
+        echo -e "${GREEN}✓${NC} Added $PACKAGES_ADDED_COUNT package(s) to requirements.txt"
+        echo ""
+        echo -e "Updated file: ${BLUE}$req_file${NC}"
+        echo ""
+    fi
+
+    return 0
+}
+
+# Add "# Custom additional packages" section to Dockerfile
+add_custom_section_to_dockerfile() {
+    local dockerfile="$1"
+
+    local cmd_line=$(grep -n "^CMD " "$dockerfile" | tail -1 | cut -d: -f1)
+
+    if [ -n "$cmd_line" ]; then
+        sed -i "${cmd_line}i\\# Custom additional packages\n" "$dockerfile"
+    else
+        echo "" >> "$dockerfile"
+        echo "# Custom additional packages" >> "$dockerfile"
+        echo "" >> "$dockerfile"
+    fi
+
+    echo -e "${DIM}Added '# Custom additional packages' section to Dockerfile${NC}"
+}
+
 # Add Python packages to Dockerfile
 # Returns: 0 if packages added, 1 if error, sets PACKAGES_ADDED_COUNT
 add_python_packages() {
@@ -653,6 +755,45 @@ add_python_packages() {
     shift
     local packages=("$@")
     PACKAGES_ADDED_COUNT=0
+
+    # Detect Dockerfile format
+    local format=$(detect_dockerfile_format "$dockerfile")
+
+    case "$format" in
+        "requirements-txt")
+            local req_file=$(find_requirements_file "$dockerfile")
+            if [ -z "$req_file" ]; then
+                echo -e "${RED}✗ Dockerfile uses requirements.txt but file not found${NC}"
+                echo ""
+                echo "Expected location: $(dirname "$dockerfile")/requirements.txt"
+                return 1
+            fi
+
+            echo -e "${DIM}Detected project-init Dockerfile format (uses requirements.txt)${NC}"
+            echo ""
+            add_packages_to_requirements "$req_file" "${packages[@]}"
+            return $?
+            ;;
+
+        "custom-section")
+            # Continue with existing logic below
+            ;;
+
+        "unknown")
+            echo -e "${YELLOW}⚠ Dockerfile doesn't have standard package section${NC}"
+            echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+            read -p "Add '# Custom additional packages' section to Dockerfile? [Y/n]: " ADD_SECTION </dev/tty
+            ADD_SECTION=${ADD_SECTION:-Y}
+
+            if [[ "$ADD_SECTION" =~ ^[Yy]$ ]]; then
+                add_custom_section_to_dockerfile "$dockerfile"
+            else
+                echo -e "${RED}✗ Cannot add packages without a package section${NC}"
+                return 1
+            fi
+            ;;
+    esac
 
     # Find "# Custom additional packages" section
     local custom_line=$(grep -n "^# Custom additional packages" "$dockerfile" | cut -d: -f1)
@@ -672,6 +813,7 @@ add_python_packages() {
     local last_pip_line=""
     local is_multiline=false
 
+    local needs_run_line=false
     if [[ "$next_line_content" =~ ^RUN\ pip\ install ]]; then
         # There's already a RUN pip install in the custom section
         last_pip_line=$next_line
@@ -679,8 +821,8 @@ add_python_packages() {
             is_multiline=true
         fi
     else
-        # No RUN pip install yet - insert one after the comment
-        sed -i "${custom_line}a\\RUN pip install --no-cache-dir \\\\" "$dockerfile"
+        # No RUN pip install yet - will insert one when we add the first package
+        needs_run_line=true
         last_pip_line=$((custom_line + 1))
         is_multiline=true
     fi
@@ -695,6 +837,14 @@ add_python_packages() {
             echo -e "${YELLOW}  ⚠ $pkg_base already in Dockerfile, skipping${NC}"
             echo ""
             continue
+        fi
+
+        # If we need to create the RUN pip install line, do it now (before first package)
+        if [ "$needs_run_line" = true ]; then
+            # Insert RUN pip install line after the custom comment
+            sed -i "${custom_line}a\\RUN pip install --no-cache-dir \\\\" "$dockerfile"
+            last_pip_line=$((custom_line + 1))
+            needs_run_line=false
         fi
 
         if [ "$is_multiline" = true ]; then
@@ -786,11 +936,49 @@ add_system_packages() {
     return 0
 }
 
-# Remove packages from Dockerfile
+# Remove packages from requirements.txt file
+remove_packages_from_requirements() {
+    local req_file="$1"
+    shift
+    local packages=("$@")
+
+    cp "$req_file" "${req_file}.bak"
+
+    for pkg in "${packages[@]}"; do
+        local pkg_base=$(echo "$pkg" | sed 's/[=><!~].*//')
+
+        # Check if package exists (case-insensitive, handles version specifiers and inline comments)
+        if grep -qi "^[[:space:]]*${pkg_base}[[:space:]=><!~#$]" "$req_file" || grep -qi "^[[:space:]]*${pkg_base}$" "$req_file"; then
+            # Remove the line (case-insensitive)
+            sed -i "/^[[:space:]]*${pkg_base}[[:space:]=><!~#]/Id" "$req_file"
+            sed -i "/^[[:space:]]*${pkg_base}$/Id" "$req_file"
+            echo -e "${GREEN}  ✓${NC} Removed: $pkg"
+        else
+            echo -e "${YELLOW}  ⚠${NC} Package not found: $pkg"
+        fi
+    done
+
+    return 0
+}
+
+# Remove packages from Dockerfile or requirements.txt
 remove_packages() {
     local dockerfile="$1"
     shift
     local packages=("$@")
+
+    # Check if this is a requirements.txt-based Dockerfile
+    local format=$(detect_dockerfile_format "$dockerfile")
+
+    if [ "$format" = "requirements-txt" ]; then
+        local req_file=$(find_requirements_file "$dockerfile")
+        if [ -n "$req_file" ]; then
+            echo -e "${DIM}Detected project-init Dockerfile format (uses requirements.txt)${NC}"
+            echo ""
+            remove_packages_from_requirements "$req_file" "${packages[@]}"
+            return $?
+        fi
+    fi
 
     cp "$dockerfile" "${dockerfile}.bak"
 
@@ -913,6 +1101,14 @@ remove_packages() {
 interactive_mode() {
     local dockerfile="$1"
 
+    # Detect Dockerfile format once at the start
+    local format=$(detect_dockerfile_format "$dockerfile")
+    local req_file=""
+    local req_pkgs=""
+    if [ "$format" = "requirements-txt" ]; then
+        req_file=$(find_requirements_file "$dockerfile")
+    fi
+
     while true; do
 
         # Show current packages categorized
@@ -940,68 +1136,106 @@ interactive_mode() {
             echo -e "  • ${BOLD}System:${NC} ${DIM}(none)${NC}"
         fi
 
-        # Parse categorized Python packages (matching image-create structure)
-        local jupyter_pkgs=""
-        local datascience_pkgs=""
-        local core_pkgs=""  # Legacy category for old Dockerfiles
-        local usecase_pkgs=""
-        local custom_pkgs=""
-
-        while IFS=: read -r category pkg; do
-            case "$category" in
-                jupyter) jupyter_pkgs="$jupyter_pkgs $pkg" ;;
-                datascience) datascience_pkgs="$datascience_pkgs $pkg" ;;
-                core) core_pkgs="$core_pkgs $pkg" ;;  # Legacy
-                usecase) usecase_pkgs="$usecase_pkgs $pkg" ;;
-                custom) custom_pkgs="$custom_pkgs $pkg" ;;
-            esac
-        done < <(parse_python_packages_by_category "$dockerfile")
-
-        # Display Python packages by category (new structure from image-create)
-        if [ -n "$jupyter_pkgs" ]; then
-            echo -e "  • ${BOLD}Jupyter & Interactive:${NC}$jupyter_pkgs"
-        elif [ -n "$core_pkgs" ]; then
-            # Legacy: old Dockerfiles had everything as "core"
-            echo -e "  • ${BOLD}Core Python:${NC}$core_pkgs ${DIM}(legacy format)${NC}"
+        # Check if using requirements.txt format (project-init style)
+        if [ "$format" = "requirements-txt" ] && [ -n "$req_file" ] && [ -f "$req_file" ]; then
+            req_pkgs=$(grep -v '^#' "$req_file" | grep -v '^[[:space:]]*$' | tr '\n' ' ')
+            local short_req_path="${req_file/#$HOME/~}"
+            echo -e "  • ${BOLD}Python packages${NC} ${DIM}(from $short_req_path):${NC}"
+            if [ -n "$req_pkgs" ]; then
+                echo -e "    $req_pkgs"
+            else
+                echo -e "    ${DIM}(none)${NC}"
+            fi
         else
-            echo -e "  • ${BOLD}Jupyter & Interactive:${NC} ${DIM}(none)${NC}"
-        fi
+            # Parse categorized Python packages (matching image-create structure)
+            local jupyter_pkgs=""
+            local datascience_pkgs=""
+            local core_pkgs=""  # Legacy category for old Dockerfiles
+            local usecase_pkgs=""
+            local custom_pkgs=""
 
-        if [ -n "$datascience_pkgs" ]; then
-            echo -e "  • ${BOLD}Data Science:${NC}$datascience_pkgs"
-        else
-            echo -e "  • ${BOLD}Data Science:${NC} ${DIM}(none)${NC}"
-        fi
+            while IFS=: read -r category pkg; do
+                case "$category" in
+                    jupyter) jupyter_pkgs="$jupyter_pkgs $pkg" ;;
+                    datascience) datascience_pkgs="$datascience_pkgs $pkg" ;;
+                    core) core_pkgs="$core_pkgs $pkg" ;;  # Legacy
+                    usecase) usecase_pkgs="$usecase_pkgs $pkg" ;;
+                    custom) custom_pkgs="$custom_pkgs $pkg" ;;
+                esac
+            done < <(parse_python_packages_by_category "$dockerfile")
 
-        if [ -n "$usecase_pkgs" ]; then
-            echo -e "  • ${BOLD}Use Case Specific:${NC}$usecase_pkgs"
-        else
-            echo -e "  • ${BOLD}Use Case Specific:${NC} ${DIM}(none)${NC}"
-        fi
+            # Display Python packages by category (new structure from image-create)
+            if [ -n "$jupyter_pkgs" ]; then
+                echo -e "  • ${BOLD}Jupyter & Interactive:${NC}$jupyter_pkgs"
+            elif [ -n "$core_pkgs" ]; then
+                # Legacy: old Dockerfiles had everything as "core"
+                echo -e "  • ${BOLD}Core Python:${NC}$core_pkgs ${DIM}(legacy format)${NC}"
+            else
+                echo -e "  • ${BOLD}Jupyter & Interactive:${NC} ${DIM}(none)${NC}"
+            fi
 
-        if [ -n "$custom_pkgs" ]; then
-            echo -e "  • ${BOLD}Custom-installed:${NC}$custom_pkgs"
-        else
-            echo -e "  • ${BOLD}Custom-installed:${NC} ${DIM}(none)${NC}"
+            if [ -n "$datascience_pkgs" ]; then
+                echo -e "  • ${BOLD}Data Science:${NC}$datascience_pkgs"
+            else
+                echo -e "  • ${BOLD}Data Science:${NC} ${DIM}(none)${NC}"
+            fi
+
+            if [ -n "$usecase_pkgs" ]; then
+                echo -e "  • ${BOLD}Use Case Specific:${NC}$usecase_pkgs"
+            else
+                echo -e "  • ${BOLD}Use Case Specific:${NC} ${DIM}(none)${NC}"
+            fi
+
+            if [ -n "$custom_pkgs" ]; then
+                echo -e "  • ${BOLD}Custom-installed:${NC}$custom_pkgs"
+            else
+                echo -e "  • ${BOLD}Custom-installed:${NC} ${DIM}(none)${NC}"
+            fi
         fi
 
         echo ""
 
         echo -e "${BOLD}What would you like to do?${NC}"
         echo ""
-        echo -e "  ${BOLD}1)${NC} Add Python packages (pip)"
-        echo -e "  ${BOLD}2)${NC} Import from requirements.txt"
-        echo -e "  ${BOLD}3)${NC} Add system packages (apt)"
-        echo -e "  ${BOLD}4)${NC} Remove packages"
-        echo -e "  ${BOLD}5)${NC} Edit Dockerfile directly ${DIM}(advanced)${NC}"
-        echo -e "  ${BOLD}6)${NC} Continue to rebuild ${BOLD}${YELLOW}(necessary to apply changes!)${NC}"
-        echo -e "  ${BOLD}7)${NC} Cancel"
+        echo -e "  ${BOLD}1)${NC} List all packages"
+        echo -e "  ${BOLD}2)${NC} Add Python packages (pip)"
+        echo -e "  ${BOLD}3)${NC} Import from requirements.txt"
+        echo -e "  ${BOLD}4)${NC} Add system packages (apt)"
+        echo -e "  ${BOLD}5)${NC} Remove packages"
+        echo -e "  ${BOLD}6)${NC} Edit Dockerfile directly ${DIM}(advanced)${NC}"
+        echo -e "  ${BOLD}7)${NC} Continue to rebuild ${BOLD}${YELLOW}(necessary to apply changes!)${NC}"
+        echo -e "  ${BOLD}8)${NC} Cancel"
         echo ""
         read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-        read -p "Choice [1-7]: " CHOICE </dev/tty
+        read -p "Choice [1-8]: " CHOICE </dev/tty
 
         case $CHOICE in
             1)
+                # List all packages
+                echo ""
+                echo -e "${BOLD}Installed Packages${NC}"
+                echo ""
+
+                if [ "$format" = "requirements-txt" ] && [ -n "$req_file" ] && [ -f "$req_file" ]; then
+                    local short_req_path="${req_file/#$HOME/~}"
+                    echo -e "${CYAN}From requirements.txt:${NC} $short_req_path"
+                    echo ""
+                    # Show packages (strip comments, empty lines), with line numbers
+                    grep -v '^[[:space:]]*#' "$req_file" | grep -v '^[[:space:]]*$' | \
+                        sed 's/[[:space:]]*#.*//' | nl -ba | sed 's/^/  /'
+                else
+                    echo -e "${CYAN}From Dockerfile:${NC}"
+                    echo ""
+                    parse_python_packages "$dockerfile" | tr ' ' '\n' | grep -v '^$' | nl -ba | sed 's/^/  /'
+                fi
+
+                echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+
+            2)
+                # Add Python packages
                 # Loop until no duplicates
                 while true; do
                     echo ""
@@ -1021,20 +1255,26 @@ interactive_mode() {
                     # Get all currently installed packages
                     local aime_base="numpy pillow tqdm conda ipython psutil torch torchvision torchaudio"
                     local all_current=""
-                    if [ -n "$jupyter_pkgs" ]; then
-                        all_current="$all_current $jupyter_pkgs"
-                    fi
-                    if [ -n "$datascience_pkgs" ]; then
-                        all_current="$all_current $datascience_pkgs"
-                    fi
-                    if [ -n "$core_pkgs" ]; then
-                        all_current="$all_current $core_pkgs"
-                    fi
-                    if [ -n "$usecase_pkgs" ]; then
-                        all_current="$all_current $usecase_pkgs"
-                    fi
-                    if [ -n "$custom_pkgs" ]; then
-                        all_current="$all_current $custom_pkgs"
+
+                    # Check both requirements.txt and Dockerfile packages
+                    if [ "$format" = "requirements-txt" ] && [ -n "$req_pkgs" ]; then
+                        all_current="$req_pkgs"
+                    else
+                        if [ -n "$jupyter_pkgs" ]; then
+                            all_current="$all_current $jupyter_pkgs"
+                        fi
+                        if [ -n "$datascience_pkgs" ]; then
+                            all_current="$all_current $datascience_pkgs"
+                        fi
+                        if [ -n "$core_pkgs" ]; then
+                            all_current="$all_current $core_pkgs"
+                        fi
+                        if [ -n "$usecase_pkgs" ]; then
+                            all_current="$all_current $usecase_pkgs"
+                        fi
+                        if [ -n "$custom_pkgs" ]; then
+                            all_current="$all_current $custom_pkgs"
+                        fi
                     fi
 
                     # Check for duplicates
@@ -1068,7 +1308,7 @@ interactive_mode() {
                 done
                 ;;
 
-            2)
+            3)
                 # Import from requirements.txt
                 if select_requirements_file; then
                     local req_packages=$(read_requirements_packages "$SELECTED_REQ_FILE")
@@ -1104,7 +1344,7 @@ interactive_mode() {
                 fi
                 ;;
 
-            3)
+            4)
                 echo ""
                 echo -e "${BOLD}Add System Packages${NC}"
                 echo ""
@@ -1136,9 +1376,25 @@ interactive_mode() {
                 fi
                 ;;
 
-            4)
+            5)
                 echo ""
                 echo -e "${BOLD}Remove Packages${NC}"
+                echo ""
+
+                # Show available packages
+                echo -e "${CYAN}Available packages:${NC}"
+                echo ""
+                if [ "$format" = "requirements-txt" ] && [ -n "$req_file" ] && [ -f "$req_file" ]; then
+                    # Show packages from requirements.txt (strip comments and version specifiers for display)
+                    grep -v '^[[:space:]]*#' "$req_file" | grep -v '^[[:space:]]*$' | \
+                        sed 's/[[:space:]]*#.*//' | sed 's/[=><!~].*//' | \
+                        sed 's/^[[:space:]]*//' | sed 's/[[:space:]]*$//' | \
+                        grep -v '^$' | nl -ba | sed 's/^/  /'
+                else
+                    parse_python_packages "$dockerfile" | tr ' ' '\n' | grep -v '^$' | \
+                        sed 's/[=><!~].*//' | nl -ba | sed 's/^/  /'
+                fi
+
                 echo ""
                 echo "Enter package names to remove (space-separated):"
                 echo ""
@@ -1151,9 +1407,9 @@ interactive_mode() {
                     echo ""
                     remove_packages "$dockerfile" $REMOVE_PACKAGES
                     echo ""
-                    echo -e "${GREEN}✓${NC} Packages removed from Dockerfile"
+                    echo -e "${GREEN}✓${NC} Packages removed"
                     echo ""
-                    echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image based on the updated Dockerfile.${NC}"
+                    echo -e "${YELLOW}💡 To apply changes, you'll need to rebuild the image.${NC}"
                     echo ""
                     read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                     read -p "Rebuild now? [Y/n]: " REBUILD_NOW </dev/tty
@@ -1168,7 +1424,7 @@ interactive_mode() {
                 fi
                 ;;
 
-            5)
+            6)
                 echo ""
                 EDITOR_CMD=$(find_editor)
                 if [ "$EDITOR_CMD" = "cat" ]; then
@@ -1192,12 +1448,12 @@ interactive_mode() {
                 fi
                 ;;
 
-            6)
+            7)
                 echo ""
                 return 0
                 ;;
 
-            7)
+            8)
                 echo ""
                 echo "Cancelled."
                 exit 0
@@ -1394,21 +1650,37 @@ if [ -f "$INFO_FILE" ]; then
     DOCKERFILE=$(grep "^Dockerfile:" "$INFO_FILE" | cut -d: -f2- | xargs)
 fi
 
-# Fallback to standard location - extract project name from image
+# Extract project name from image
 # If IMAGE_NAME is ds01-1001/my-project, PROJECT_NAME is my-project
 PROJECT_NAME="${IMAGE_NAME##*/}"
+
+# Search for Dockerfile in multiple locations (in priority order):
+# 1. Info file (if stored)
+# 2. Project workspace: ~/workspace/{project}/Dockerfile (project-init style)
+# 3. Centralized: ~/dockerfiles/{project}.Dockerfile (image-create style)
 if [ -z "$DOCKERFILE" ] || [ ! -f "$DOCKERFILE" ]; then
-    DOCKERFILE="$DOCKERFILES_DIR/${PROJECT_NAME}.Dockerfile"
+    # Try project workspace location first (project-init style)
+    if [ -f "$HOME/workspace/${PROJECT_NAME}/Dockerfile" ]; then
+        DOCKERFILE="$HOME/workspace/${PROJECT_NAME}/Dockerfile"
+    # Then try centralized dockerfiles location (image-create style)
+    elif [ -f "$DOCKERFILES_DIR/${PROJECT_NAME}.Dockerfile" ]; then
+        DOCKERFILE="$DOCKERFILES_DIR/${PROJECT_NAME}.Dockerfile"
+    else
+        DOCKERFILE="$HOME/workspace/${PROJECT_NAME}/Dockerfile"  # Default for error message
+    fi
 fi
 
 # Check if Dockerfile exists
 if [ ! -f "$DOCKERFILE" ]; then
     echo -e "${RED}✗ Dockerfile not found${NC}"
-    echo "Expected location: $DOCKERFILE"
+    echo ""
+    echo "Searched locations:"
+    echo "  1. ~/workspace/${PROJECT_NAME}/Dockerfile"
+    echo "  2. ~/dockerfiles/${PROJECT_NAME}.Dockerfile"
     echo ""
     read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Enter path to Dockerfile: " CUSTOM_PATH </dev/tty
-    if [ -f "$CUSTOM_PATH" ]; then
+    if [ -n "$CUSTOM_PATH" ] && [ -f "$CUSTOM_PATH" ]; then
         DOCKERFILE="$CUSTOM_PATH"
     else
         echo -e "${RED}✗ File not found: $CUSTOM_PATH${NC}"

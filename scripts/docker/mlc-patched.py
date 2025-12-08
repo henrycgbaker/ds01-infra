@@ -1678,10 +1678,21 @@ def build_docker_create_command(
     # ========== DS01 PATCH: Set CUDA_VISIBLE_DEVICES for MIG isolation ==========
     # AIME base images set NVIDIA_VISIBLE_DEVICES=all and the NVIDIA Container Runtime
     # doesn't properly isolate MIG devices. Setting CUDA_VISIBLE_DEVICES ensures PyTorch
-    # and other CUDA applications only see the allocated device.
+    # and other CUDA applications only see the allocated device(s).
+    #
+    # For multi-GPU containers: device=UUID1,UUID2,UUID3
+    # CUDA_VISIBLE_DEVICES should be set to indices: 0,1,2
     if num_gpus and num_gpus.startswith('device='):
-        device_id = num_gpus.replace('device=', '')
-        cuda_extras.extend(['-e', f'CUDA_VISIBLE_DEVICES={device_id}'])
+        device_ids = num_gpus.replace('device=', '')
+        # Count the number of devices (comma-separated UUIDs)
+        num_devices = len(device_ids.split(','))
+        if num_devices > 1:
+            # Multi-GPU: Set indices 0,1,2,...
+            cuda_visible = ','.join(str(i) for i in range(num_devices))
+            cuda_extras.extend(['-e', f'CUDA_VISIBLE_DEVICES={cuda_visible}'])
+        else:
+            # Single GPU: Use the device ID directly
+            cuda_extras.extend(['-e', f'CUDA_VISIBLE_DEVICES={device_ids}'])
     # ========== END DS01 PATCH ==========
 
     rocm_extras = [
@@ -1713,14 +1724,14 @@ def build_docker_create_command(
         image_with_tag = selected_docker_image
     else:
         # User was set up at runtime via docker run + docker commit
-        # The committed image is {base_image_name}:{container_tag}
+        # The committed image uses :latest tag for consistency with image-create
         if ':' in selected_docker_image:
-            # Custom image with explicit tag - strip existing tag, use container_tag
+            # Custom image with explicit tag - strip existing tag, use :latest
             base_image_name = selected_docker_image.split(':')[0]
-            image_with_tag = f'{base_image_name}:{container_tag}'
+            image_with_tag = f'{base_image_name}:latest'
         else:
-            # AIME base image - append container_tag
-            image_with_tag = f'{selected_docker_image}:{container_tag}'
+            # AIME base image - append :latest
+            image_with_tag = f'{selected_docker_image}:latest'
 
     if 'CUDA' in architecture:
         docker_cmd = base_docker_cmd + cuda_extras + [
@@ -2229,13 +2240,13 @@ def main():
             # DS01 OPTIMIZATION: Skip commit if user is already configured in image
             if not skip_user_setup:
                 # Commit the container: saves the current state of the container as a new image.
-                # DS01 FIX: Handle custom images that already have tags (e.g., ds01-1001/test:latest)
-                # Strip existing tag before appending container_tag
+                # DS01 FIX: Use :latest tag for consistency with image-create
+                # This ensures all DS01 images use the same tagging convention
                 if ':' in selected_docker_image:
                     base_image_name = selected_docker_image.split(':')[0]
                 else:
                     base_image_name = selected_docker_image
-                committed_image = f'{base_image_name}:{container_tag}'
+                committed_image = f'{base_image_name}:latest'
 
                 bash_command_commit = [
                     'docker', 'commit', container_tag, committed_image

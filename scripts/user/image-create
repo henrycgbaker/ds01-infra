@@ -23,6 +23,11 @@ if [[ -f "/opt/ds01-infra/scripts/lib/aime-images.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/aime-images.sh
 fi
 
+# Source shared Dockerfile generator library
+if [[ -f "/opt/ds01-infra/scripts/lib/dockerfile-generator.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/dockerfile-generator.sh
+fi
+
 USERNAME=$(whoami)
 USER_ID=$(id -u)
 GROUP_ID=$(id -g)
@@ -626,18 +631,14 @@ interactive_mode() {
     # New naming convention: ds01-{user-id}/{project-name}:latest
     FULL_IMAGE_NAME="ds01-${USER_ID}/${IMAGE_NAME}"
 
-    # Check if exists (DS01 format or AIME format)
+    # Check if DS01 custom image exists (only check ds01-{uid}/{name}:latest format)
+    # Note: We don't check AIME base image tags (aimehub/...:name._.uid) because those are
+    # just tracking tags on base images, not user-created custom images
     EXISTING_DS01=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep "^${FULL_IMAGE_NAME}:latest$" || true)
-    EXISTING_AIME=$(docker images --format "{{.Repository}}:{{.Tag}}" | grep ":${IMAGE_NAME}\._\.${USER_ID}$" || true)
 
-    if [ -n "$EXISTING_DS01" ] || [ -n "$EXISTING_AIME" ]; then
+    if [ -n "$EXISTING_DS01" ]; then
         echo -e "${YELLOW}⚠ Image with name '${IMAGE_NAME}' already exists${NC}"
-        if [ -n "$EXISTING_DS01" ]; then
-            echo -e "  ${DIM}DS01 image: ${EXISTING_DS01}${NC}"
-        fi
-        if [ -n "$EXISTING_AIME" ]; then
-            echo -e "  ${DIM}AIME image: ${EXISTING_AIME}${NC}"
-        fi
+        echo -e "  ${DIM}DS01 image: ${EXISTING_DS01}${NC}"
         echo ""
         read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Overwrite? [y/N]: " OVERWRITE </dev/tty
@@ -1141,16 +1142,29 @@ create_dockerfile() {
         usecase_packages=""
     fi
 
-    # Determine Dockerfile location based on flag
-    local dockerfile_dir="$DOCKERFILES_DIR"
-    if [ "$PROJECT_DOCKERFILE" = true ] && [ -n "$PROJECT_DIR" ]; then
+    # Extract project name from full image name (ds01-1001/test-project -> test-project)
+    local project_name="${image_name##*/}"  # Remove everything before the last /
+
+    # Determine Dockerfile location - prefer project workspace
+    local dockerfile_dir=""
+    local dockerfile=""
+    local workspace_dir="$HOME/workspace/${project_name}"
+
+    if [ -n "$PROJECT_DIR" ]; then
+        # Explicit project dir specified
         dockerfile_dir="$PROJECT_DIR"
+        dockerfile="$dockerfile_dir/Dockerfile"
+    elif [ -d "$workspace_dir" ]; then
+        # Project workspace exists - use it
+        dockerfile_dir="$workspace_dir"
+        dockerfile="$dockerfile_dir/Dockerfile"
+    else
+        # Create new project workspace (consistent with project-init)
+        dockerfile_dir="$workspace_dir"
+        dockerfile="$dockerfile_dir/Dockerfile"
     fi
 
     mkdir -p "$dockerfile_dir"
-    # Extract project name from full image name (ds01-1001/test-project -> test-project)
-    local project_name="${image_name##*/}"  # Remove everything before the last /
-    local dockerfile="$dockerfile_dir/${project_name}.Dockerfile"
 
     cat > "$dockerfile" << DOCKERFILEEOF
 # DS01 Custom Image: $project_name
@@ -1161,16 +1175,18 @@ create_dockerfile() {
 
 FROM $base_image
 
+# DS01 metadata labels
 LABEL maintainer="$USERNAME"
 LABEL maintainer.id="$USER_ID"
-LABEL aime.mlc.base_image="$base_image"
-LABEL aime.mlc.project="$project_name"
-LABEL aime.mlc.user_id="$USER_ID"
-LABEL aime.mlc.username="$USERNAME"
-LABEL aime.mlc.DS01_MANAGED="true"
-LABEL aime.mlc.DS01_IMAGE="$project_name"
-LABEL aime.mlc.DS01_FRAMEWORK="$framework"
-LABEL aime.mlc.DS01_CREATED="$(date -Iseconds)"
+LABEL ds01.project="$project_name"
+LABEL ds01.framework="$framework"
+LABEL ds01.created="$(date -Iseconds)"
+LABEL ds01.managed="true"
+
+# Build arguments (set automatically by DS01)
+ARG DS01_USER_ID=${USER_ID}
+ARG DS01_GROUP_ID=${GROUP_ID}
+ARG DS01_USERNAME=${USERNAME}
 
 WORKDIR /workspace
 

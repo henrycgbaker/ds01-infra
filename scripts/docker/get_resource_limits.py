@@ -210,10 +210,15 @@ class ResourceLimitParser:
         return output
 
 
+    def get_gpu_allocation_config(self):
+        """Get gpu_allocation section from config"""
+        return self.config.get('gpu_allocation', {})
+
+
 def main():
     """CLI interface for testing"""
     if len(sys.argv) < 2:
-        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--priority|--gpu-hold-time|--container-hold-time|--idle-timeout|--max-runtime]")
+        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--max-containers|--max-mig-per-container|--mig-instances-per-gpu|--allow-full-gpu|--priority|--gpu-hold-time|--container-hold-time|--idle-timeout|--max-runtime]")
         sys.exit(1)
 
     username = sys.argv[1]
@@ -228,6 +233,23 @@ def main():
         limits = parser.get_user_limits(username)
         max_gpus = limits.get('max_gpus_per_user') or limits.get('max_mig_instances', 1)
         print(max_gpus if max_gpus is not None else "unlimited")
+    elif '--max-containers' in sys.argv:
+        limits = parser.get_user_limits(username)
+        max_containers = limits.get('max_containers_per_user', 3)
+        print(max_containers if max_containers is not None else "unlimited")
+    elif '--max-mig-per-container' in sys.argv:
+        limits = parser.get_user_limits(username)
+        # Support both old name (max_gpus_per_container) and new name (max_mig_per_container)
+        max_mig = limits.get('max_mig_per_container') or limits.get('max_gpus_per_container', 1)
+        print(max_mig if max_mig is not None else "unlimited")
+    elif '--mig-instances-per-gpu' in sys.argv:
+        gpu_config = parser.get_gpu_allocation_config()
+        mig_per_gpu = gpu_config.get('mig_instances_per_gpu', 4)
+        print(mig_per_gpu)
+    elif '--allow-full-gpu' in sys.argv:
+        limits = parser.get_user_limits(username)
+        allow_full = limits.get('allow_full_gpu', False)
+        print("true" if allow_full else "false")
     elif '--priority' in sys.argv:
         limits = parser.get_user_limits(username)
         print(limits.get('priority', 10))
