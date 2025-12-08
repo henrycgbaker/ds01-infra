@@ -135,7 +135,8 @@ class GPUAvailabilityChecker:
         return '.' not in str(gpu_slot)
 
     def suggest_gpu_for_user(self, username: str, max_gpus: int = None, priority: int = 10,
-                             require_full_gpu: bool = False, allow_full_gpu: bool = False) -> Dict:
+                             require_full_gpu: bool = False, allow_full_gpu: bool = False,
+                             exclude_slots: list = None) -> Dict:
         """
         Suggest which GPU to allocate for a user.
         Uses least-allocated strategy with full GPU access control.
@@ -146,10 +147,14 @@ class GPUAvailabilityChecker:
             priority: User's allocation priority (not currently used)
             require_full_gpu: If True, only suggest full GPUs (not MIG)
             allow_full_gpu: If False, filter out full GPUs from suggestions
+            exclude_slots: List of slot IDs to exclude (for multi-GPU allocation)
 
         Returns:
             Dict with 'gpu_slot', 'gpu_uuid', or error if none available
         """
+        if exclude_slots is None:
+            exclude_slots = []
+
         availability = self.get_user_available_gpus(username, max_gpus)
 
         if not availability['can_allocate']:
@@ -161,6 +166,10 @@ class GPUAvailabilityChecker:
             }
 
         available = availability['available_gpus']
+
+        # Exclude already-reserved slots (for multi-GPU allocation)
+        for slot in exclude_slots:
+            available.pop(slot, None)
 
         if not available:
             return {

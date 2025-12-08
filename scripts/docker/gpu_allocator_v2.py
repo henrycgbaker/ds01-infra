@@ -401,7 +401,8 @@ class GPUAllocatorSmart:
                 for _ in range(num_full_gpus):
                     suggestion = self.availability_checker.suggest_gpu_for_user(
                         username, max_mig_total, self._get_user_priority(username),
-                        require_full_gpu=True, allow_full_gpu=True
+                        require_full_gpu=True, allow_full_gpu=True,
+                        exclude_slots=allocated_slots
                     )
                     if suggestion['success']:
                         allocated_slots.append(suggestion['gpu_slot'])
@@ -415,7 +416,8 @@ class GPUAllocatorSmart:
                 for _ in range(remaining_migs_needed):
                     suggestion = self.availability_checker.suggest_gpu_for_user(
                         username, max_mig_total, self._get_user_priority(username),
-                        require_full_gpu=False, allow_full_gpu=can_use_full
+                        require_full_gpu=False, allow_full_gpu=can_use_full,
+                        exclude_slots=allocated_slots
                     )
                     if suggestion['success']:
                         allocated_slots.append(suggestion['gpu_slot'])
@@ -430,7 +432,8 @@ class GPUAllocatorSmart:
                 for _ in range(num_migs):
                     suggestion = self.availability_checker.suggest_gpu_for_user(
                         username, max_mig_total, self._get_user_priority(username),
-                        require_full_gpu=False, allow_full_gpu=can_use_full
+                        require_full_gpu=False, allow_full_gpu=can_use_full,
+                        exclude_slots=allocated_slots
                     )
                     if suggestion['success']:
                         slot = suggestion['gpu_slot']
