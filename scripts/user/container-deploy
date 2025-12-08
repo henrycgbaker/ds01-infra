@@ -442,8 +442,7 @@ export DS01_CONTAINER_NAME_FILE="$CONTAINER_NAME_FILE"
 # Run container-create normally (NOT capturing output - breaks interactive prompts)
 if ! "$CONTAINER_CREATE" "${CREATE_ARGS[@]}"; then
     rm -f "$CONTAINER_NAME_FILE"
-    echo ""
-    echo -e "${RED}✗ Container creation failed${NC}"
+    # Detailed error message already shown by container-create/mlc-create-wrapper
     exit 1
 fi
 

@@ -1135,15 +1135,7 @@ if bash "$MLC_WRAPPER" "${WRAPPER_ARGS[@]}"; then
     fi
 else
     EXIT_CODE=$?
-    echo ""
-    echo -e "${RED}✗ Container creation failed (exit code: $EXIT_CODE)${NC}"
-    echo ""
-    echo -e "${YELLOW}Common issues:${NC}"
-    echo "  • GPU allocation failure - try 'gpu-status' to check availability"
-    echo "  • Image not found - run 'image-create <name>' first"
-    echo "  • Container already exists - use 'container-remove <name>' first"
-    echo ""
-    echo -e "${YELLOW}For detailed error output, check the messages above.${NC}"
-    echo ""
+    # Detailed error message should already be shown by mlc-create-wrapper
+    # Just exit with the same code - don't add confusing generic messages
     exit $EXIT_CODE
 fi

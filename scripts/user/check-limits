@@ -32,8 +32,9 @@ get_limits() {
 # Get current GPU allocations
 get_gpu_usage() {
     local count
+    # Count lines with GPU allocation (format: "  🟢 container: GPU X.X [interface]")
     count=$(python3 "$SCRIPT_DIR/docker/gpu-state-reader.py" user "$USERNAME" 2>/dev/null | \
-        grep -c "gpu_slot" 2>/dev/null) || count=0
+        grep -c "GPU [0-9]" 2>/dev/null) || count=0
     echo "${count:-0}"
 }
 
@@ -57,11 +58,12 @@ parse_limit() {
     fi
 }
 
-# Soft limit threshold (read from config or default to 80%)
-SOFT_LIMIT_THRESHOLD="${SOFT_LIMIT_THRESHOLD:-80}"
+# Usage bar thresholds
+WARNING_THRESHOLD="${WARNING_THRESHOLD:-70}"   # Yellow at 70%+
+CRITICAL_THRESHOLD="${CRITICAL_THRESHOLD:-85}" # Red at 85%+
 
-# Format usage bar with soft limit coloring
-# Green: <80%, Yellow: 80-99%, Red: 100%
+# Format usage bar with threshold coloring
+# Green: 0-69%, Yellow: 70-84%, Red: 85%+
 usage_bar() {
     local current="${1:-0}"
     local max="${2:-1}"
@@ -85,11 +87,11 @@ usage_bar() {
     local filled=$((percent * width / 100))
     local empty=$((width - filled))
 
-    # Color based on soft limit threshold
+    # Color based on thresholds: green <70%, yellow 70-84%, red 85%+
     local color="$GREEN"
-    if [[ $percent -ge 100 ]]; then
+    if [[ $percent -ge $CRITICAL_THRESHOLD ]]; then
         color="$RED"
-    elif [[ $percent -ge $SOFT_LIMIT_THRESHOLD ]]; then
+    elif [[ $percent -ge $WARNING_THRESHOLD ]]; then
         color="$YELLOW"
     fi
 
@@ -114,13 +116,19 @@ main() {
         exit 1
     fi
 
-    # Parse key limits
-    local max_mig=$(echo "$limits" | grep -oP 'max_mig_instances:\s*\K\S+' || echo "2")
-    local max_containers=$(echo "$limits" | grep -oP 'max_containers_per_user:\s*\K\S+' || echo "3")
-    local allow_full_gpu=$(echo "$limits" | grep -oP 'allow_full_gpu:\s*\K\S+' || echo "False")
-    local max_gpus_per_container=$(echo "$limits" | grep -oP 'max_gpus_per_container:\s*\K\S+' || echo "1")
-    local group=$(echo "$limits" | grep -oP '_group:\s*\K\S+' || echo "student")
-    local storage=$(echo "$limits" | grep -oP 'storage_workspace:\s*\K\S+' || echo "100G")
+    # Parse key limits (from get_resource_limits.py human-readable output)
+    local max_mig=$(echo "$limits" | grep -oP 'Max GPUs \(simultaneous\):\s*\K\S+' || echo "2")
+    local max_containers=$(echo "$limits" | grep -oP 'Max containers:\s*\K\S+' || echo "3")
+    local allow_full_gpu=$(echo "$limits" | grep -i "Full GPU access" | grep -q "Allowed" && echo "true" || echo "false")
+    local max_gpus_per_container=$(echo "$limits" | grep -oP 'Max GPUs per container:\s*\K\S+' || echo "1")
+    local group=$(echo "$limits" | grep -oP '\(group:\s*\K[^)]+' || echo "student")
+    local storage=$(echo "$limits" | grep -oP 'Workspace.*:\s*\K\S+' || echo "100G")
+
+    # Lifecycle settings
+    local idle_timeout=$(echo "$limits" | grep -oP 'Idle timeout:\s*\K\S+' || echo "2h")
+    local max_runtime=$(echo "$limits" | grep -oP 'Max runtime:\s*\K\S+' || echo "24h")
+    local gpu_hold=$(echo "$limits" | grep -oP 'GPU hold after stop:\s*\K\S+' || echo "0.25h")
+    local container_hold=$(echo "$limits" | grep -oP 'Container hold \(stopped\):\s*\K\S+' || echo "0.5h")
 
     max_mig=$(parse_limit "$max_mig")
     max_containers=$(parse_limit "$max_containers")
@@ -166,12 +174,51 @@ main() {
     echo ""
 
     # Storage
-    echo -e "${BOLD}Storage Limit:${NC} $storage"
-    if command -v quota &>/dev/null; then
-        quota -s 2>/dev/null | tail -n +3 | head -1 || echo "  (quota system not active)"
+    echo -e "${BOLD}Storage (workspace):${NC}"
+    # Convert storage limit to GB for comparison
+    local storage_limit_gb=$(echo "$storage" | sed 's/G$//' | sed 's/T$/*1024/' | bc 2>/dev/null || echo "100")
+
+    # Get current workspace usage in GB
+    local workspace_dir="$HOME/workspace"
+    local storage_used_gb=0
+    if [ -d "$workspace_dir" ]; then
+        storage_used_gb=$(du -s "$workspace_dir" 2>/dev/null | cut -f1)
+        storage_used_gb=$((storage_used_gb / 1024 / 1024))  # Convert KB to GB
+    fi
+
+    # Also check home directory if workspace doesn't exist or is small
+    if [ "$storage_used_gb" -lt 1 ]; then
+        storage_used_gb=$(du -s "$HOME" 2>/dev/null | cut -f1)
+        storage_used_gb=$((storage_used_gb / 1024 / 1024))  # Convert KB to GB
+    fi
+
+    # Display usage bar
+    echo -n "  "
+    usage_bar "$storage_used_gb" "$storage_limit_gb"
+    echo -e "  (${storage_used_gb}G used of ${storage} limit)"
+    echo ""
+
+    # Lifecycle / Automation
+    echo -e "${BOLD}Lifecycle (auto-cleanup):${NC}"
+    if [[ "$idle_timeout" == "None" || "$idle_timeout" == "null" ]]; then
+        echo -e "  Idle timeout:           ${GREEN}None${NC} (no auto-stop)"
     else
-        local home_usage=$(du -sh "$HOME" 2>/dev/null | cut -f1 || echo "unknown")
-        echo "  Current home directory: $home_usage"
+        echo -e "  Idle timeout:           $idle_timeout (auto-stop if CPU < 1%)"
+    fi
+    if [[ "$max_runtime" == "None" || "$max_runtime" == "null" ]]; then
+        echo -e "  Max runtime:            ${GREEN}None${NC} (no limit)"
+    else
+        echo -e "  Max runtime:            $max_runtime (auto-stop after this)"
+    fi
+    if [[ "$gpu_hold" == "None" || "$gpu_hold" == "null" ]]; then
+        echo -e "  GPU hold after stop:    ${GREEN}Indefinite${NC}"
+    else
+        echo -e "  GPU hold after stop:    $gpu_hold (then GPU freed)"
+    fi
+    if [[ "$container_hold" == "None" || "$container_hold" == "null" ]]; then
+        echo -e "  Container hold:         ${GREEN}Never removed${NC}"
+    else
+        echo -e "  Container hold:         $container_hold (then removed)"
     fi
     echo ""
 
@@ -224,7 +271,7 @@ main() {
             echo -e "${BLUE}ℹ FULL GPU ACCESS${NC}"
             echo "  Your group ($group) can only use MIG instances, not full GPUs."
             echo "  MIG instances provide isolated GPU slices - sufficient for most workloads."
-            echo "  If you need full GPU access, contact your administrator."
+            echo "  If you need full GPU access, contact h.baker@hertie-school.org."
             echo ""
         fi
     fi
@@ -234,7 +281,7 @@ main() {
     if [[ $warnings -eq 0 && $soft_warnings -eq 0 ]]; then
         echo -e "${GREEN}✓ All resources available${NC}"
     elif [[ $warnings -gt 0 ]]; then
-        echo -e "${RED}$warnings limit(s) reached - see above${NC}"
+        echo -e "${RED}$warnings limit(s) reached - if you need more resoures contact h.baker@hertie-school.org${NC}\n"
     else
         echo -e "${YELLOW}$soft_warnings notice(s) - approaching limits${NC}"
     fi
@@ -259,14 +306,6 @@ if positions:
             echo "  You'll be notified when a GPU is available."
         fi
     fi
-
-    echo ""
-    echo "Commands:"
-    echo "  container-deploy <name>   Create and start a container"
-    echo "  container-list            View your containers"
-    echo "  gpu-queue list            View GPU queue"
-    echo "  check-limits --verbose    Show detailed limit info"
-    echo ""
 }
 
 main
