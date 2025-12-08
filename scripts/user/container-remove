@@ -195,6 +195,32 @@ cleanup_gpu_state() {
     fi
 }
 
+# Detect new pip packages installed in container vs base image
+# Returns newline-separated list of new packages, or empty if none
+detect_new_packages() {
+    local container_tag="$1"
+    local image="$2"
+
+    # Get pip packages from container (only names, not versions for cleaner output)
+    local container_pkgs=$(docker exec "$container_tag" pip list --format=freeze 2>/dev/null | cut -d= -f1 | sort -u)
+    if [ -z "$container_pkgs" ]; then
+        echo ""
+        return
+    fi
+
+    # Get pip packages from base image
+    local image_pkgs=$(docker run --rm --entrypoint pip "$image" list --format=freeze 2>/dev/null | cut -d= -f1 | sort -u)
+    if [ -z "$image_pkgs" ]; then
+        # Can't determine base packages, assume there might be changes
+        echo ""
+        return
+    fi
+
+    # Find packages in container but not in image
+    local new_pkgs=$(comm -23 <(echo "$container_pkgs") <(echo "$image_pkgs") 2>/dev/null)
+    echo "$new_pkgs"
+}
+
 # Remove image associated with a container
 remove_container_image() {
     local container_tag="$1"
@@ -234,6 +260,7 @@ cleanup_container() {
     local remove_images_arg="$5"
     local remove_volumes_arg="$6"
     local skip_removal_confirm="$7"
+    local skip_save_prompt="$8"
     local container_tag="${container_name}._.$USER_ID"
 
     # Check if container exists
@@ -285,74 +312,82 @@ cleanup_container() {
         fi
     fi
 
-    # Prompt to save changes to image
-    # Show when: not in force mode AND (interactive OR called from retire workflow)
-    if [ "$force" != "true" ] && ([ "$interactive" = "true" ] || [ "$skip_removal_confirm" = "true" ]); then
-        echo ""
-        echo -e "${CYAN}━━━ Save Changes to Image ━━━${NC}"
-        echo ""
-
+    # Prompt to save changes to image - ONLY if new packages detected
+    # Show when: not skipped AND not forced AND (interactive OR called from retire workflow)
+    if [ "$skip_save_prompt" != "true" ] && [ "$force" != "true" ] && ([ "$interactive" = "true" ] || [ "$skip_removal_confirm" = "true" ]); then
         # Get the image used by this container
         local image=$(docker inspect --format "{{.Config.Image}}" "$container_tag" 2>/dev/null || echo "")
 
         if [ -n "$image" ]; then
-            if [ "$guided" = "true" ]; then
-                echo -e "${CYAN}ℹ ${NC}${BOLD}Before removing this container:${NC}"
-                echo ""
-                echo "  Did you install new packages or make configuration changes?"
-                echo "  You can save them back to the Docker image for future use."
-                echo ""
-                echo -e "${BOLD}What gets saved:${NC}"
-                echo "  • New pip/conda packages installed"
-                echo "  • Configuration file changes"
-                echo "  • System packages (apt/yum)"
-                echo ""
-                echo -e "${BOLD}What does NOT get saved:${NC}"
-                echo "  • Your workspace files (already safe in ~/workspace/)"
-                echo "  • Running processes"
-                echo ""
-            fi
+            # Detect new packages (this may take a moment)
+            local new_packages=$(detect_new_packages "$container_tag" "$image")
+            local pkg_count=$(echo "$new_packages" | grep -c . 2>/dev/null || echo "0")
 
-            echo -e "${YELLOW}💡${NC} Save container changes to image: ${CYAN}$image${NC}?"
-            echo -e "   ${DIM}(This updates the image with any packages/configs you installed)${NC}"
-            echo ""
-            echo -e "${YELLOW}⚠ IMPORTANT:${NC} This uses 'docker commit' (quick but not reproducible)"
-            echo -e "   ${BOLD}Recommended:${NC} Update Dockerfile instead: ${GREEN}image-update $container_name --add \"package1 package2\"${NC}"
-            echo -e "   ${DIM}Why? Dockerfile changes are reproducible, version-controlled, and team-shareable${NC}"
-            echo ""
-            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-            read -p "Save changes to image anyway? [y/N]: " SAVE_IMAGE </dev/tty
-
-            if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
+            # Only show prompt if new packages were detected
+            if [ "$pkg_count" -gt 0 ]; then
                 echo ""
-                echo -e "${CYAN}Committing changes to image...${NC}"
+                echo -e "${CYAN}━━━ New Packages Detected ━━━${NC}"
+                echo ""
 
-                # Commit container changes to image
-                if docker commit "$container_tag" "$image" > /dev/null 2>&1; then
-                    echo -e "${GREEN}✓${NC} Changes saved to image: $image"
-                    echo ""
-                    echo -e "${BOLD}What was saved:${NC}"
-                    echo "  • All package installations (pip, conda, apt, etc.)"
-                    echo "  • Configuration file changes"
-                    echo "  • System modifications"
-                    echo ""
-                    echo -e "${YELLOW}⚠ Remember:${NC} These changes are NOT in your Dockerfile"
-                    echo -e "   Next ${GREEN}image-update${NC} rebuild will overwrite these committed changes"
-                    echo -e "   For permanent changes: ${GREEN}image-update $container_name --add \"your-packages\"${NC}"
-                    echo ""
-                    echo -e "${DIM}Next time you run: ${GREEN}container-deploy $container_name${NC}"
-                    echo -e "${DIM}The container will include these changes (until next Dockerfile rebuild)${NC}"
-                    echo ""
+                # Format packages for display and command
+                local pkg_list=$(echo "$new_packages" | tr '\n' ' ' | sed 's/ $//')
+
+                echo -e "${YELLOW}💡${NC} Found ${BOLD}$pkg_count${NC} new package(s) installed in container:"
+                echo ""
+                # Show packages (limit display if too many)
+                if [ "$pkg_count" -le 10 ]; then
+                    echo "$new_packages" | while read -r pkg; do
+                        [ -n "$pkg" ] && echo -e "  • ${CYAN}$pkg${NC}"
+                    done
                 else
-                    echo -e "${YELLOW}⚠${NC} Failed to commit changes to image"
+                    echo "$new_packages" | head -8 | while read -r pkg; do
+                        [ -n "$pkg" ] && echo -e "  • ${CYAN}$pkg${NC}"
+                    done
+                    echo -e "  ${DIM}... and $((pkg_count - 8)) more${NC}"
+                fi
+                echo ""
+
+                if [ "$guided" = "true" ]; then
+                    echo -e "${BOLD}You have two options to preserve these packages:${NC}"
+                    echo ""
+                    echo -e "  ${BOLD}1. Update Dockerfile (Recommended)${NC}"
+                    echo "     Reproducible, version-controlled, team-shareable"
+                    echo ""
+                    echo -e "  ${BOLD}2. Docker commit (Quick but fragile)${NC}"
+                    echo "     Fast, but changes lost on next Dockerfile rebuild"
                     echo ""
                 fi
-            else
+
+                echo -e "${BOLD}Recommended:${NC} Update Dockerfile with:"
+                echo -e "  ${GREEN}image-update $container_name --add \"$pkg_list\"${NC}"
                 echo ""
-                echo -e "${YELLOW}Skipped.${NC} Changes will be lost when container is removed."
-                echo -e "${DIM}Tip: Update Dockerfile with ${GREEN}image-update${NC}, then rebuild image${NC}"
+                echo -e "${YELLOW}⚠${NC} Docker commit is quick but NOT reproducible"
                 echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Save via docker commit anyway? [y/N]: " SAVE_IMAGE </dev/tty
+
+                if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
+                    echo ""
+                    echo -e "${CYAN}Committing changes to image...${NC}"
+
+                    if docker commit "$container_tag" "$image" > /dev/null 2>&1; then
+                        echo -e "${GREEN}✓${NC} Changes saved to image"
+                        echo ""
+                        echo -e "${YELLOW}⚠ Remember:${NC} Next Dockerfile rebuild will overwrite these"
+                        echo -e "   For permanent changes: ${GREEN}image-update $container_name --add \"$pkg_list\"${NC}"
+                        echo ""
+                    else
+                        echo -e "${YELLOW}⚠${NC} Failed to commit changes to image"
+                        echo ""
+                    fi
+                else
+                    echo ""
+                    echo -e "Skipped. To add packages permanently:"
+                    echo -e "  ${GREEN}image-update $container_name --add \"$pkg_list\"${NC}"
+                    echo ""
+                fi
             fi
+            # If no new packages detected, skip the entire prompt silently
         fi
     fi
 
@@ -587,6 +622,7 @@ CLEANUP_IMAGES=false
 CLEANUP_VOLUMES=false
 FORCE=false
 SKIP_REMOVAL_CONFIRM=false
+SKIP_SAVE_PROMPT=false
 DRY_RUN=false
 
 while [[ $# -gt 0 ]]; do
@@ -613,6 +649,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-removal-confirm)
             SKIP_REMOVAL_CONFIRM=true
+            shift
+            ;;
+        --skip-save-prompt)
+            SKIP_SAVE_PROMPT=true
             shift
             ;;
         --dry-run)
@@ -757,7 +797,7 @@ fi
 if [ -n "$CONTAINER_NAME" ]; then
     # Interactive mode: prompt for image/volume removal (overrides flags for single container)
     # Non-interactive mode: use flags
-    cleanup_container "$CONTAINER_NAME" "$FORCE" "$INTERACTIVE_MODE" "$GUIDED" "$CLEANUP_IMAGES" "$CLEANUP_VOLUMES" "$SKIP_REMOVAL_CONFIRM"
+    cleanup_container "$CONTAINER_NAME" "$FORCE" "$INTERACTIVE_MODE" "$GUIDED" "$CLEANUP_IMAGES" "$CLEANUP_VOLUMES" "$SKIP_REMOVAL_CONFIRM" "$SKIP_SAVE_PROMPT"
     exit $?
 fi
 

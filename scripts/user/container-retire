@@ -46,6 +46,30 @@ else
     exit 1
 fi
 
+# Detect new pip packages installed in container vs base image
+# Returns newline-separated list of new packages, or empty if none
+detect_new_packages() {
+    local container_tag="$1"
+    local image="$2"
+
+    # Get pip packages from container (only names, not versions)
+    local container_pkgs
+    container_pkgs=$(docker exec "$container_tag" pip list --format=freeze 2>/dev/null | cut -d= -f1 | sort -u)
+    if [ -z "$container_pkgs" ]; then
+        return
+    fi
+
+    # Get pip packages from base image (run temp container)
+    local image_pkgs
+    image_pkgs=$(docker run --rm --entrypoint pip "$image" list --format=freeze 2>/dev/null | cut -d= -f1 | sort -u)
+    if [ -z "$image_pkgs" ]; then
+        return
+    fi
+
+    # Find packages in container but not in image
+    comm -23 <(echo "$container_pkgs") <(echo "$image_pkgs") 2>/dev/null
+}
+
 usage() {
     echo ""
     echo -e "${BOLD}DS01 Container Retire${NC}"
@@ -406,6 +430,75 @@ if [ "$FORCE" != "true" ] && [ "$SKIP_INITIAL_CONFIRM" != "true" ]; then
     echo ""
 fi
 
+# Check for new packages BEFORE stopping (while container is still running)
+PACKAGES_SAVED=false
+if [ "$CONTAINER_STATUS" = "running" ] && [ "$FORCE" != "true" ]; then
+    # Get the image used by this container
+    IMAGE=$(docker inspect --format "{{.Config.Image}}" "$CONTAINER_TAG" 2>/dev/null || echo "")
+
+    if [ -n "$IMAGE" ]; then
+        # Detect new packages
+        NEW_PACKAGES=$(detect_new_packages "$CONTAINER_TAG" "$IMAGE")
+        PKG_COUNT=$(echo "$NEW_PACKAGES" | grep -c . 2>/dev/null || echo 0)
+        # Fix: grep -c can include newline in output
+        PKG_COUNT=$(echo "$PKG_COUNT" | tr -d '[:space:]')
+
+        if [ "$PKG_COUNT" -gt 0 ] 2>/dev/null; then
+            echo -e "${CYAN}━━━ New Packages Detected ━━━${NC}"
+            echo ""
+
+            # Format packages for display and command
+            PKG_LIST=$(echo "$NEW_PACKAGES" | tr '\n' ' ' | sed 's/ $//')
+
+            echo -e "${YELLOW}💡${NC} Found ${BOLD}$PKG_COUNT${NC} new package(s) installed:"
+            echo ""
+            if [ "$PKG_COUNT" -le 10 ]; then
+                echo "$NEW_PACKAGES" | while read -r pkg; do
+                    [ -n "$pkg" ] && echo -e "  • ${CYAN}$pkg${NC}"
+                done
+            else
+                echo "$NEW_PACKAGES" | head -8 | while read -r pkg; do
+                    [ -n "$pkg" ] && echo -e "  • ${CYAN}$pkg${NC}"
+                done
+                echo -e "  ${DIM}... and $((PKG_COUNT - 8)) more${NC}"
+            fi
+            echo ""
+
+            if [ "$GUIDED" = true ]; then
+                echo -e "${BOLD}Options to preserve these packages:${NC}"
+                echo ""
+                echo -e "  ${BOLD}1. Update Dockerfile (Recommended)${NC}"
+                echo "     Reproducible, version-controlled, shareable"
+                echo ""
+                echo -e "  ${BOLD}2. Docker commit (Quick but fragile)${NC}"
+                echo "     Fast, but lost on next Dockerfile rebuild"
+                echo ""
+            fi
+
+            echo -e "${BOLD}Recommended:${NC} Update Dockerfile with:"
+            echo -e "  ${GREEN}image-update $CONTAINER_NAME --add \"$PKG_LIST\"${NC}"
+            echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+            read -p "Save via docker commit instead? [y/N]: " SAVE_IMAGE </dev/tty
+
+            if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
+                echo ""
+                echo -e "${CYAN}Committing changes to image...${NC}"
+                if docker commit "$CONTAINER_TAG" "$IMAGE" > /dev/null 2>&1; then
+                    echo -e "${GREEN}✓${NC} Changes saved to image"
+                    PACKAGES_SAVED=true
+                else
+                    echo -e "${YELLOW}⚠${NC} Failed to commit changes"
+                fi
+            else
+                echo ""
+                echo -e "Skipped. To add permanently: ${GREEN}image-update $CONTAINER_NAME --add \"$PKG_LIST\"${NC}"
+            fi
+            echo ""
+        fi
+    fi
+fi
+
 # Step 1: Stop container (if running)
 if [ "$CONTAINER_STATUS" = "running" ]; then
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -443,9 +536,10 @@ fi
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# Call container-remove with --skip-removal-confirm to skip its removal confirmation
-# (we already confirmed above), and pass --force to skip save image prompt in automated contexts
-REMOVE_ARGS=("--skip-removal-confirm")
+# Call container-remove with flags to skip prompts we already handled
+# --skip-removal-confirm: we already confirmed above
+# --skip-save-prompt: we already handled package detection above
+REMOVE_ARGS=("--skip-removal-confirm" "--skip-save-prompt")
 if [ "$GUIDED" = true ]; then
     REMOVE_ARGS+=("--guided")
 fi

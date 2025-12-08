@@ -626,52 +626,36 @@ case $START_MODE in
             # Flush any leftover stdin from container session
             read -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
 
-            echo -e "${BOLD}What would you like to do?${NC}"
-            echo ""
-            echo -e "${CYAN}1)${NC} ${BOLD}Keep running${NC} (exit session, container stays active)"
-            echo "   • You can reconnect anytime"
-            echo "   • GPU remains allocated to this container"
-            if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
-                echo -e "   • Will auto-stop after ${CYAN}$idle_timeout${NC} of GPU inactivity"
-            fi
-            if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
-                echo -e "   • Max runtime: ${CYAN}$max_runtime${NC}"
-            fi
-            echo ""
-            echo -e "${CYAN}2)${NC} ${BOLD}Retire container${NC} (stop + remove, free GPU immediately)"
-            echo "   • Removes container instance"
-            echo "   • GPU freed immediately for others"
-            echo "   • Workspace files remain safe"
-            echo -e "   • Can recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
-            echo ""
-
-            # Show guided explanation before prompt (if guided mode)
+            # Guided mode: EXPLAIN → PAUSE → CHOOSE pattern
             if [ "$GUIDED" = true ]; then
-                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-                echo -e "${BOLD}Understanding Your Options${NC}"
-                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${CYAN}ℹ${NC} ${BOLD}Understanding Your Options${NC}"
                 echo ""
-                echo -e "${BOLD}Option 1: Keep Running${NC}"
-                echo "  • Container stays active in the background"
-                echo "  • All processes, environments, and data preserved"
-                echo "  • GPU remains allocated to you (other users cannot use it)"
-                echo "  • You can reconnect anytime with same state"
-                echo "  • Container will auto-retire at max runtime limit"
+                echo "Your container exited but is still running in the background."
                 echo ""
-                echo -e "${BOLD}Option 2: Retire Container${NC}"
-                echo "  • Stops all processes and removes container instance"
-                echo "  • GPU freed immediately for other users"
+                echo -e "${BOLD}Option 1 - Keep Running:${NC}"
+                echo "  • Container stays active with GPU allocated"
+                echo -e "  • Reconnect with: ${GREEN}container-attach $CONTAINER_NAME${NC}"
+                if [ "$idle_timeout" != "None" ] && [ "$idle_timeout" != "null" ]; then
+                    echo -e "  • Auto-stops after ${CYAN}$idle_timeout${NC} of GPU inactivity"
+                fi
+                echo ""
+                echo -e "${BOLD}Option 2 - Retire Container:${NC}"
+                echo "  • Stops and removes container, frees GPU"
                 echo "  • Workspace files remain 100% safe"
-                echo "  • Can recreate container from image anytime"
-                echo "  • Be a good citizen - frees resources quickly!"
+                echo -e "  • Recreate anytime with: ${GREEN}container-deploy $CONTAINER_NAME${NC}"
                 echo ""
                 echo -e "${YELLOW}💡 Think of it like:${NC}"
-                echo "  Keep running = leave laptop on but close the lid"
-                echo "  Retire = shut down laptop (files still on disk)"
+                echo "  Keep = close laptop lid  |  Retire = shut down (files safe)"
                 echo ""
-                read -p "Press Enter to choose..." </dev/tty
+                read -p "Press Enter to continue..." </dev/tty
                 echo ""
             fi
+
+            echo -e "${BOLD}What would you like to do?${NC}"
+            echo ""
+            echo -e "${CYAN}1)${NC} Keep running ${DIM}(reconnect anytime, GPU stays allocated)${NC}"
+            echo -e "${CYAN}2)${NC} Retire ${DIM}(stop + remove, free GPU)${NC}"
+            echo ""
 
             # Prompt with default to Keep running (safest - prevents accidental removal)
             read -p "Choose [1=keep, 2=retire] (default: 1): " CHOICE </dev/tty
@@ -683,9 +667,9 @@ case $START_MODE in
             case "$CHOICE" in
                 1)
                     echo -e "${GREEN}✓${NC} Container kept running"
-                    echo ""
 
                     if [ "$GUIDED" = true ]; then
+                        echo ""
                         echo -e "${CYAN}━━━ Reconnecting to Your Container ━━━${NC}"
                         echo ""
                         echo -e "${BOLD}Option A: Using Terminal${NC}"
@@ -696,19 +680,9 @@ case $START_MODE in
                         echo "  2. Select your container"
                         echo ""
                     else
-                        echo -e "${BOLD}Next steps:${NC}"
                         echo -e "  Reconnect: ${GREEN}container-attach $CONTAINER_NAME${NC}"
-                        echo -e "  Status:    ${GREEN}container-list${NC}"
                         echo ""
                     fi
-
-                    if [ "$max_runtime" != "None" ] && [ "$max_runtime" != "null" ]; then
-                        echo -e "${CYAN}ℹ${NC} ${DIM}Container will auto-retire at max runtime (${max_runtime})${NC}"
-                        echo ""
-                    fi
-                    echo -e "${YELLOW}💡 Tip:${NC} When completely done, ${GREEN}container-retire $CONTAINER_NAME${NC}"
-                    echo "   (frees GPU for others)"
-                    echo ""
                     ;;
                 2)
                     echo -e "${YELLOW}Retiring container...${NC}"
