@@ -189,7 +189,7 @@ Without OPA blocking, the system relies on "security through obscurity":
 ### Created
 - `/opt/ds01-infra/config/systemd/opa-docker-authz.service`
 - `/opt/ds01-infra/config/docker/daemon.json`
-- `/opt/ds01-infra/docs/docker-permissions-migration.md` (this file)
+- `/opt/ds01-infra/docs-user/docker-permissions-migration.md` (this file)
 
 ### Modified
 - `/opt/ds01-infra/scripts/docker/docker-wrapper.sh` - Added visibility filtering

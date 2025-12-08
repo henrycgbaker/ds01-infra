@@ -5,8 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'docs/**'
-      - '!docs/internal/**'
+      - 'docs-user/**'
+      - '!docs-user/internal/**'
 
   workflow_dispatch:  # Allow manual trigger
 
@@ -32,15 +32,15 @@ jobs:
           rm -rf target/docs/
           mkdir -p target/docs/
 
-          # Sync user-facing docs only
-          cp source/docs/README.md target/docs/
-          cp source/docs/quick-reference.md target/docs/
-          cp -r source/docs/getting-started target/docs/
-          cp -r source/docs/guides target/docs/
-          cp -r source/docs/background target/docs/
-          cp -r source/docs/reference target/docs/
-          cp -r source/docs/troubleshooting target/docs/
-          cp -r source/docs/advanced target/docs/
+          # Sync user-facing docs only (from docs-user/ in source)
+          cp source/docs-user/README.md target/docs/
+          cp source/docs-user/quick-reference.md target/docs/
+          cp -r source/docs-user/getting-started target/docs/
+          cp -r source/docs-user/guides target/docs/
+          cp -r source/docs-user/background target/docs/
+          cp -r source/docs-user/reference target/docs/
+          cp -r source/docs-user/troubleshooting target/docs/
+          cp -r source/docs-user/advanced target/docs/
 
       - name: Check for changes
         id: changes

@@ -79,7 +79,7 @@ show_welcome() {
         echo -e "  Option A: VS Code Dev Containers (recommended for ML)"
         echo -e "    → Attach VS Code directly to THIS container"
         echo -e "    → All code runs in container automatically (GPU access)"
-        echo -e "    → See: /opt/ds01-infra/docs/vscode-container-setup.md"
+        echo -e "    → See: /opt/ds01-infra/docs-user/advanced/vscode-remote.md"
         echo ""
         echo -e "  Option B: VS Code Remote SSH (quick edits)"
         echo -e "    → SSH to DS01 host, edit files in ~/workspace"
