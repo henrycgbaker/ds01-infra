@@ -31,7 +31,7 @@ defaults:
   # Container lifecycle
   max_containers_per_user: 3        # Max simultaneous containers
   max_runtime: 24h                  # Max walltime (null = no limit) - increased from 12h for overnight training
-  idle_timeout: 2h                  # Auto-stop after X hours of GPU inactivity - increased from 0.5h
+  idle_timeout: 0.5h                  # Auto-stop after X hours of GPU inactivity - increased from 0.5h
   gpu_hold_after_stop: 0.25h        # How long to hold GPU after container stopped (null = indefinite)
   container_hold_after_stop: 0.5h   # Auto-remove container after X hours stopped (null = never auto-remove)
   max_tasks: 32768                  # Max tasks for systemd slice (increased from 512 - fixes libgomp thread creation)
@@ -43,7 +43,7 @@ groups:
   student:
     members: []  # TO DO: autopopulate from LDAP group 'ds01-students'
     allow_full_gpu: false           # Students can ONLY use MIG instances
-    max_mig_per_container: 1        # 1 MIG per container
+    max_mig_per_container: 2        # Up to 2 MIGs per container
 
   researcher:
     members: [s.kaiser@hertie-school.lan, 204214@hertie-school.lan, 204214, c.fusarbassini@hertie-school.lan, c.fusarbassini]

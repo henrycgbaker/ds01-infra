@@ -1988,6 +1988,8 @@ if eval "$BUILD_CMD"; then
             echo ""
             echo -e "  ${BOLD}2.${NC} Deploy new container from updated image:"
             echo -e "     ${GREEN}container-deploy $CONTAINER_BASE_NAME${NC}"
+            echo -e "                 OR"
+            echo -e "     ${GREEN}project-launch $CONTAINER_BASE_NAME${NC}"
         fi
     else
         echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
@@ -1997,6 +1999,8 @@ if eval "$BUILD_CMD"; then
         echo "Your image is ready! Deploy a container to use it:"
         echo ""
         echo -e "  ${GREEN}container-deploy $CONTAINER_BASE_NAME${NC}"
+        echo -e "              OR"
+        echo -e "  ${GREEN}project-launch $CONTAINER_BASE_NAME${NC}"
     fi
     echo ""
 
