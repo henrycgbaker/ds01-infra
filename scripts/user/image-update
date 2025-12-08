@@ -650,19 +650,21 @@ parse_system_packages() {
 }
 
 # Detect Dockerfile format
-# Returns: "custom-section" or "requirements-txt" or "unknown"
+# Returns: "requirements-txt" or "custom-section" or "unknown"
+# Note: Check requirements.txt FIRST since Dockerfiles may have both
 detect_dockerfile_format() {
     local dockerfile="$1"
 
-    # Check for image-create style: has "# Custom additional packages"
-    if grep -q "^# Custom additional packages" "$dockerfile"; then
-        echo "custom-section"
+    # Check for requirements.txt pattern FIRST (takes priority)
+    # This is the primary package install method
+    if grep -q "pip install.*-r.*/tmp/requirements.txt\|COPY requirements.txt" "$dockerfile"; then
+        echo "requirements-txt"
         return 0
     fi
 
-    # Check for project-init style: uses requirements.txt
-    if grep -q "pip install.*-r.*/tmp/requirements.txt\|COPY requirements.txt" "$dockerfile"; then
-        echo "requirements-txt"
+    # Check for custom section style (no requirements.txt)
+    if grep -q "^# Custom additional packages" "$dockerfile"; then
+        echo "custom-section"
         return 0
     fi
 
