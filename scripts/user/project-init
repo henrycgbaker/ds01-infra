@@ -21,6 +21,11 @@ if [[ -f "/opt/ds01-infra/scripts/lib/project-metadata.sh" ]]; then
     source /opt/ds01-infra/scripts/lib/project-metadata.sh
 fi
 
+# Source AIME images library for base image resolution
+if [[ -f "/opt/ds01-infra/scripts/lib/aime-images.sh" ]]; then
+    source /opt/ds01-infra/scripts/lib/aime-images.sh
+fi
+
 # Set orchestration context - suppresses atomic command "Next steps" output
 export DS01_CONTEXT="orchestration"
 export DS01_INTERFACE="orchestration"
@@ -477,15 +482,16 @@ fi
 # 4c. Create basic Dockerfile
 if [ ! -f "$PROJECT_DIR/Dockerfile" ]; then
     echo -e "  Creating Dockerfile..."
-    cat > "$PROJECT_DIR/Dockerfile" << 'DOCKERFILE'
+    # Get the actual AIME base image (not a placeholder)
+    AIME_BASE_IMAGE=$(get_base_image "pytorch")
+    cat > "$PROJECT_DIR/Dockerfile" << DOCKERFILE
 # DS01 Project Dockerfile
 # This file defines the container environment for your project.
 # Customize as needed - image-create will build from this.
 
 # Base image: AIME Machine Learning Container (PyTorch + CUDA)
-# Change this if you need a different framework (tensorflow, jax)
-ARG BASE_IMAGE=aimehub/pytorch:latest
-FROM ${BASE_IMAGE}
+# To change framework, run: image-create --framework=tensorflow
+FROM $AIME_BASE_IMAGE
 
 # Build arguments (set by DS01)
 ARG DS01_USER_ID=1000
@@ -503,6 +509,7 @@ WORKDIR /workspace
 CMD ["/bin/bash"]
 DOCKERFILE
     echo -e "  ${GREEN}Created${NC} Dockerfile"
+    echo -e "  ${DIM}Base image: $AIME_BASE_IMAGE${NC}"
 fi
 
 # =============================================================================

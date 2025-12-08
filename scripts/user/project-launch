@@ -355,20 +355,26 @@ if [ "$IMAGE_EXISTS" = false ]; then
     if [[ "$CREATE_IMAGE" =~ ^[Yy]$ ]]; then
         echo -e ""
 
-        # Check for requirements.txt
+        # Check for project files
         REQ_FILE=""
+        DOCKERFILE=""
         if [[ -f "$PROJECT_DIR/requirements.txt" ]]; then
             REQ_FILE="$PROJECT_DIR/requirements.txt"
             echo -e "${GREEN}Found:${NC} requirements.txt"
         fi
+        if [[ -f "$PROJECT_DIR/Dockerfile" ]]; then
+            DOCKERFILE="$PROJECT_DIR/Dockerfile"
+            echo -e "${GREEN}Found:${NC} Dockerfile"
+        fi
 
         # Build arguments for image-create
-        # Let image-create handle Dockerfile creation with correct base image
         IMAGE_ARGS=("$PROJECT_NAME")
         if [[ -n "$REQ_FILE" ]]; then
             IMAGE_ARGS+=("-r" "$REQ_FILE")
         fi
-        IMAGE_ARGS+=("--project-dockerfile")  # Store in project dir
+        if [[ -n "$DOCKERFILE" ]]; then
+            IMAGE_ARGS+=("--dockerfile" "$DOCKERFILE")
+        fi
         if [ "$GUIDED" = true ]; then
             IMAGE_ARGS+=("--guided")
         fi
@@ -377,7 +383,7 @@ if [ "$IMAGE_EXISTS" = false ]; then
         echo -e "${BOLD}Building image...${NC}"
         echo -e ""
 
-        # Run image-create (creates Dockerfile with correct AIME base image)
+        # Run image-create with project's Dockerfile and requirements
         image-create "${IMAGE_ARGS[@]}"
 
         # Verify image was created
