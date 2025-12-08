@@ -337,18 +337,21 @@ class DashboardData:
         return users
 
     def get_user_cpu_usage(self) -> Dict:
-        """Get per-user CPU usage from running containers"""
+        """Get per-user CPU usage from running containers (normalized to system capacity)"""
+        import os
         user_cpu = {}
+        cpu_count = os.cpu_count() or 1  # Total system CPUs
 
         try:
             # Get container stats with CPU usage
+            # Docker reports CPU% where 100% = 1 core, so 12800% = 128 cores
             result = subprocess.run(
                 [DOCKER_BIN, 'stats', '--no-stream', '--format',
                  '{{.Name}}\t{{.CPUPerc}}'],
                 capture_output=True, text=True, timeout=10
             )
 
-            # Build container -> CPU% mapping
+            # Build container -> CPU% mapping (raw docker values)
             container_cpu = {}
             for line in result.stdout.strip().split('\n'):
                 if not line:
@@ -382,10 +385,11 @@ class DashboardData:
                     user = self.extract_owner(ds01_user, aime_user, aime_username, devcontainer_path)
 
                     if user not in user_cpu:
-                        user_cpu[user] = {'cpu_percent': 0.0, 'containers': 0}
+                        user_cpu[user] = {'cpu_percent': 0.0, 'containers': 0, 'cpu_count': cpu_count}
 
                     user_cpu[user]['containers'] += 1
-                    user_cpu[user]['cpu_percent'] += container_cpu.get(name, 0.0)
+                    # Normalize: Docker 100% = 1 core, so divide by cpu_count to get % of system
+                    user_cpu[user]['cpu_percent'] += container_cpu.get(name, 0.0) / cpu_count
 
         except Exception:
             pass
