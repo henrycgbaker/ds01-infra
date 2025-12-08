@@ -1441,10 +1441,31 @@ def build_docker_run_command(
         '-v', '/tmp/.X11-unix:/tmp/.X11-unix',
     ]
 
-    cuda_extras = [
-        '--gpus', num_gpus,
-        '--device', '/dev/video0',
-    ]
+    # ========== DS01 PATCH: Handle multi-MIG GPU allocation ==========
+    if num_gpus and num_gpus.startswith('device='):
+        device_ids = num_gpus.replace('device=', '')
+        device_list = device_ids.split(',')
+        num_devices = len(device_list)
+
+        if num_devices > 1:
+            # Multi-MIG: Use --runtime=nvidia with NVIDIA_VISIBLE_DEVICES env var
+            cuda_extras = [
+                '--runtime=nvidia',
+                '-e', f'NVIDIA_VISIBLE_DEVICES={device_ids}',
+                '--device', '/dev/video0',
+            ]
+        else:
+            # Single MIG/GPU: Use standard --gpus device=... syntax
+            cuda_extras = [
+                '--gpus', num_gpus,
+                '--device', '/dev/video0',
+            ]
+    else:
+        cuda_extras = [
+            '--gpus', num_gpus,
+            '--device', '/dev/video0',
+        ]
+    # ========== END DS01 PATCH ==========
 
     rocm_extras = [
         '-u', 'root',
@@ -1669,30 +1690,41 @@ def build_docker_create_command(
     # Insert the volumes list at the correct position, after '-it'
     base_docker_cmd[3:3] = volumes    
        
-    cuda_extras = [
-        '--gpus', num_gpus,
-        '--device', '/dev/video0',
-        '--group-add', 'sudo'
-    ]
-
-    # ========== DS01 PATCH: Set CUDA_VISIBLE_DEVICES for MIG isolation ==========
-    # AIME base images set NVIDIA_VISIBLE_DEVICES=all and the NVIDIA Container Runtime
-    # doesn't properly isolate MIG devices. Setting CUDA_VISIBLE_DEVICES ensures PyTorch
-    # and other CUDA applications only see the allocated device(s).
+    # ========== DS01 PATCH: Handle multi-MIG GPU allocation ==========
+    # Docker's --gpus device=... flag doesn't support comma-separated UUIDs
+    # For multiple MIG devices, we must use --runtime=nvidia with NVIDIA_VISIBLE_DEVICES
     #
-    # For multi-GPU containers: device=UUID1,UUID2,UUID3
-    # CUDA_VISIBLE_DEVICES should be set to indices: 0,1,2
+    # Single MIG:  --gpus device=MIG-uuid
+    # Multi MIG:   --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=MIG-uuid1,MIG-uuid2
     if num_gpus and num_gpus.startswith('device='):
         device_ids = num_gpus.replace('device=', '')
-        # Count the number of devices (comma-separated UUIDs)
-        num_devices = len(device_ids.split(','))
+        device_list = device_ids.split(',')
+        num_devices = len(device_list)
+
         if num_devices > 1:
-            # Multi-GPU: Set indices 0,1,2,...
-            cuda_visible = ','.join(str(i) for i in range(num_devices))
-            cuda_extras.extend(['-e', f'CUDA_VISIBLE_DEVICES={cuda_visible}'])
+            # Multi-MIG: Use --runtime=nvidia with NVIDIA_VISIBLE_DEVICES env var
+            cuda_extras = [
+                '--runtime=nvidia',
+                '-e', f'NVIDIA_VISIBLE_DEVICES={device_ids}',
+                '-e', f'CUDA_VISIBLE_DEVICES={",".join(str(i) for i in range(num_devices))}',
+                '--device', '/dev/video0',
+                '--group-add', 'sudo'
+            ]
         else:
-            # Single GPU: Use the device ID directly
-            cuda_extras.extend(['-e', f'CUDA_VISIBLE_DEVICES={device_ids}'])
+            # Single MIG/GPU: Use standard --gpus device=... syntax
+            cuda_extras = [
+                '--gpus', num_gpus,
+                '-e', f'CUDA_VISIBLE_DEVICES={device_ids}',
+                '--device', '/dev/video0',
+                '--group-add', 'sudo'
+            ]
+    else:
+        # Non-device format (e.g., "all", "2", etc.)
+        cuda_extras = [
+            '--gpus', num_gpus,
+            '--device', '/dev/video0',
+            '--group-add', 'sudo'
+        ]
     # ========== END DS01 PATCH ==========
 
     rocm_extras = [

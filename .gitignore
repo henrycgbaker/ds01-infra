@@ -36,4 +36,4 @@ logs/*
 
 # Claude AI files
 .claude/
-CLAUDE.md
+CLAUDE.mdbin/
