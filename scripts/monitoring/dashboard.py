@@ -1,0 +1,1027 @@
+#!/usr/bin/env python3
+"""
+DS01 Unified Dashboard - Visual System Monitoring
+
+Usage:
+  dashboard                    # Default compact view (GPU, CPU by user, system)
+  dashboard --full             # All sections expanded
+  dashboard --watch / -w       # Watch mode (2s refresh)
+  dashboard --json             # JSON output for scripting
+
+Modular Sections:
+  dashboard gpu                # GPU/MIG utilization diagram
+  dashboard cpu                # CPU usage by user diagram
+  dashboard system             # CPU, Memory, Disk bars
+  dashboard mig-config         # MIG partition configuration
+  dashboard containers         # All containers with stats
+  dashboard users              # Per-user resource summary
+  dashboard temp               # GPU temperatures and power
+
+Additional Views:
+  dashboard allocations [N]    # Recent N GPU allocations (default: 10)
+  dashboard alerts             # Active alerts and warnings (idle containers, etc)
+
+Examples:
+  dashboard                    # Quick system overview
+  dashboard --watch            # Live monitoring
+  dashboard alerts             # Check for issues
+  dashboard allocations 20     # Last 20 GPU allocations
+"""
+
+import sys
+import os
+import json
+import subprocess
+import argparse
+import time
+import re
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Optional, Tuple
+
+# Configuration
+INFRA_ROOT = Path('/opt/ds01-infra')
+# Use real docker binary directly (bypass wrapper filtering for dashboard)
+DOCKER_BIN = '/usr/bin/docker'
+sys.path.insert(0, str(INFRA_ROOT / "scripts" / "docker"))
+sys.path.insert(0, str(INFRA_ROOT / "scripts" / "monitoring"))
+
+# Import from our monitoring scripts
+try:
+    import importlib.util
+
+    # Import gpu-utilization-monitor functions
+    spec = importlib.util.spec_from_file_location(
+        'gpu_util_monitor',
+        str(INFRA_ROOT / 'scripts' / 'monitoring' / 'gpu-utilization-monitor.py')
+    )
+    gpu_util_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gpu_util_mod)
+    get_gpu_utilization = gpu_util_mod.get_gpu_utilization
+    get_container_gpu_allocations = gpu_util_mod.get_container_gpu_allocations
+
+    # Import mig-utilization-monitor functions
+    spec = importlib.util.spec_from_file_location(
+        'mig_util_monitor',
+        str(INFRA_ROOT / 'scripts' / 'monitoring' / 'mig-utilization-monitor.py')
+    )
+    mig_util_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig_util_mod)
+    get_mig_instances = mig_util_mod.get_mig_instances
+    get_mig_utilization = mig_util_mod.get_mig_utilization
+    get_container_mig_allocations = mig_util_mod.get_container_mig_allocations
+
+except Exception as e:
+    print(f"Warning: Could not import monitor modules: {e}", file=sys.stderr)
+    get_gpu_utilization = lambda: []
+    get_container_gpu_allocations = lambda: []
+    get_mig_instances = lambda: []
+    get_mig_utilization = lambda x: x
+    get_container_mig_allocations = lambda: []
+
+
+class Colors:
+    """ANSI color codes for terminal output"""
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GRAY = '\033[90m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RESET = '\033[0m'
+
+    @staticmethod
+    def c(text: str, color: str) -> str:
+        """Colorize text"""
+        return f"{color}{text}{Colors.RESET}"
+
+    @staticmethod
+    def bar(percent: float, width: int = 30, show_percent: bool = True) -> str:
+        """Create colored progress bar based on utilization level"""
+        percent = max(0, min(100, percent))  # Clamp to 0-100
+        filled = int(width * percent / 100)
+        empty = width - filled
+
+        if percent >= 90:
+            color = Colors.RED
+        elif percent >= 50:
+            color = Colors.YELLOW
+        else:
+            color = Colors.GREEN
+
+        bar_str = f"{color}{'█' * filled}{'░' * empty}{Colors.RESET}"
+        if show_percent:
+            return f"[{bar_str}] {percent:3.0f}%"
+        return f"[{bar_str}]"
+
+
+class DashboardData:
+    """Data fetcher for dashboard - single source of truth"""
+
+    def __init__(self):
+        self.config_file = INFRA_ROOT / "config" / "resource-limits.yaml"
+
+    def get_gpu_data(self) -> Dict:
+        """Get comprehensive GPU/MIG data with utilization"""
+        gpus = get_gpu_utilization() or []
+        mig_instances = get_mig_instances() or []
+        mig_instances = get_mig_utilization(mig_instances) if mig_instances else []
+        gpu_allocations = get_container_gpu_allocations() or []
+        mig_allocations = get_container_mig_allocations() or []
+
+        # Build allocation lookup
+        alloc_by_slot = {}
+        for alloc in gpu_allocations + mig_allocations:
+            slot = alloc.get('gpu_slot') or alloc.get('mig_slot', '')
+            if slot:
+                alloc_by_slot[slot] = alloc
+
+        # Determine which GPUs have MIG enabled
+        mig_gpu_ids = set()
+        for mig in mig_instances:
+            mig_gpu_ids.add(mig['gpu'])
+
+        return {
+            'gpus': gpus,
+            'mig_instances': mig_instances,
+            'allocations': alloc_by_slot,
+            'mig_gpu_ids': mig_gpu_ids,
+            'total_slots': len(gpus) + len(mig_instances) - len(mig_gpu_ids),
+            'allocated_count': len(alloc_by_slot)
+        }
+
+    def get_container_stats(self, container: str) -> Optional[Dict]:
+        """Get CPU/memory stats for a container"""
+        try:
+            result = subprocess.run(
+                [DOCKER_BIN, 'stats', container, '--no-stream', '--format',
+                 '{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}'],
+                capture_output=True, text=True, timeout=3
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                parts = result.stdout.strip().split('\t')
+                if len(parts) >= 3:
+                    mem_parts = parts[1].split('/')
+                    return {
+                        'cpu_percent': parts[0].rstrip('%'),
+                        'mem_used': mem_parts[0].strip() if mem_parts else '?',
+                        'mem_total': mem_parts[1].strip() if len(mem_parts) > 1 else '?',
+                        'mem_percent': parts[2].rstrip('%')
+                    }
+        except (subprocess.TimeoutExpired, Exception):
+            pass
+        return None
+
+    def get_system_resources(self) -> Dict:
+        """Get system CPU, memory, disk usage"""
+        result = {'cpu': {}, 'memory': {}, 'disk': {}, 'swap': {}}
+
+        # CPU
+        try:
+            with open('/proc/cpuinfo', 'r') as f:
+                cpu_count = len([line for line in f if line.startswith('processor')])
+            with open('/proc/loadavg', 'r') as f:
+                load = float(f.read().split()[0])
+            result['cpu'] = {
+                'count': cpu_count,
+                'load': load,
+                'percent': min(100, (load / cpu_count) * 100) if cpu_count > 0 else 0
+            }
+        except Exception:
+            result['cpu'] = {'count': 0, 'load': 0, 'percent': 0}
+
+        # Memory
+        try:
+            with open('/proc/meminfo', 'r') as f:
+                meminfo = {}
+                for line in f:
+                    parts = line.split(':')
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        val = parts[1].strip().split()[0]
+                        meminfo[key] = int(val)
+
+            total = meminfo.get('MemTotal', 0) / (1024 * 1024)  # GB
+            available = meminfo.get('MemAvailable', 0) / (1024 * 1024)
+            used = total - available
+            swap_total = meminfo.get('SwapTotal', 0) / (1024 * 1024)
+            swap_free = meminfo.get('SwapFree', 0) / (1024 * 1024)
+            swap_used = swap_total - swap_free
+
+            result['memory'] = {
+                'total': total, 'used': used,
+                'percent': (used / total * 100) if total > 0 else 0
+            }
+            result['swap'] = {
+                'total': swap_total, 'used': swap_used,
+                'percent': (swap_used / swap_total * 100) if swap_total > 0 else 0
+            }
+        except Exception:
+            result['memory'] = {'total': 0, 'used': 0, 'percent': 0}
+            result['swap'] = {'total': 0, 'used': 0, 'percent': 0}
+
+        # Disk
+        try:
+            df_result = subprocess.run(['df', '-BG', '/'], capture_output=True, text=True)
+            if df_result.returncode == 0:
+                lines = df_result.stdout.strip().split('\n')
+                if len(lines) >= 2:
+                    parts = lines[1].split()
+                    result['disk'] = {
+                        'total': int(parts[1].rstrip('G')),
+                        'used': int(parts[2].rstrip('G')),
+                        'percent': int(parts[4].rstrip('%'))
+                    }
+        except Exception:
+            result['disk'] = {'total': 0, 'used': 0, 'percent': 0}
+
+        return result
+
+    def get_recent_allocations(self, limit: int = 10) -> List[Dict]:
+        """Get recent GPU allocation events from log"""
+        log_file = Path('/var/log/ds01/gpu-allocations.log')
+        allocations = []
+
+        if not log_file.exists():
+            return allocations
+
+        try:
+            with open(log_file, 'r') as f:
+                lines = f.readlines()
+
+            for line in reversed(lines[-limit*3:]):
+                if any(event in line for event in ['ALLOCATED', 'REJECTED', 'RELEASED']):
+                    parts = line.strip().split('|')
+                    if len(parts) >= 5:
+                        event = 'ALLOCATED' if 'ALLOCATED' in line else ('REJECTED' if 'REJECTED' in line else 'RELEASED')
+                        allocations.append({
+                            'timestamp': parts[0].strip(),
+                            'event': event,
+                            'user': parts[2].strip() if len(parts) > 2 else '?',
+                            'container': parts[3].strip() if len(parts) > 3 else '?',
+                            'gpu': parts[4].strip() if len(parts) > 4 else '?',
+                            'reason': parts[6].strip() if len(parts) > 6 else ''
+                        })
+                        if len(allocations) >= limit:
+                            break
+        except Exception:
+            pass
+
+        return list(reversed(allocations))[:limit]
+
+    @staticmethod
+    def extract_owner(ds01_user: str, aime_user_upper: str, aime_username: str, devcontainer_path: str) -> str:
+        """Extract container owner from labels, prioritized.
+
+        Checks multiple label sources for robust ownership detection:
+        1. ds01.user - explicit DS01 label
+        2. aime.mlc.USER - AIME uppercase label
+        3. aime.mlc.username - AIME lowercase label
+        4. devcontainer.local_folder - VS Code path extraction
+        """
+        if ds01_user:
+            return ds01_user
+        if aime_user_upper:
+            return aime_user_upper
+        if aime_username:
+            return aime_username
+        if devcontainer_path and devcontainer_path.startswith('/home/'):
+            parts = devcontainer_path.split('/')
+            if len(parts) >= 3:
+                return parts[2]  # /home/<username>/...
+        return "(other)"
+
+    def get_user_summary(self) -> Dict:
+        """Get per-user resource usage summary"""
+        users = {}
+
+        try:
+            # Get all containers with labels for owner identification
+            # Check multiple label sources for robust detection
+            result = subprocess.run(
+                [DOCKER_BIN, 'ps', '-a', '--format',
+                 '{{.Names}}\t{{.Status}}\t{{.Label "ds01.user"}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "aime.mlc.username"}}\t{{.Label "devcontainer.local_folder"}}'],
+                capture_output=True, text=True
+            )
+
+            gpu_data = self.get_gpu_data()
+
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    name, status = parts[0], parts[1]
+                    # Extract owner from multiple label sources (prioritized)
+                    ds01_user = parts[2] if len(parts) > 2 else ''
+                    aime_user_upper = parts[3] if len(parts) > 3 else ''
+                    aime_username = parts[4] if len(parts) > 4 else ''
+                    devcontainer_path = parts[5] if len(parts) > 5 else ''
+                    user = self.extract_owner(ds01_user, aime_user_upper, aime_username, devcontainer_path)
+
+                    if user not in users:
+                        users[user] = {'containers': 0, 'running': 0, 'gpus': []}
+                    users[user]['containers'] += 1
+                    if 'Up' in status:
+                        users[user]['running'] += 1
+
+                    # Check GPU allocation
+                    for slot, alloc in gpu_data['allocations'].items():
+                        if alloc.get('container') == name:
+                            users[user]['gpus'].append(slot)
+        except Exception:
+            pass
+
+        return users
+
+    def get_user_cpu_usage(self) -> Dict:
+        """Get per-user CPU usage from running containers"""
+        user_cpu = {}
+
+        try:
+            # Get container stats with CPU usage
+            result = subprocess.run(
+                [DOCKER_BIN, 'stats', '--no-stream', '--format',
+                 '{{.Name}}\t{{.CPUPerc}}'],
+                capture_output=True, text=True, timeout=10
+            )
+
+            # Build container -> CPU% mapping
+            container_cpu = {}
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    name = parts[0]
+                    cpu_str = parts[1].replace('%', '')
+                    try:
+                        container_cpu[name] = float(cpu_str)
+                    except ValueError:
+                        container_cpu[name] = 0.0
+
+            # Get container owners
+            result = subprocess.run(
+                [DOCKER_BIN, 'ps', '--format',
+                 '{{.Names}}\t{{.Label "ds01.user"}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "aime.mlc.username"}}\t{{.Label "devcontainer.local_folder"}}'],
+                capture_output=True, text=True
+            )
+
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 1:
+                    name = parts[0]
+                    ds01_user = parts[1] if len(parts) > 1 else ''
+                    aime_user = parts[2] if len(parts) > 2 else ''
+                    aime_username = parts[3] if len(parts) > 3 else ''
+                    devcontainer_path = parts[4] if len(parts) > 4 else ''
+                    user = self.extract_owner(ds01_user, aime_user, aime_username, devcontainer_path)
+
+                    if user not in user_cpu:
+                        user_cpu[user] = {'cpu_percent': 0.0, 'containers': 0}
+
+                    user_cpu[user]['containers'] += 1
+                    user_cpu[user]['cpu_percent'] += container_cpu.get(name, 0.0)
+
+        except Exception:
+            pass
+
+        return user_cpu
+
+    def get_alerts(self) -> List[Dict]:
+        """Get active system alerts"""
+        alerts = []
+
+        # Check for idle containers
+        try:
+            result = subprocess.run(
+                [DOCKER_BIN, 'stats', '--no-stream', '--format', '{{.Name}}\t{{.CPUPerc}}'],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    parts = line.split('\t')
+                    if len(parts) >= 2:
+                        cpu = float(parts[1].rstrip('%'))
+                        if cpu < 1.0:
+                            alerts.append({
+                                'type': 'idle',
+                                'severity': 'warning',
+                                'message': f"Container idle: {parts[0]} (CPU < 1%)"
+                            })
+        except Exception:
+            pass
+
+        # Check disk usage
+        sys_res = self.get_system_resources()
+        if sys_res['disk'].get('percent', 0) > 90:
+            alerts.append({
+                'type': 'disk',
+                'severity': 'critical',
+                'message': f"High disk usage: {sys_res['disk']['percent']}%"
+            })
+
+        # Check GPU temperature
+        gpu_data = self.get_gpu_data()
+        for gpu in gpu_data.get('gpus', []):
+            temp = gpu.get('temperature_c', 0)
+            if temp > 80:
+                alerts.append({
+                    'type': 'temperature',
+                    'severity': 'warning',
+                    'message': f"GPU {gpu.get('index', '?')} temperature: {temp}°C"
+                })
+
+        return alerts[:10]  # Limit to 10 alerts
+
+
+class DashboardRenderer:
+    """Renders dashboard sections with visual formatting"""
+
+    WIDTH = 72  # Terminal width for boxes
+
+    def __init__(self, data: DashboardData):
+        self.data = data
+
+    def box_top(self) -> str:
+        return "┌" + "─" * (self.WIDTH - 2) + "┐"
+
+    def box_mid(self) -> str:
+        return "├" + "─" * (self.WIDTH - 2) + "┤"
+
+    def box_bot(self) -> str:
+        return "└" + "─" * (self.WIDTH - 2) + "┘"
+
+    def box_line(self, content: str, pad: bool = True) -> str:
+        """Create a box line with content, handling ANSI codes for width"""
+        # Strip ANSI codes for length calculation
+        clean = re.sub(r'\033\[[0-9;]*m', '', content)
+        padding = self.WIDTH - 4 - len(clean)
+        if pad and padding > 0:
+            return f"│ {content}{' ' * padding} │"
+        # Content too long - truncate properly preserving ANSI codes
+        truncated = self._truncate_ansi(content, self.WIDTH - 4)
+        return f"│ {truncated} │"
+
+    def _truncate_ansi(self, text: str, max_visible: int) -> str:
+        """Truncate string to max visible characters, preserving ANSI codes"""
+        result = []
+        visible_count = 0
+        i = 0
+
+        while i < len(text) and visible_count < max_visible:
+            char = text[i]
+            if char == '\033':
+                # Start of ANSI escape sequence - collect it entirely
+                escape_seq = char
+                i += 1
+                while i < len(text):
+                    escape_seq += text[i]
+                    if text[i] == 'm':
+                        i += 1
+                        break
+                    i += 1
+                result.append(escape_seq)
+            else:
+                result.append(char)
+                visible_count += 1
+                i += 1
+
+        # Add reset code to close any open formatting
+        return ''.join(result) + Colors.RESET
+
+    def render_header(self) -> str:
+        """Render dashboard header"""
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        lines = []
+        lines.append("═" * self.WIDTH)
+        title = Colors.c("DS01 GPU SERVER DASHBOARD", Colors.BOLD)
+        # Center the title
+        clean_title = "DS01 GPU SERVER DASHBOARD"
+        pad = (self.WIDTH - len(clean_title)) // 2
+        lines.append(" " * pad + title)
+        lines.append(Colors.c(f"{'Timestamp: ' + now:^{self.WIDTH}}", Colors.GRAY))
+        lines.append("═" * self.WIDTH)
+        return "\n".join(lines)
+
+    def render_gpu_section(self) -> str:
+        """Render GPU/MIG utilization with hierarchical container display"""
+        gpu_data = self.data.get_gpu_data()
+        gpus = gpu_data['gpus']
+        mig_instances = gpu_data['mig_instances']
+        allocations = gpu_data['allocations']
+        mig_gpu_ids = gpu_data['mig_gpu_ids']
+
+        lines = []
+
+        # Header
+        alloc_count = gpu_data['allocated_count']
+        total_slots = gpu_data['total_slots']
+        header = Colors.c("GPU / MIG UTILIZATION", Colors.BOLD)
+        stats = f"[{alloc_count}/{total_slots} alloc]"
+
+        lines.append(self.box_top())
+        lines.append(self.box_line(f"{header}  {stats}"))
+        lines.append(self.box_mid())
+
+        # Group MIG instances by GPU
+        mig_by_gpu = {}
+        for mig in mig_instances:
+            gpu_id = mig['gpu']
+            if gpu_id not in mig_by_gpu:
+                mig_by_gpu[gpu_id] = []
+            mig_by_gpu[gpu_id].append(mig)
+
+        # Render each GPU
+        for gpu in gpus:
+            gpu_id = gpu['index']
+            gpu_name = gpu.get('name', 'Unknown GPU')
+            util = gpu.get('gpu_util_percent', 0)
+            mem_util = gpu.get('mem_util_percent', 0)
+            temp = gpu.get('temperature_c', 0)
+
+            lines.append(self.box_line(""))
+
+            if gpu_id in mig_gpu_ids:
+                # MIG-enabled GPU
+                mig_list = mig_by_gpu.get(gpu_id, [])
+                profile = mig_list[0].get('profile', '?') if mig_list else '?'
+                gpu_header = f"GPU {gpu_id}: {gpu_name[:25]} [{Colors.c('MIG', Colors.GREEN)} {profile} × {len(mig_list)}]"
+                lines.append(self.box_line(gpu_header))
+
+                # Render each MIG instance
+                for i, mig in enumerate(sorted(mig_list, key=lambda x: x['slot'])):
+                    slot = mig['slot']
+                    mig_util = mig.get('gpu_util_percent', 0)
+                    is_last = (i == len(mig_list) - 1)
+                    prefix = "└─" if is_last else "├─"
+
+                    # Check allocation
+                    alloc = allocations.get(slot)
+                    if alloc:
+                        container = alloc.get('container', '?')[:18]
+                        user = alloc.get('user', '?')[:8]
+                        stats = self.data.get_container_stats(alloc.get('container', ''))
+
+                        bar = Colors.bar(mig_util, width=10, show_percent=False)
+                        container_info = Colors.c(f"{user}:{container}", Colors.YELLOW)
+
+                        if stats:
+                            cpu = stats['cpu_percent']
+                            mem = stats['mem_used'][:6]
+                            detail = f"CPU:{cpu}% {mem}"
+                        else:
+                            detail = ""
+
+                        line = f"  {prefix} {slot} {bar} {mig_util:2d}%  {container_info} {detail}"
+                    else:
+                        bar = Colors.bar(0, width=10, show_percent=False)
+                        free = Colors.c("FREE", Colors.GREEN)
+                        line = f"  {prefix} {slot} {bar}  0%  {free}"
+
+                    lines.append(self.box_line(line))
+            else:
+                # Full GPU (no MIG)
+                gpu_header = f"GPU {gpu_id}: {gpu_name[:25]} [{Colors.c('FULL GPU', Colors.CYAN)}]"
+                lines.append(self.box_line(gpu_header))
+
+                # Utilization bars
+                util_bar = Colors.bar(util, width=35)
+                mem_bar = Colors.bar(mem_util, width=35)
+                lines.append(self.box_line(f"  Util: {util_bar}  Temp: {temp}°C"))
+                lines.append(self.box_line(f"  Mem:  {mem_bar}"))
+
+                # Check allocation (full GPU uses just the GPU index as slot)
+                alloc = allocations.get(str(gpu_id))
+                if alloc:
+                    container = alloc.get('container', '?')
+                    user = alloc.get('user', '?')
+                    stats = self.data.get_container_stats(container)
+                    container_info = Colors.c(f"{user}:{container}", Colors.YELLOW)
+
+                    if stats:
+                        cpu = stats['cpu_percent']
+                        mem = stats['mem_used']
+                        detail = f"CPU:{cpu}% RAM:{mem}"
+                    else:
+                        detail = ""
+
+                    lines.append(self.box_line(f"  └─ {container_info}  {detail}"))
+                else:
+                    lines.append(self.box_line(f"  └─ {Colors.c('FREE', Colors.GREEN)}"))
+
+        lines.append(self.box_line(""))
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_system_section(self) -> str:
+        """Render system resources section"""
+        sys_res = self.data.get_system_resources()
+
+        lines = []
+        lines.append(self.box_top())
+        lines.append(self.box_line(Colors.c("SYSTEM RESOURCES", Colors.BOLD)))
+        lines.append(self.box_mid())
+
+        # CPU
+        cpu = sys_res['cpu']
+        cpu_bar = Colors.bar(cpu['percent'], width=30)
+        lines.append(self.box_line(f"CPU:  {cpu_bar}  {cpu['load']:.1f}/{cpu['count']} cores"))
+
+        # Memory
+        mem = sys_res['memory']
+        mem_bar = Colors.bar(mem['percent'], width=30)
+        lines.append(self.box_line(f"RAM:  {mem_bar}  {mem['used']:.0f}/{mem['total']:.0f} GB"))
+
+        # Disk
+        disk = sys_res['disk']
+        disk_bar = Colors.bar(disk['percent'], width=30)
+        lines.append(self.box_line(f"Disk: {disk_bar}  {disk['used']}/{disk['total']} GB"))
+
+        # Swap (only if used)
+        swap = sys_res['swap']
+        if swap['total'] > 0:
+            swap_bar = Colors.bar(swap['percent'], width=30)
+            lines.append(self.box_line(f"Swap: {swap_bar}  {swap['used']:.1f}/{swap['total']:.0f} GB"))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_cpu_users_section(self) -> str:
+        """Render per-user CPU usage as horizontal bars (similar to GPU section)"""
+        user_cpu = self.data.get_user_cpu_usage()
+
+        lines = []
+        lines.append(self.box_top())
+        lines.append(self.box_line(Colors.c("CPU USAGE BY USER", Colors.BOLD)))
+        lines.append(self.box_mid())
+
+        if not user_cpu:
+            lines.append(self.box_line(Colors.c("No running containers", Colors.GRAY)))
+        else:
+            # Sort by CPU usage descending
+            sorted_users = sorted(user_cpu.items(), key=lambda x: x[1]['cpu_percent'], reverse=True)
+
+            for user, stats in sorted_users[:8]:  # Top 8 users
+                cpu_pct = stats['cpu_percent']
+                container_count = stats['containers']
+
+                # Truncate long usernames
+                user_display = user[:12] if len(user) > 12 else user
+
+                # Create bar (width 25 to fit in box)
+                bar = Colors.bar(min(cpu_pct, 100), width=25, show_percent=False)
+                cpu_str = f"{cpu_pct:>5.1f}%"
+
+                line = f"{user_display:<12} {bar} {cpu_str} ({container_count} containers)"
+                lines.append(self.box_line(line))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_allocations_section(self, limit: int = 5) -> str:
+        """Render recent GPU allocations"""
+        allocations = self.data.get_recent_allocations(limit)
+
+        lines = []
+        lines.append(self.box_top())
+        lines.append(self.box_line(Colors.c(f"RECENT GPU ALLOCATIONS (last {limit})", Colors.BOLD)))
+        lines.append(self.box_mid())
+
+        if not allocations:
+            lines.append(self.box_line(Colors.c("No recent allocations", Colors.GRAY)))
+        else:
+            for alloc in allocations:
+                # Parse timestamp - format: 2025-11-26T11:27:36.891593
+                ts = alloc['timestamp']
+                # Extract time portion (HH:MM:SS)
+                if 'T' in ts:
+                    time_only = ts.split('T')[1][:8]  # Get HH:MM:SS
+                elif ' ' in ts:
+                    time_only = ts.split()[1][:8]
+                else:
+                    time_only = ts[:8]
+
+                event = alloc['event']
+                if event == 'ALLOCATED':
+                    symbol = Colors.c("✓", Colors.GREEN)
+                    arrow = "→"
+                elif event == 'REJECTED':
+                    symbol = Colors.c("✗", Colors.RED)
+                    arrow = "×"
+                else:  # RELEASED
+                    symbol = Colors.c("○", Colors.GRAY)
+                    arrow = "←"
+
+                user = alloc['user'][:12]
+                gpu = alloc['gpu'][:8]
+                container = alloc['container'][:25]
+                reason = alloc.get('reason', '')[:20]
+
+                line = f"{time_only}  {symbol} {user:<12} {arrow} GPU {gpu:<8} {container}"
+                if event == 'REJECTED' and reason:
+                    line = f"{time_only}  {symbol} {user:<12} {arrow} {Colors.c(reason, Colors.RED)}"
+
+                lines.append(self.box_line(line))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_alerts_section(self) -> str:
+        """Render active alerts"""
+        alerts = self.data.get_alerts()
+
+        if not alerts:
+            return ""
+
+        lines = []
+        lines.append(self.box_top())
+        header = Colors.c(f"⚠ ALERTS ({len(alerts)})", Colors.YELLOW)
+        lines.append(self.box_line(header))
+        lines.append(self.box_mid())
+
+        for alert in alerts[:5]:
+            severity = alert.get('severity', 'warning')
+            color = Colors.RED if severity == 'critical' else Colors.YELLOW
+            msg = alert['message']
+            lines.append(self.box_line(f"• {Colors.c(msg, color)}"))
+
+        if len(alerts) > 5:
+            lines.append(self.box_line(Colors.c(f"  ... and {len(alerts) - 5} more", Colors.GRAY)))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_users_section(self) -> str:
+        """Render per-user summary"""
+        users = self.data.get_user_summary()
+
+        lines = []
+        lines.append("═" * self.WIDTH)
+        lines.append(Colors.c(f"{'USER SUMMARY':^{self.WIDTH}}", Colors.BOLD))
+        lines.append("═" * self.WIDTH)
+        lines.append("")
+
+        header = f"{'User':<20} {'Containers':<12} {'Running':<10} {'GPUs':<20}"
+        lines.append(header)
+        lines.append("─" * self.WIDTH)
+
+        for user in sorted(users.keys()):
+            stats = users[user]
+            gpu_str = ', '.join(stats['gpus'][:3])
+            if len(stats['gpus']) > 3:
+                gpu_str += f" +{len(stats['gpus']) - 3}"
+
+            # Truncate long usernames to fit column
+            user_display = user[:18] if len(user) > 18 else user
+            running_color = Colors.GREEN if stats['running'] > 0 else Colors.GRAY
+            line = f"{user_display:<20} {stats['containers']:<12} {Colors.c(str(stats['running']), running_color):<19} {gpu_str:<20}"
+            lines.append(line)
+
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_temp_section(self) -> str:
+        """Render GPU temperature and power info"""
+        gpu_data = self.data.get_gpu_data()
+        gpus = gpu_data['gpus']
+
+        lines = []
+        lines.append(self.box_top())
+        lines.append(self.box_line(Colors.c("GPU TEMPERATURE & POWER", Colors.BOLD)))
+        lines.append(self.box_mid())
+
+        for gpu in gpus:
+            idx = gpu['index']
+            temp = gpu.get('temperature_c', 0)
+
+            # Color code temperature
+            if temp >= 80:
+                temp_color = Colors.RED
+            elif temp >= 70:
+                temp_color = Colors.YELLOW
+            else:
+                temp_color = Colors.GREEN
+
+            temp_str = Colors.c(f"{temp}°C", temp_color)
+            lines.append(self.box_line(f"GPU {idx}: {temp_str}"))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_containers_section(self) -> str:
+        """Render all containers with stats"""
+        lines = []
+        lines.append("═" * self.WIDTH)
+        lines.append(Colors.c(f"{'ALL CONTAINERS':^{self.WIDTH}}", Colors.BOLD))
+        lines.append("═" * self.WIDTH)
+        lines.append("")
+
+        try:
+            # Get ALL containers with owner labels (multiple sources for robust detection)
+            result = subprocess.run(
+                [DOCKER_BIN, 'ps', '-a', '--format',
+                 '{{.Names}}\t{{.Status}}\t{{.Label "ds01.user"}}\t{{.Label "aime.mlc.USER"}}\t{{.Label "aime.mlc.username"}}\t{{.Label "devcontainer.local_folder"}}'],
+                capture_output=True, text=True
+            )
+
+            header = f"{'Container':<30} {'User':<15} {'Status':<15} {'CPU':<8} {'RAM':<10}"
+            lines.append(header)
+            lines.append("─" * self.WIDTH)
+
+            for line in result.stdout.strip().split('\n'):
+                if not line:
+                    continue
+                parts = line.split('\t')
+                if len(parts) >= 2:
+                    name, status = parts[0][:28], parts[1]
+                    # Extract owner from multiple label sources (prioritized)
+                    ds01_user = parts[2] if len(parts) > 2 else ''
+                    aime_user_upper = parts[3] if len(parts) > 3 else ''
+                    aime_username = parts[4] if len(parts) > 4 else ''
+                    devcontainer_path = parts[5] if len(parts) > 5 else ''
+                    user = self.data.extract_owner(ds01_user, aime_user_upper, aime_username, devcontainer_path)[:13]
+
+                    # Get stats if running
+                    if 'Up' in status:
+                        status_color = Colors.GREEN
+                        status_short = "Running"
+                        stats = self.data.get_container_stats(parts[0])
+                        if stats:
+                            cpu = stats['cpu_percent']
+                            ram = stats['mem_used']
+                        else:
+                            cpu = "?"
+                            ram = "?"
+                    else:
+                        status_color = Colors.GRAY
+                        status_short = "Stopped"
+                        cpu = "-"
+                        ram = "-"
+
+                    status_str = Colors.c(status_short, status_color)
+                    lines.append(f"{name:<30} {user:<15} {status_str:<24} {cpu:<8} {ram:<10}")
+
+        except Exception as e:
+            lines.append(f"Error: {e}")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    def render_mig_config_section(self) -> str:
+        """Render MIG configuration details"""
+        gpu_data = self.data.get_gpu_data()
+        gpus = gpu_data['gpus']
+        mig_gpu_ids = gpu_data['mig_gpu_ids']
+
+        lines = []
+        lines.append(self.box_top())
+        lines.append(self.box_line(Colors.c("MIG CONFIGURATION", Colors.BOLD)))
+        lines.append(self.box_mid())
+
+        for gpu in gpus:
+            idx = gpu['index']
+            name = gpu.get('name', 'Unknown')[:30]
+
+            if idx in mig_gpu_ids:
+                mig_list = [m for m in gpu_data['mig_instances'] if m['gpu'] == idx]
+                profile = mig_list[0].get('profile', '?') if mig_list else '?'
+                status = Colors.c(f"MIG ENABLED ({profile} × {len(mig_list)})", Colors.GREEN)
+            else:
+                status = Colors.c("FULL GPU (no MIG)", Colors.CYAN)
+
+            lines.append(self.box_line(f"GPU {idx}: {name}"))
+            lines.append(self.box_line(f"  └─ {status}"))
+
+        lines.append(self.box_bot())
+        return "\n".join(lines)
+
+    def render_default_view(self) -> str:
+        """Render default compact dashboard view"""
+        sections = [
+            self.render_header(),
+            "",
+            self.render_gpu_section(),
+            "",
+            self.render_cpu_users_section(),
+            "",
+            self.render_system_section(),
+        ]
+
+        sections.append("")
+        return "\n".join(sections)
+
+    def render_full_view(self) -> str:
+        """Render complete dashboard with all sections"""
+        sections = [
+            self.render_header(),
+            "",
+            self.render_gpu_section(),
+            "",
+            self.render_system_section(),
+            "",
+            self.render_temp_section(),
+            "",
+            self.render_allocations_section(10),
+            "",
+            self.render_alerts_section(),
+            "",
+            self.render_users_section(),
+            "",
+            self.render_containers_section(),
+        ]
+
+        return "\n".join(s for s in sections if s)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='DS01 GPU Server Dashboard',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+
+    parser.add_argument('--full', action='store_true', help='Show all sections expanded')
+    parser.add_argument('--watch', '-w', action='store_true', help='Watch mode (2s refresh)')
+    parser.add_argument('--json', action='store_true', help='JSON output')
+    parser.add_argument('command', nargs='?',
+                        choices=['gpu', 'cpu', 'mig-config', 'system', 'containers', 'users',
+                                 'allocations', 'temp', 'alerts', 'monitor'],
+                        help='Subcommand')
+    parser.add_argument('args', nargs='*', help='Subcommand arguments')
+
+    args = parser.parse_args()
+
+    # Initialize
+    data = DashboardData()
+    renderer = DashboardRenderer(data)
+
+    # Handle JSON output
+    if args.json:
+        output = {
+            'timestamp': datetime.now().isoformat(),
+            'gpu_data': data.get_gpu_data(),
+            'system': data.get_system_resources(),
+            'allocations': data.get_recent_allocations(20),
+            'alerts': data.get_alerts(),
+            'users': data.get_user_summary()
+        }
+        # Clean non-serializable data
+        output['gpu_data'].pop('mig_gpu_ids', None)
+        print(json.dumps(output, indent=2, default=str))
+        return
+
+    # Handle watch mode
+    if args.watch or args.command == 'monitor':
+        try:
+            while True:
+                os.system('clear')
+                if args.full:
+                    print(renderer.render_full_view())
+                else:
+                    print(renderer.render_default_view())
+                print(Colors.c("\nPress Ctrl+C to exit watch mode", Colors.GRAY))
+                time.sleep(2)
+        except KeyboardInterrupt:
+            print("\nWatch mode stopped.")
+        return
+
+    # Handle subcommands
+    if args.command == 'gpu':
+        print(renderer.render_header())
+        print()
+        print(renderer.render_gpu_section())
+    elif args.command == 'cpu':
+        print(renderer.render_cpu_users_section())
+    elif args.command == 'mig-config':
+        print(renderer.render_mig_config_section())
+    elif args.command == 'system':
+        print(renderer.render_system_section())
+    elif args.command == 'containers':
+        print(renderer.render_containers_section())
+    elif args.command == 'users':
+        print(renderer.render_users_section())
+    elif args.command == 'allocations':
+        limit = int(args.args[0]) if args.args else 10
+        print(renderer.render_allocations_section(limit))
+    elif args.command == 'temp':
+        print(renderer.render_temp_section())
+    elif args.command == 'alerts':
+        alerts = renderer.render_alerts_section()
+        if alerts:
+            print(alerts)
+        else:
+            print(Colors.c("No active alerts", Colors.GREEN))
+    elif args.full:
+        print(renderer.render_full_view())
+    else:
+        # Default view
+        print(renderer.render_default_view())
+
+
+if __name__ == '__main__':
+    main()
