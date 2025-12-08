@@ -240,7 +240,13 @@ def main():
     elif '--max-mig-per-container' in sys.argv:
         limits = parser.get_user_limits(username)
         # Support both old name (max_gpus_per_container) and new name (max_mig_per_container)
-        max_mig = limits.get('max_mig_per_container') or limits.get('max_gpus_per_container', 1)
+        # Note: None means unlimited, so we must check for key presence, not truthiness
+        if 'max_mig_per_container' in limits:
+            max_mig = limits['max_mig_per_container']
+        elif 'max_gpus_per_container' in limits:
+            max_mig = limits['max_gpus_per_container']
+        else:
+            max_mig = 1  # Default
         print(max_mig if max_mig is not None else "unlimited")
     elif '--mig-instances-per-gpu' in sys.argv:
         gpu_config = parser.get_gpu_allocation_config()

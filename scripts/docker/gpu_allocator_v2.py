@@ -356,9 +356,15 @@ class GPUAllocatorSmart:
 
             # Get max MIG instances total and per container
             max_mig_total = limits.get('max_mig_instances', 2)
-            max_mig_per_container = limits.get('max_mig_per_container') or limits.get('max_gpus_per_container', 1)
+            # Handle None (unlimited) - check key presence, not truthiness
+            if 'max_mig_per_container' in limits:
+                max_mig_per_container = limits['max_mig_per_container']
+            elif 'max_gpus_per_container' in limits:
+                max_mig_per_container = limits['max_gpus_per_container']
+            else:
+                max_mig_per_container = 1
 
-            # Handle unlimited
+            # Handle unlimited (None or "unlimited" string)
             if max_mig_total is None or max_mig_total == "unlimited":
                 max_mig_total = 999
             if max_mig_per_container is None or max_mig_per_container == "unlimited":
