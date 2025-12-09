@@ -43,7 +43,7 @@ class TestContainerDeployRetire:
 
         # This would be a real deploy test
         # For now, verify the script exists and can show help
-        deploy = Path("/opt/ds01-infra/scripts/user/container-deploy")
+        deploy = Path("/opt/ds01-infra/scripts/user/orchestrators/container-deploy")
         result = subprocess.run(
             [str(deploy), "--help"],
             capture_output=True,
@@ -56,8 +56,8 @@ class TestContainerDeployRetire:
     @pytest.mark.e2e
     def test_deploy_retire_output_consistency(self):
         """Deploy and retire produce consistent output for users."""
-        deploy = Path("/opt/ds01-infra/scripts/user/container-deploy")
-        retire = Path("/opt/ds01-infra/scripts/user/container-retire")
+        deploy = Path("/opt/ds01-infra/scripts/user/orchestrators/container-deploy")
+        retire = Path("/opt/ds01-infra/scripts/user/orchestrators/container-retire")
 
         # Both should exist
         assert deploy.exists()

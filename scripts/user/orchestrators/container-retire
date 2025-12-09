@@ -33,8 +33,8 @@ USER_ID=$(id -u)
 # Script paths
 SCRIPT_DIR="/opt/ds01-infra/scripts/user"
 INFRA_ROOT="/opt/ds01-infra"
-CONTAINER_STOP="$SCRIPT_DIR/container-stop"
-CONTAINER_REMOVE="$SCRIPT_DIR/container-remove"
+CONTAINER_STOP="$SCRIPT_DIR/atomic/container-stop"
+CONTAINER_REMOVE="$SCRIPT_DIR/atomic/container-remove"
 
 # Source interactive library (with fallback for development)
 if [ -f "/usr/local/lib/interactive-select.sh" ]; then

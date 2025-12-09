@@ -71,8 +71,8 @@ class TestContainerCreateStop:
     def test_create_stop_sequence(self, temp_dir):
         """Test create followed by stop (without actual container)."""
         # This is a structural test - verify scripts can be called
-        create_script = Path("/opt/ds01-infra/scripts/user/container-create")
-        stop_script = Path("/opt/ds01-infra/scripts/user/container-stop")
+        create_script = Path("/opt/ds01-infra/scripts/user/atomic/container-create")
+        stop_script = Path("/opt/ds01-infra/scripts/user/atomic/container-stop")
 
         # Test --help works for both
         for script in [create_script, stop_script]:
@@ -92,7 +92,7 @@ class TestDeployRetireWorkflow:
     @pytest.mark.integration
     def test_deploy_calls_create_and_start(self):
         """container-deploy should call create and start."""
-        deploy_script = Path("/opt/ds01-infra/scripts/user/container-deploy")
+        deploy_script = Path("/opt/ds01-infra/scripts/user/orchestrators/container-deploy")
         content = deploy_script.read_text()
 
         # Should reference both create and start
@@ -104,7 +104,7 @@ class TestDeployRetireWorkflow:
     @pytest.mark.integration
     def test_retire_calls_stop_and_remove(self):
         """container-retire should call stop and remove."""
-        retire_script = Path("/opt/ds01-infra/scripts/user/container-retire")
+        retire_script = Path("/opt/ds01-infra/scripts/user/orchestrators/container-retire")
         content = retire_script.read_text()
 
         # Should reference both stop and remove
@@ -116,7 +116,7 @@ class TestDeployRetireWorkflow:
     @pytest.mark.integration
     def test_deploy_sets_orchestration_context(self):
         """container-deploy sets orchestration context for child commands."""
-        deploy_script = Path("/opt/ds01-infra/scripts/user/container-deploy")
+        deploy_script = Path("/opt/ds01-infra/scripts/user/orchestrators/container-deploy")
         content = deploy_script.read_text()
 
         assert "orchestration" in content.lower()
@@ -124,7 +124,7 @@ class TestDeployRetireWorkflow:
     @pytest.mark.integration
     def test_retire_sets_orchestration_context(self):
         """container-retire sets orchestration context for child commands."""
-        retire_script = Path("/opt/ds01-infra/scripts/user/container-retire")
+        retire_script = Path("/opt/ds01-infra/scripts/user/orchestrators/container-retire")
         content = retire_script.read_text()
 
         assert "orchestration" in content.lower()

@@ -33,9 +33,9 @@ USER_ID=$(id -u)
 # Script paths
 SCRIPT_DIR="/opt/ds01-infra/scripts/user"
 INFRA_ROOT="/opt/ds01-infra"
-CONTAINER_CREATE="$SCRIPT_DIR/container-create"
-CONTAINER_START="$SCRIPT_DIR/container-start"
-CONTAINER_RUN="$SCRIPT_DIR/container-run"
+CONTAINER_CREATE="$SCRIPT_DIR/atomic/container-create"
+CONTAINER_START="$SCRIPT_DIR/atomic/container-start"
+CONTAINER_RUN="$SCRIPT_DIR/atomic/container-run"
 
 usage() {
     echo ""
@@ -693,7 +693,7 @@ case $START_MODE in
                     # Call container-retire with --skip-initial-confirm
                     # (user already confirmed by choosing option 2, but they should still
                     # get the save-packages and image-deletion prompts)
-                    CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
+                    CONTAINER_RETIRE="$SCRIPT_DIR/orchestrators/container-retire"
                     if [ -f "$CONTAINER_RETIRE" ]; then
                         bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --skip-initial-confirm
                     else
@@ -717,7 +717,7 @@ case $START_MODE in
 
             # Auto-retire to follow "running or removed" principle
             # Use --skip-initial-confirm for consistent prompts (save packages, image deletion)
-            CONTAINER_RETIRE="$SCRIPT_DIR/container-retire"
+            CONTAINER_RETIRE="$SCRIPT_DIR/orchestrators/container-retire"
             if [ -f "$CONTAINER_RETIRE" ]; then
                 bash "$CONTAINER_RETIRE" "$CONTAINER_NAME" --skip-initial-confirm
             fi

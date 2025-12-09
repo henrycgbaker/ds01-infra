@@ -72,7 +72,7 @@ fi
 section "3. Orchestrator Context Setting"
 
 # Check container-deploy sets orchestration context
-DEPLOY_SCRIPT="$INFRA_ROOT/scripts/user/container-deploy"
+DEPLOY_SCRIPT="$INFRA_ROOT/scripts/user/orchestrators/container-deploy"
 if [[ -f "$DEPLOY_SCRIPT" ]]; then
     assert_grep 'DS01_CONTEXT.*orchestration' "$DEPLOY_SCRIPT" "container-deploy sets DS01_CONTEXT=orchestration"
     assert_grep 'source.*/ds01-context.sh' "$DEPLOY_SCRIPT" "container-deploy sources context library"
@@ -81,7 +81,7 @@ else
 fi
 
 # Check container-retire sets orchestration context
-RETIRE_SCRIPT="$INFRA_ROOT/scripts/user/container-retire"
+RETIRE_SCRIPT="$INFRA_ROOT/scripts/user/orchestrators/container-retire"
 if [[ -f "$RETIRE_SCRIPT" ]]; then
     assert_grep 'DS01_CONTEXT.*orchestration' "$RETIRE_SCRIPT" "container-retire sets DS01_CONTEXT=orchestration"
     assert_grep 'source.*/ds01-context.sh' "$RETIRE_SCRIPT" "container-retire sources context library"

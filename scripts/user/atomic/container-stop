@@ -616,7 +616,7 @@ if stop_container "$CONTAINER_NAME" "$FORCE" "$TIMEOUT" "$VERBOSE"; then
     # When called from retire orchestrator, auto-remove silently
     if [ "$DS01_ORCHESTRATOR" = "retire" ]; then
         # Silently remove container (orchestrator handles all messaging)
-        "$SCRIPT_DIR/container-remove" "$CONTAINER_NAME" --force >/dev/null 2>&1
+        "$INFRA_ROOT/scripts/user/atomic/container-remove" "$CONTAINER_NAME" --force >/dev/null 2>&1
     # Show next steps (no removal prompt - separation of concerns)
     elif [ "$KEEP_CONTAINER" = false ]; then
         # Ephemeral model: inform about retirement option

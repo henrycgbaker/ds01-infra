@@ -49,7 +49,7 @@ fi
 # ============================================================================
 section "2. Container Deploy Binary Model"
 
-DEPLOY_SCRIPT="$INFRA_ROOT/scripts/user/container-deploy"
+DEPLOY_SCRIPT="$INFRA_ROOT/scripts/user/orchestrators/container-deploy"
 
 assert_file_exists "$DEPLOY_SCRIPT" "container-deploy script exists"
 
@@ -80,7 +80,7 @@ fi
 # ============================================================================
 section "3. Container Retire Binary Model"
 
-RETIRE_SCRIPT="$INFRA_ROOT/scripts/user/container-retire"
+RETIRE_SCRIPT="$INFRA_ROOT/scripts/user/orchestrators/container-retire"
 
 assert_file_exists "$RETIRE_SCRIPT" "container-retire script exists"
 
@@ -108,7 +108,7 @@ fi
 section "4. Atomic Commands Full State Model"
 
 # container-stop should NOT auto-remove (full state model)
-STOP_SCRIPT="$INFRA_ROOT/scripts/user/container-stop"
+STOP_SCRIPT="$INFRA_ROOT/scripts/user/atomic/container-stop"
 
 if [[ -f "$STOP_SCRIPT" ]]; then
     # Stop should not call remove (keeps container in stopped state)
@@ -127,7 +127,7 @@ if [[ -f "$STOP_SCRIPT" ]]; then
 fi
 
 # container-start should work on stopped containers
-START_SCRIPT="$INFRA_ROOT/scripts/user/container-start"
+START_SCRIPT="$INFRA_ROOT/scripts/user/atomic/container-start"
 
 if [[ -f "$START_SCRIPT" ]]; then
     assert_file_exists "$START_SCRIPT" "container-start exists"
@@ -145,7 +145,7 @@ fi
 # ============================================================================
 section "5. Container Create GPU Allocation"
 
-CREATE_SCRIPT="$INFRA_ROOT/scripts/user/container-create"
+CREATE_SCRIPT="$INFRA_ROOT/scripts/user/atomic/container-create"
 
 if [[ -f "$CREATE_SCRIPT" ]]; then
     # Check that create allocates GPU
@@ -169,7 +169,7 @@ fi
 # ============================================================================
 section "6. Container Remove GPU Release"
 
-REMOVE_SCRIPT="$INFRA_ROOT/scripts/user/container-remove"
+REMOVE_SCRIPT="$INFRA_ROOT/scripts/user/atomic/container-remove"
 
 if [[ -f "$REMOVE_SCRIPT" ]]; then
     # Check for GPU release
