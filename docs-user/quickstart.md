@@ -1,6 +1,6 @@
 # 5-Minute Quickstart
 
-Get from zero to working in 5 minutes.
+Get from zero to working in <30 minutes.
 
 ---
 
@@ -9,14 +9,18 @@ Get from zero to working in 5 minutes.
 From your laptop terminal:
 
 ```bash
-ssh your-username@ds01-server-address
+ssh <student-id>@students.hertie-school.org@10.1.23.20
 ```
 
-If you don't have SSH keys set up, you'll be prompted for a password.
+If you don't have SSH keys set up, you'll be prompted for your usual Hertie Microsoft password.
 
 ---
 
 ## Step 2: Run First-Time Setup
+
+**Time:** ~20 minutes (incl initial image cache build)
+
+**Interactive:** Just answer the prompts - it walks you through everything.
 
 Once connected, run:
 
@@ -24,20 +28,40 @@ Once connected, run:
 user-setup
 ```
 
-This wizard will:
-- Set up SSH keys (for GitHub)
-- Create your first project workspace
-- Build a custom Docker image
+This interactive GUI will:
+- Generate & configure SSH keys (for DS01 & GitHub)
+- Configure VS Code (necessary extensions & auto-SSH)
+
+--- 
+
+Then run:
+
+```bash
+project-init
+```
+This interactive GUI will: 
+- Create your first project workspace 
+- Setup best-practice DS directory structure
+- Auto-build project docs (README.md, requirements.txt, Dockerfile, pyproject.toml)
+- Initialise git 
+- Build a custom Docker image1
 - Deploy your first container
 
-**Time:** 15-20 minutes (includes image build)
+---
 
-**Interactive:** Just answer the prompts - it walks you through everything.
+Then run:
 
-**Stuck?** Add `--guided` for more explanations:
 ```bash
-user-setup --guided
+project-launch
 ```
+
+This interactive GUI will: 
+- Scan available projects
+- Build an executable Docker image from the project's Dockerfile (or otherwise first define a Dockerfile)
+- Deploy a container instance of the image onto a GPU/MIG
+- Either attach the terminal to running container, or start in background
+
+**Now you are have a fully deployed container!**
 
 ---
 
@@ -58,41 +82,63 @@ python --version
 # Check PyTorch (or TensorFlow)
 python -c "import torch; print(torch.cuda.is_available())"
 
-# Navigate to your workspace
+# Navigate to your workspace (if not already)
 cd /workspace
 
-# Start coding!
+# Start running scripts in your project directory!
 ```
+*NB: `/workspace` inside the container is your project directory on the host (`~/workspace/<project-name>/`). This is a bind mount; files you save here persist even after retiring the container.* 
 
 ---
 
-## Step 4: Exit and Retire (End of Day)
+### Step 3.5: Attach Terminal/IDE to Running Container
+
+If you are comfortable with working from the terminal `project launch` will offer you the option to directly attach your terminal to the deployed container (or add `--open` flag to the launch command).
+
+If you are more comfortable working in an IDE you will need the following 3 extensions in your IDE (here, presuming VS Code)
+- SSH Remote
+- Dev Containers 
+- Container Tools 
+
+Once installed: Cmd + Shift + P to open the Command Pallete, and type `Dev Containers: Attach to Running Container...`. This will open up a new window attached to the running container!
+
+*NB: this ^^^ is all walked through by `user setup` CLI.*
+
+
+## Step 4: Exit and Retire Container
 
 When done working:
 
 ```bash
 # Exit the container
 exit
+# This will prompt to retire container (freeing GPU for others) or keep it running in background
 
-# Free the GPU for others
+# If you keep it running, but later are finished with it:
 container retire my-project
 ```
 
-**Your files in `~/workspace/` are always saved** - the container is just the temporary environment.
+**Your files in `~/workspace/` persist (logs, checkpoints, code)** - the container is just the temporary computing environment.
 
 ---
 
-## Tomorrow and Beyond
+## Future Routine
 
-Your daily routine:
+In cloud computing platforms such as Hertie's DS01, **containers should be treated as ephemeral**. 
+- You deploy containers when you need to run a computationally-expensive job.
+- By setting up git with a GitHub remote in `project-init`, you are able to quickly push and pull work to/from the server and back to your personal computer (better practice than manually downloading/uploading files!)
+- This way, your files (code, models, logs, but also Dockerfile for reproducible environment) are version controlled and accessible from any computer.
+
+**Containers (and to some extent images) should be considered disposable; dockerfiles and mounted directories are where your project progress is stored.**
+
 
 ```bash
-# Morning
-project launch my-project --open
+# To run a specific job
+project launch my-project 
 
 # Work...
 
-# Evening
+# When job completed
 exit
 container retire my-project
 ```
@@ -119,8 +165,9 @@ Every command has built-in help:
 
 ```bash
 <command> --help        # Quick reference
-<command> --guided      # Step-by-step mode
+<command> --info        # Comprehensive reference
 <command> --concepts    # Learn before running
+<command> --guided      # Step-by-step mode
 ```
 
 **Show all available commands:**
