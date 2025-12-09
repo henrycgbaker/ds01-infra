@@ -485,7 +485,7 @@ class GPUAllocatorSmart:
     def get_docker_id(self, gpu_slot: str) -> str:
         """
         Get Docker-compatible device ID for a GPU slot.
-        For MIG instances, returns UUID. For physical GPUs, returns slot ID.
+        For MIG instances, returns MIG UUID. For full GPUs, returns GPU UUID.
         """
         # Query nvidia-smi for the UUID
         try:
@@ -499,12 +499,20 @@ class GPUAllocatorSmart:
             # Parse output to find UUID for this slot
             import re
             current_gpu = None
+            current_gpu_uuid = None
             for line in result.stdout.split('\n'):
-                gpu_match = re.match(r'GPU (\d+):', line)
+                # Match full GPU line: "GPU 0: NVIDIA A100 (UUID: GPU-xxx)"
+                gpu_match = re.match(r'GPU (\d+):\s+[^(]+\(UUID:\s+(GPU-[a-f0-9-]+)\)', line)
                 if gpu_match:
                     current_gpu = gpu_match.group(1)
+                    current_gpu_uuid = gpu_match.group(2)
+
+                    # If this is a full GPU slot (no decimal), return GPU UUID
+                    if gpu_slot == current_gpu:
+                        return current_gpu_uuid
                     continue
 
+                # Match MIG line: "  MIG 1g.10gb Device 0: (UUID: MIG-xxx)"
                 mig_match = re.match(r'\s+MIG\s+\S+\s+Device\s+(\d+):\s+\(UUID:\s+(MIG-[a-f0-9-]+)\)', line)
                 if mig_match and current_gpu is not None:
                     device_id = mig_match.group(1)
