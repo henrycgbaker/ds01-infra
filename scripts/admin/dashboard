@@ -80,6 +80,24 @@ except Exception as e:
     get_container_mig_allocations = lambda: []
 
 
+def format_container_display(container: str, user: str) -> str:
+    """Format container info for compact display: 'project (user - UID)'
+
+    Examples:
+        'test._.1722830498', 'h.baker@hertie-school.lan' → 'test (h.baker - 1722830498)'
+        'my-project', 'datasciencelab' → 'my-project (datasciencelab)'
+    """
+    # Extract project name: 'test._.1722830498' → 'test'
+    project = container.split('.')[0] if '.' in container else container
+    # Extract UID: 'test._.1722830498' → '1722830498'
+    uid = container.split('.')[-1] if '._.' in container else ''
+    # Shorten user: 'h.baker@hertie-school.lan' → 'h.baker'
+    short_user = user.split('@')[0] if '@' in user else user
+    if uid:
+        return f"{project} ({short_user} - {uid})"
+    return f"{project} ({short_user})"
+
+
 class Colors:
     """ANSI color codes for terminal output"""
     GREEN = '\033[92m'
@@ -567,12 +585,13 @@ class DashboardRenderer:
                     # Check allocation
                     alloc = allocations.get(slot)
                     if alloc:
-                        container = alloc.get('container', '?')[:18]
-                        user = alloc.get('user', '?')[:8]
                         stats = self.data.get_container_stats(alloc.get('container', ''))
 
                         bar = Colors.bar(mig_util, width=10, show_percent=False)
-                        container_info = Colors.c(f"{user}:{container}", Colors.YELLOW)
+                        container_info = Colors.c(format_container_display(
+                            alloc.get('container', '?'),
+                            alloc.get('user', '?')
+                        ), Colors.YELLOW)
 
                         if stats:
                             cpu = stats['cpu_percent']
@@ -603,9 +622,11 @@ class DashboardRenderer:
                 alloc = allocations.get(str(gpu_id))
                 if alloc:
                     container = alloc.get('container', '?')
-                    user = alloc.get('user', '?')
                     stats = self.data.get_container_stats(container)
-                    container_info = Colors.c(f"{user}:{container}", Colors.YELLOW)
+                    container_info = Colors.c(format_container_display(
+                        container,
+                        alloc.get('user', '?')
+                    ), Colors.YELLOW)
 
                     if stats:
                         cpu = stats['cpu_percent']

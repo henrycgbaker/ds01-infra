@@ -152,6 +152,9 @@ echo ""
 # --- Resource Info ---
 echo -e "${BOLD}Resource Info:${NC}"
 create_symlink "$INFRA_ROOT/scripts/user/check-limits" "check-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/check-limits" "get-limits" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/check-dispatcher.sh" "check" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/user/get-dispatcher.sh" "get" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/docker/gpu-queue-manager.py" "gpu-queue" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 

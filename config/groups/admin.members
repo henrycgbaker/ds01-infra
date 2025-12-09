@@ -1,0 +1,13 @@
+# ================================================
+# Admin Group Members
+# ================================================
+# System administrators with unlimited resource access.
+# Admins have no limits on GPUs, containers, or runtime.
+#
+# Format: One username per line matching /home/<username>
+# - System accounts: short name (no domain)
+# - Staff: firstname.lastname@hertie-school.lan
+# - Comments start with #
+# ================================================
+
+datasciencelab  # Main admin account

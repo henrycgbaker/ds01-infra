@@ -1,69 +1,77 @@
 # DS01 GPU Server - Resource Limits Configuration
 # /opt/ds01-infra/config/resource-limits.yaml
+#
+# Related files:
+# - config/groups/*.members    - Group member lists (one file per group)
+# - config/user-overrides.yaml - Per-user exceptions
+# - scripts/lib/error-messages.sh - Error message templates
 
-# This file controls default and per-user/group resource allocations
-
-# Default limits for all users (unless overridden below)
+# Default limits for all users (unless overridden by group or user-specific settings)
 defaults:
-  # GPU limits
+  # === GPU limits ===
   max_mig_instances: 3              # Max MIG/GPU instances user can have allocated (across all containers)
-  max_mig_per_container: 1          # Max MIG-equivalents per single container
+  max_mig_per_container: 3          # Max MIG-equivalents per single container
   allow_full_gpu: false             # Can user request full (non-MIG) GPU? Default: no
-  gpu_memory: null                  # GPU memory limit in GB (null = no limit, already enforced by MIG)
 
-  # Compute limits (per container)
-  max_cpus: 32                      # CPU cores per container (increased from 16)
+  # TODO-NOT-IMPLEMENTED: gpu_memory - redundant with MIG memory limits
+  # gpu_memory: null                # GPU memory limit in GB (null = no limit, already enforced by MIG)
+
+  # === Compute limits (per container) ===
+  max_cpus: 32                      # CPU cores per container
   memory: 32g                       # RAM limit per container
   memory_swap: 32g                  # Swap limit (should match memory to prevent swap)
   shm_size: 16g                     # Shared memory (important for PyTorch DataLoader)
   pids_limit: 4096                  # Max processes (prevents fork bombs)
 
-  # I/O limits (per container) - for storage fairness
-  io_read_bps: 500M                 # Max read bandwidth (bytes/sec)
-  io_write_bps: 200M                # Max write bandwidth (bytes/sec)
-  ulimit_nofile: 65535              # Max open files
+  # TODO-NOT-IMPLEMENTED: I/O limits - no enforcement code exists
+  # io_read_bps: 500M               # Max read bandwidth (bytes/sec)
+  # io_write_bps: 200M              # Max write bandwidth (bytes/sec)
+  # ulimit_nofile: 65535            # Max open files
 
-  # Storage limits (enforced via disk quotas)
-  storage_workspace: 100G           # Max storage in /workspace/$USER
-  storage_data: 200G                # Max storage in /data/$USER
-  storage_tmp: 50G                  # Max storage in /tmp (inside container)
+  # TODO-NOT-IMPLEMENTED: Storage quotas - requires manual setup
+  # storage_workspace: 100G         # Max storage in /workspace/$USER
+  # storage_data: 200G              # Max storage in /data/$USER
+  # storage_tmp: 50G                # Max storage in /tmp (inside container)
 
-  # Container lifecycle
+  # === Container lifecycle ===
   max_containers_per_user: 3        # Max simultaneous containers
-  max_runtime: 24h                  # Max walltime (null = no limit) - increased from 12h for overnight training
-  idle_timeout: 0.5h                  # Auto-stop after X hours of GPU inactivity - increased from 0.5h
+  max_runtime: 24h                  # Max walltime (null = no limit)
+  idle_timeout: 0.5h                # Auto-stop after X hours of GPU inactivity
   gpu_hold_after_stop: 0.25h        # How long to hold GPU after container stopped (null = indefinite)
   container_hold_after_stop: 0.5h   # Auto-remove container after X hours stopped (null = never auto-remove)
-  max_tasks: 32768                  # Max tasks for systemd slice (increased from 512 - fixes libgomp thread creation)
+  max_tasks: 32768                  # Max tasks for systemd slice (fixes libgomp thread creation)
 
 default_group: student
 
-# User group definitions
+# === Group definitions ===
+# Member lists are maintained in config/groups/{group}.members files
+# File format: one username per line, # comments allowed
 groups:
   student:
-    members: []  # TO DO: autopopulate from LDAP group 'ds01-students'
-    allow_full_gpu: false           
-    max_mig_per_container: 3        
+    # Members: config/groups/student.members
+    # Note: Users not in any group file default to 'student' via default_group
+    allow_full_gpu: false
+    max_mig_per_container: 3
 
   researcher:
-    # List both student ID and name formats for LDAP robustness
-    members: [s.kaiser@hertie-school.lan, 204214@hertie-school.lan, c.fusarbassini@hertie-school.lan]
-    allow_full_gpu: true            
+    # Members: config/groups/researcher.members
+    allow_full_gpu: true
     max_mig_per_container: 4        # Up to 4 MIG-equivalents per container (= 1 full GPU)
     max_mig_instances: 8            # Can use up to 8 MIG instances or equivalent
     max_cpus: 64                    # Increased for CPU-heavy workloads (sklearn)
     memory: 128g                    # Increased for large datasets
     memory_swap: 128g
     shm_size: 32g
-    storage_workspace: 500G
-    storage_data: 1T
-    max_runtime: 24h                
-    idle_timeout: 1h                
+    max_runtime: 24h
+    idle_timeout: 1h
     max_tasks: 65536                # High for parallel workloads
     max_containers_per_user: 5
+    # TODO-NOT-IMPLEMENTED: Storage quotas
+    # storage_workspace: 500G
+    # storage_data: 1T
 
   admin:
-    members: [datasciencelab]
+    # Members: config/groups/admin.members
     allow_full_gpu: true            # Admins CAN request full GPUs
     max_mig_per_container: null     # Unlimited MIG-equivalents per container
     max_mig_instances: null         # Unlimited (can use all GPUs)
@@ -71,150 +79,57 @@ groups:
     memory: 128g
     memory_swap: 128g
     shm_size: 64g
-    storage_workspace: 2T
-    storage_data: 5T
-    idle_timeout: 1h              
-    max_runtime: 24h               
+    idle_timeout: 1h
+    max_runtime: 24h
     gpu_hold_after_stop: 1h         # Hold GPU for 1h after stop
     max_containers_per_user: 10
     max_tasks: null
+    # TODO-NOT-IMPLEMENTED: Storage quotas
+    # storage_workspace: 2T
+    # storage_data: 5T
 
-# Per-user overrides (takes precedence over group settings)
-# These override any group settings for specific users
-user_overrides:
-  # Temporary exemption from cleanup - will be included in cron jobs later
-  # Silke Kaiser (both ID and name formats for robustness)
-  204214@hertie-school.lan:
-    idle_timeout: null               # No idle timeout (exempt from auto-stop)
-    max_runtime: null                # No runtime limit
-    container_hold_after_stop: null  # Don't auto-remove stopped containers
-  s.kaiser@hertie-school.lan:
-    idle_timeout: null
-    max_runtime: null
-    container_hold_after_stop: null
+# Per-user overrides are maintained in: config/user-overrides.yaml
+# (removed from this file - see that file for format and examples)
 
-  # Example time-based reservation:
-  # john_doe:
-  #   max_mig_instances: 4
-  #   allow_full_gpu: true          # Grant full GPU access temporarily
-  #   memory: 64g
-  #   reservation_start: "2025-11-01T00:00:00"
-  #   reservation_end: "2025-11-08T00:00:00"
-  #   reserved_gpus: [0]            # Reserve specific GPU IDs
-  #   reason: "Thesis deadline - needs dedicated GPU for 1 week"
-
-# GPU allocation strategy
+# === GPU allocation ===
 gpu_allocation:
-  strategy: least_allocated         # Options: least_allocated, round_robin
-  allocation_method: dynamic        # Allocate on container start, not permanent assignment
-
-  # MIG (Multi-Instance GPU) configuration for A100s
-  enable_mig: true                  # Enable MIG partitioning
+  # DEPLOYED: This value is used by gpu_allocator_v2.py
   mig_instances_per_gpu: 4          # How many MIG instances per physical GPU (1 full GPU = 4 MIG-equivalents)
-  mig_strategy: auto                # auto, manual, disabled
-  mig_profile: 2g.20gb              # MIG profile (3 instances per A100)
-                                    # Options: 1g.10gb (7 instances), 2g.20gb (3 instances), 3g.40gb (2 instances)
 
-  # MIG Hardware Configuration (which GPUs to partition)
-  mig_gpus:
-    # GPU 0: Leave as full GPU (no MIG) - only accessible to users with allow_full_gpu=true
-    0:
-      enable: false
-      profile: null
-    # GPUs 1-3: Enable MIG with 4 instances each (using 1g.10gb profile)
-    1:
-      enable: true
-      profile: 1g.10gb              # 7 instances per GPU (we'll create 4)
-      instances: 4                  # Number of instances to create
-    2:
-      enable: true
-      profile: 1g.10gb
-      instances: 4
-    3:
-      enable: true
-      profile: 1g.10gb
-      instances: 4
+  # TODO-NOT-IMPLEMENTED: Strategy settings - hardcoded to least_allocated/dynamic
+  # strategy: least_allocated       # Options: least_allocated, round_robin
+  # allocation_method: dynamic      # Allocate on container start, not permanent assignment
 
-  # Full GPU vs MIG access control:
-  # - allow_full_gpu: false (default, students): Can ONLY get MIG instances
-  # - allow_full_gpu: true (researchers, admins): Can request MIG OR full GPU
-  # - GPU 0 (full GPU) only allocated to users with allow_full_gpu=true
-  # - GPUs 1-3 (MIG) available to all users
+  # TODO-NOT-IMPLEMENTED: MIG auto-detected via nvidia-smi, these are informational only
+  # enable_mig: true                # Enable MIG partitioning
+  # mig_strategy: auto              # auto, manual, disabled
+  # mig_profile: 2g.20gb            # MIG profile (options: 1g.10gb, 2g.20gb, 3g.40gb)
 
-  respect_reservations: true        # Honor user_override reservations
-  
-# Container lifecycle policies
+  # TODO-NOT-IMPLEMENTED: MIG Hardware Configuration - auto-detected
+  # mig_gpus:
+  #   0: { enable: false, profile: null }         # Full GPU only
+  #   1: { enable: true, profile: 1g.10gb, instances: 4 }
+  #   2: { enable: true, profile: 1g.10gb, instances: 4 }
+  #   3: { enable: true, profile: 1g.10gb, instances: 4 }
+
+  # TODO-NOT-IMPLEMENTED: Reservation system
+  # respect_reservations: true      # Honor user_override reservations
+
+# === Container lifecycle policies ===
 policies:
-  auto_stop_idle: true
-  checkpoint_warning: 1h           # Warn users X hours before auto-stop
-  require_workspace_mount: true     # Force all containers to mount /workspace
-  enforce_storage_quotas: true      # Enable disk quotas
-
-  # Soft limits - warn before hitting hard limits
-  soft_limit_threshold: 0.8        # Warn at 80% of hard limit (0.8 = 80%)
-
-  # High demand mode - more aggressive idle cleanup
+  # DEPLOYED: Used by check-idle-containers.sh and high-demand detection
   high_demand_threshold: 0.8       # System is "high demand" at 80% GPU allocation
   high_demand_idle_reduction: 0.5  # Reduce idle timeout by 50% during high demand
 
-  # Error handling
-  graceful_errors: true             # Show helpful error messages when limits exceeded
-  suggest_alternatives: true        # Suggest alternatives when resource unavailable
-  
-# Advanced settings
-advanced:
-  enable_mps: false                 # MPS (Multi-Process Service) - disabled when MIG enabled
-  network_mode: host                # or 'bridge'
-  restart_policy: unless-stopped
+  # TODO-NOT-IMPLEMENTED: Policy enforcement
+  # auto_stop_idle: true
+  # checkpoint_warning: 1h         # Warn users X hours before auto-stop
+  # require_workspace_mount: true  # Force all containers to mount /workspace
+  # enforce_storage_quotas: true   # Enable disk quotas
+  # soft_limit_threshold: 0.8      # Warn at 80% of hard limit
+  # graceful_errors: true          # Show helpful error messages when limits exceeded
+  # suggest_alternatives: true     # Suggest alternatives when resource unavailable
 
-  # Log retention
-  log_retention_days: 30            # Days to keep logs before archiving
-  log_archive_days: 365             # Days to keep archives before deletion
-
-# Wizard defaults (for interactive setup) TODO: move this to a script
-wizard:
-  default_mig_count: 1              # Default MIG request in wizard
-  recommended_mig_count: 1          # Recommended MIG count shown to users
-  max_mig_warning_threshold: 4      # Warn if requesting more than this
-  
-  # Error messages for common scenarios
-  error_messages:
-    mig_limit_exceeded: |
-      ❌ GPU Limit Exceeded
-      
-      You requested {requested} MIG instances, but your limit is {max} MIGs.
-      You currently have {current} MIGs allocated.
-      
-      Options:
-      1. Reduce your MIG request to {available} or fewer
-      2. Stop an existing container to free up GPUs
-      3. Launch this container without GPU (CPU-only)
-      
-      Check your current allocations: ds01-gpu-status
-      
-    container_limit_exceeded: |
-      ❌ Container Limit Exceeded
-      
-      You already have {current} containers running.
-      Your limit is {max} containers.
-      
-      Please stop a container before creating a new one:
-        mlc-stop <container-name>
-      
-    no_gpu_available: |
-      ⚠️ No GPUs Available
-      
-      All GPUs are currently allocated to other users.
-      
-      Options:
-      1. Wait for a GPU to become available
-      2. Launch as CPU-only container for now
-      3. Check GPU status: ds01-gpu-status
-      
-    reservation_conflict: |
-      ❌ GPU Reserved
-      
-      The requested GPU is reserved for {reserved_user} until {end_time}.
-      Reason: {reason}
-      
-      Please try a different GPU or wait for the reservation to end.
+# REMOVED SECTIONS:
+# - advanced: None of these settings are implemented
+# - wizard: Error messages moved to scripts/lib/error-messages.sh

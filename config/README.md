@@ -4,13 +4,73 @@ Central configuration for DS01 resource management.
 
 ## Overview
 
-`resource-limits.yaml` is the **single source of truth** for:
-- Per-user/group resource limits (GPU, CPU, memory)
-- Container lifecycle policies (timeouts, auto-cleanup)
-- GPU allocation priorities
-- MIG configuration
+DS01 configuration is split into modular files for easier maintenance:
 
-## File Structure
+| File | Purpose |
+|------|---------|
+| `resource-limits.yaml` | Main config (defaults, group settings, policies) |
+| `groups/*.members` | Group member lists (one file per group) |
+| `user-overrides.yaml` | Per-user exceptions |
+
+Related files:
+- `scripts/lib/error-messages.sh` - User-facing error message templates
+
+## Directory Structure
+
+```
+config/
+├── resource-limits.yaml     # Main configuration
+├── user-overrides.yaml      # Per-user exceptions
+├── groups/
+│   ├── student.members      # Student group members
+│   ├── researcher.members   # Researcher group members
+│   └── admin.members        # Admin group members
+└── README.md                # This file
+```
+
+## Member File Format
+
+Group member files use a simple text format (one username per line):
+
+```
+# config/groups/researcher.members
+# ================================================
+# Researcher Group Members
+# ================================================
+# Format: One username per line matching /home/<username>
+# Comments start with #
+# ================================================
+
+204214@hertie-school.lan          # Silke Kaiser (student ID)
+c.fusarbassini@hertie-school.lan  # Chiara Fusarbassini (staff)
+```
+
+**Benefits of modular member files:**
+- Add comments to identify users
+- Easier to audit group membership
+- Git diffs show exactly who was added/removed
+- No YAML syntax errors from editing member lists
+
+## User Overrides File Format
+
+Per-user exceptions are in `config/user-overrides.yaml`:
+
+```yaml
+# config/user-overrides.yaml
+# Per-user resource limit overrides
+
+204214@hertie-school.lan:
+  idle_timeout: null               # No idle timeout
+  max_runtime: null                # No runtime limit
+  container_hold_after_stop: null  # Don't auto-remove
+  # Reason: Thesis work - approved 2025-XX-XX
+
+# h.baker@hertie-school.lan:
+#   max_mig_instances: 4
+#   allow_full_gpu: true
+```
+
+## Main Config Structure (resource-limits.yaml)
 
 ```yaml
 defaults:                    # Fallback for all users
@@ -19,33 +79,24 @@ defaults:                    # Fallback for all users
   memory: "32g"
   # ... more defaults
 
-groups:                      # Group-based limits
-  students:
-    members: [alice, bob]
-    max_mig_instances: 1
-    priority: 10
-    # ... group settings
+groups:                      # Group-based limits (members in separate files)
+  student:
+    # Members: config/groups/student.members
+    allow_full_gpu: false
+    max_mig_per_container: 3
 
-  researchers:
-    members: [charlie, diana]
-    max_mig_instances: 2
-    priority: 50
+  researcher:
+    # Members: config/groups/researcher.members
+    allow_full_gpu: true
+    max_mig_instances: 8
     # ... group settings
-
-user_overrides:              # Per-user exceptions
-  special_user:
-    max_mig_instances: 3
-    priority: 100
-    reason: "Thesis work"
-    # ... user-specific overrides
 
 gpu_allocation:              # GPU/MIG configuration
-  enable_mig: true
-  mig_profile: "2g.20gb"
+  mig_instances_per_gpu: 4
 
 policies:                    # System-wide policies
-  allow_multi_container: true
-  enforce_resource_limits: true
+  high_demand_threshold: 0.8
+  high_demand_idle_reduction: 0.5
 ```
 
 ## Priority Order
@@ -407,28 +458,32 @@ user_overrides:
 
 ## Modifying Configuration
 
-### Add New User
+### Add New User to a Group
 
-1. **Add to group:**
-```yaml
-groups:
-  students:
-    members: [alice, bob, charlie, newstudent]  # Add newstudent
+1. **Add to group member file:**
+```bash
+# Edit the appropriate member file
+nano config/groups/researcher.members
+```
+
+```
+# Add line to file:
+newuser@hertie-school.lan    # New User Name
 ```
 
 2. **Test:**
 ```bash
-python3 scripts/docker/get_resource_limits.py newstudent
+python3 scripts/docker/get_resource_limits.py newuser@hertie-school.lan
 ```
 
 3. **No restart needed** - changes take effect immediately
 
 ### Change Group Limits
 
-1. **Modify group settings:**
+1. **Modify group settings in resource-limits.yaml:**
 ```yaml
 groups:
-  researchers:
+  researcher:
     max_mig_instances: 3  # Changed from 2
     memory: "96g"         # Changed from 64g
 ```
@@ -441,23 +496,23 @@ sudo systemctl daemon-reload
 
 3. **Test:**
 ```bash
-python3 scripts/docker/get_resource_limits.py diana
+python3 scripts/docker/get_resource_limits.py diana@hertie-school.lan
 ```
 
 ### Add User Override
 
-1. **Add override:**
+1. **Add override to user-overrides.yaml:**
 ```yaml
-user_overrides:
-  newspecial:
-    max_mig_instances: 4
-    priority: 100
-    reason: "Special project - approved by PI"
+# config/user-overrides.yaml
+newspecial@hertie-school.lan:
+  max_mig_instances: 4
+  priority: 100
+  # Reason: Special project - approved by PI
 ```
 
 2. **Test:**
 ```bash
-python3 scripts/docker/get_resource_limits.py newspecial
+python3 scripts/docker/get_resource_limits.py newspecial@hertie-school.lan
 ```
 
 ## Troubleshooting
@@ -653,6 +708,73 @@ sudo /opt/ds01-infra/scripts/system/create-user-slice.sh <group> <username>
 ├── docker-group-additions.log      # 644
 └── events.jsonl                    # 644
 ```
+
+## User Identifier Format for Group Membership
+
+When adding users to `groups.*.members` or `user_overrides`, you must use the **exact format
+that matches their home directory** at `/home/<username>`.
+
+### Identifier Formats by User Type
+
+| User Type | Home Dir Format | Config Format | Example |
+|-----------|-----------------|---------------|---------|
+| **Staff/Faculty** | `/home/firstname.lastname@domain` | `firstname.lastname@domain` | `h.baker@hertie-school.lan` |
+| **Students** | `/home/studentID@domain` | `studentID@domain` | `204214@hertie-school.lan` |
+| **System/Local** | `/home/shortname` | `shortname` | `datasciencelab` |
+
+### Why This Matters
+
+The system captures the username via `os.getlogin()` at container creation time, which returns
+the format the user actually logged in as. This is stored in the `ds01.user` container label
+and matched against the config.
+
+### How to Find a User's Correct Format
+
+```bash
+# Check their home directory
+ls -la /home/ | grep -i "username"
+
+# Get their UID to confirm identity
+id "username@hertie-school.lan"
+
+# Test config matching
+python3 scripts/docker/get_resource_limits.py "username@hertie-school.lan"
+```
+
+### Common Mistakes
+
+**Wrong:** Using a different LDAP alias that doesn't match the login format
+```yaml
+# WRONG - s.kaiser is a different LDAP entry, never logged in
+members: [s.kaiser@hertie-school.lan]
+
+# CORRECT - 204214 is how the user actually logs in
+members: [204214@hertie-school.lan]
+```
+
+**Tip:** Always verify with `ls /home/` to see what format the user actually uses.
+
+### Example Configuration
+
+```yaml
+groups:
+  researcher:
+    # Staff use name format, students use ID format
+    members:
+      - 204214@hertie-school.lan         # Student (Silke Kaiser)
+      - c.fusarbassini@hertie-school.lan # Staff (Chiara)
+      - h.baker@hertie-school.lan        # Staff (H. Baker)
+
+  admin:
+    members:
+      - datasciencelab                   # System account (no domain)
+
+user_overrides:
+  204214@hertie-school.lan:              # Must match /home/204214@hertie-school.lan
+    idle_timeout: null
+```
+
+---
 
 ## LDAP/SSSD Username Support
 

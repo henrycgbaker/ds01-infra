@@ -184,8 +184,6 @@ main() {
 
     # Storage
     echo -e "${BOLD}Storage (workspace):${NC}"
-    # Convert storage limit to GB for comparison
-    local storage_limit_gb=$(echo "$storage" | sed 's/G$//' | sed 's/T$/*1024/' | bc 2>/dev/null || echo "100")
 
     # Get current workspace usage in GB
     local workspace_dir="$HOME/workspace"
@@ -201,10 +199,27 @@ main() {
         storage_used_gb=$((storage_used_gb / 1024 / 1024))  # Convert KB to GB
     fi
 
-    # Display usage bar
-    echo -n "  "
-    usage_bar "$storage_used_gb" "$storage_limit_gb"
-    echo -e "  (${storage_used_gb}G used of ${storage} limit)"
+    # Handle N/A or unset storage limits (aspirational config, not enforced)
+    if [[ "$storage" == "N/A" || -z "$storage" ]]; then
+        echo -n "  "
+        usage_bar "$storage_used_gb" "unlimited"
+        echo -e "  (${storage_used_gb}G used, no quota configured)"
+    else
+        # Convert storage limit to GB for comparison
+        local storage_limit_gb
+        if [[ "$storage" =~ ^[0-9]+T$ ]]; then
+            storage_limit_gb=$((${storage%T} * 1024))
+        elif [[ "$storage" =~ ^[0-9]+G$ ]]; then
+            storage_limit_gb="${storage%G}"
+        else
+            storage_limit_gb="100"  # Default fallback
+        fi
+
+        # Display usage bar
+        echo -n "  "
+        usage_bar "$storage_used_gb" "$storage_limit_gb"
+        echo -e "  (${storage_used_gb}G used of ${storage} limit)"
+    fi
     echo ""
 
     # Lifecycle / Automation

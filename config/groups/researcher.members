@@ -1,0 +1,18 @@
+# ================================================
+# Researcher Group Members
+# ================================================
+# Users with elevated GPU access and higher resource limits.
+# Researchers can request full GPUs (not just MIG instances).
+#
+# Format: One username per line matching /home/<username>
+# - Students: studentID@hertie-school.lan
+# - Staff: firstname.lastname@hertie-school.lan
+# - Comments start with #
+#
+# IMPORTANT: Use the exact format from /home/<username>
+# Check with: ls /home/ | grep -i "name"
+# ================================================
+
+204214@hertie-school.lan          # Silke Kaiser
+c.fusarbassini@hertie-school.lan  # Chiara Fusarbassini
+h.baker@hertie-school.lan         # Henry Baker (user acc)

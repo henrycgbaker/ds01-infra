@@ -1,0 +1,38 @@
+# ================================================
+# Per-User Resource Limit Overrides
+# ================================================
+# /opt/ds01-infra/config/user-overrides.yaml
+#
+# These settings override group defaults for specific users.
+# Use for temporary exceptions, thesis work, special projects, etc.
+#
+# Format: Use username matching /home/<username>
+# - Students: studentID@hertie-school.lan
+# - Staff: firstname.lastname@hertie-school.lan
+# - Check with: ls /home/ | grep -i "name"
+#
+# Common override fields:
+#   idle_timeout: null          # Disable auto-stop on idle
+#   max_runtime: null           # Disable max runtime limit
+#   container_hold_after_stop: null  # Don't auto-remove containers
+#   max_mig_instances: N        # Custom GPU limit
+#   allow_full_gpu: true        # Grant full GPU access
+# ================================================
+
+# ----------------------------------------------
+# Silke Kaiser - Pre-existing workflow
+# In the resarcher group, but this overrides 
+# ----------------------------------------------
+204214@hertie-school.lan:
+  idle_timeout: null               # No idle timeout (exempt from auto-stop)
+  max_runtime: null                # No runtime limit
+  container_hold_after_stop: null  # Don't auto-remove stopped containers
+
+# ----------------------------------------------
+# Add more user overrides below
+# ----------------------------------------------
+# Example:
+# h.baker@hertie-school.lan:
+#   max_mig_instances: 4
+#   allow_full_gpu: true
+#   # Reason: Special project - approved 2025-XX-XX

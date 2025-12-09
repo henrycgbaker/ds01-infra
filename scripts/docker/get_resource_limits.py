@@ -42,24 +42,79 @@ class ResourceLimitParser:
                 Path("/opt/ds01-infra/config/resource-limits.yaml"),
                 script_dir / "../../config/resource-limits.yaml",
             ]
-            
+
             for path in possible_paths:
                 if path.exists():
                     config_path = path
                     break
             else:
                 config_path = possible_paths[0]
-        
+
         self.config_path = Path(config_path).resolve()
+        self.config_dir = self.config_path.parent
         self.config = self._load_config()
-    
+        self._load_external_files()
+
     def _load_config(self):
         """Load and parse the YAML config file"""
         if not self.config_path.exists():
             raise FileNotFoundError(f"Config file not found: {self.config_path}")
-        
+
         with open(self.config_path) as f:
             return yaml.safe_load(f)
+
+    def _load_group_members(self, group_name):
+        """Load group members from config/groups/{group}.members file.
+
+        File format: One username per line, # comments ignored.
+        Returns list of usernames or empty list if file doesn't exist.
+        """
+        member_file = self.config_dir / "groups" / f"{group_name}.members"
+        if not member_file.exists():
+            return []
+
+        members = []
+        with open(member_file) as f:
+            for line in f:
+                # Remove comments and whitespace
+                line = line.split('#')[0].strip()
+                if line:
+                    members.append(line)
+        return members
+
+    def _load_user_overrides(self):
+        """Load user overrides from config/user-overrides.yaml.
+
+        Returns dict of username -> override settings, or empty dict if file doesn't exist.
+        """
+        override_file = self.config_dir / "user-overrides.yaml"
+        if not override_file.exists():
+            return {}
+
+        with open(override_file) as f:
+            overrides = yaml.safe_load(f)
+
+        return overrides if overrides else {}
+
+    def _load_external_files(self):
+        """Load external member files and user overrides, merging into config."""
+        # Load group members from files (supplements/overrides inline members)
+        groups = self.config.get('groups') or {}
+        for group_name in groups:
+            file_members = self._load_group_members(group_name)
+            if file_members:
+                # File members take precedence, but also include inline members
+                inline_members = groups[group_name].get('members', [])
+                combined = list(set(file_members + inline_members))
+                groups[group_name]['members'] = combined
+
+        # Load user overrides from file (merges with inline overrides)
+        file_overrides = self._load_user_overrides()
+        if file_overrides:
+            inline_overrides = self.config.get('user_overrides') or {}
+            # File overrides take precedence over inline
+            merged_overrides = {**inline_overrides, **file_overrides}
+            self.config['user_overrides'] = merged_overrides
     
     def get_user_group(self, username):
         """Get the group name for a user.

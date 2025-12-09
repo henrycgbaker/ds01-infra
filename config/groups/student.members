@@ -1,0 +1,17 @@
+# ================================================
+# Student Group Members
+# ================================================
+# Default group for all users not listed in other groups.
+# Students have standard resource limits (MIG only, no full GPU).
+#
+# Format: One username per line matching /home/<username>
+# - Students: studentID@hertie-school.lan
+# - Staff: firstname.lastname@hertie-school.lan
+# - Comments start with #
+#
+# Note: Users not in ANY group file default to 'student' group
+# via the default_group setting in resource-limits.yaml.
+# ================================================
+
+# Add student members here to explicitly list them
+# (otherwise they default to student group automatically)
