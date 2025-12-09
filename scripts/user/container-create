@@ -900,10 +900,27 @@ if [ "$CPU_ONLY" != true ] && [ "$NUM_MIGS" -eq 1 ]; then
 
         # Warning for multi-GPU requests
         if [ "$NUM_MIGS" -gt 1 ]; then
-            echo -e "${YELLOW}⚠ Multi-GPU containers consume shared resources.${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${YELLOW}⚠  IMPORTANT: Multi-MIG Limitation${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
             echo -e "  Requesting: ${BOLD}$NUM_MIGS MIG partitions${NC}"
             echo ""
-            read -p "Proceed? [Y/n, default: Y]: " CONFIRM </dev/tty
+            echo -e "  ${RED}CUDA only exposes ONE MIG device per process.${NC}"
+            echo -e "  PyTorch/TensorFlow will see: ${BOLD}1 GPU (not $NUM_MIGS)${NC}"
+            echo ""
+            echo -e "  ${CYAN}Multi-MIG is useful for:${NC}"
+            echo -e "    • Running multiple independent experiments in parallel"
+            echo -e "    • Hyperparameter sweeps (each process on separate MIG)"
+            echo -e "    • Requires multi-process architecture (MPI, subprocess)"
+            echo ""
+            echo -e "  ${CYAN}For single large model training:${NC}"
+            echo -e "    • Request a ${BOLD}full GPU${NC} instead (40GB VRAM)"
+            echo -e "    • Or reduce batch size to fit single MIG (10GB)"
+            echo ""
+            echo -e "  ${DIM}See: https://ds01-hub.hertie-school.org/docs/multi-mig-training${NC}"
+            echo ""
+            read -p "Proceed with multi-MIG? [Y/n, default: Y]: " CONFIRM </dev/tty
             CONFIRM=${CONFIRM:-Y}
             if [[ "${CONFIRM,,}" != "y" && "${CONFIRM,,}" != "yes" && -n "$CONFIRM" ]]; then
                 echo -e "${CYAN}Cancelled${NC}"
