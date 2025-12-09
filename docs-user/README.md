@@ -14,7 +14,7 @@ user-setup                    # Interactive setup wizard
 project init --guided         # Create project dir & setup 
 project launch --guided       # Start working in containerised env
 
-# ... work ...
+# ... work (via attached terminal, or attach IDE) ...
 
 exit                  
 ```
