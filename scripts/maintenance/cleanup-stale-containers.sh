@@ -16,6 +16,9 @@ CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 LOG_DIR="/var/log/ds01"
 LOG_FILE="$LOG_DIR/cleanup-stale-containers.log"
 
+# Source shared library for colors and utilities
+source "$INFRA_ROOT/scripts/lib/init.sh"
+
 # Ensure log directory exists
 mkdir -p "$LOG_DIR"
 
@@ -28,66 +31,15 @@ log() {
 # Get container hold timeout for user (in hours)
 get_container_hold_timeout() {
     local username="$1"
-
-    # Use Python to parse YAML and get container_hold_after_stop
-    USERNAME="$username" CONFIG_FILE="$CONFIG_FILE" python3 - <<'PYEOF'
-import yaml
-import sys
-import os
-
-try:
-    username = os.environ['USERNAME']
-    config_file = os.environ['CONFIG_FILE']
-
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
-
-    # Check user overrides first
-    if 'user_overrides' in config and config['user_overrides'] is not None:
-        if username in config['user_overrides']:
-            timeout = config['user_overrides'][username].get('container_hold_after_stop')
-            if timeout:
-                print(timeout)
-                sys.exit(0)
-
-    # Check groups
-    if 'groups' in config and config['groups'] is not None:
-        for group_name, group_config in config['groups'].items():
-            if 'members' in group_config and username in group_config['members']:
-                timeout = group_config.get('container_hold_after_stop')
-                if timeout:
-                    print(timeout)
-                    sys.exit(0)
-
-    # Default timeout
-    default_timeout = config.get('defaults', {}).get('container_hold_after_stop', '12h')
-    print(default_timeout)
-except Exception as e:
-    print("12h", file=sys.stderr)
-    sys.exit(1)
-PYEOF
+    # Use centralized get_resource_limits.py CLI instead of embedded heredoc
+    python3 "$INFRA_ROOT/scripts/docker/get_resource_limits.py" "$username" --container-hold-time
 }
 
 # Parse duration string (e.g., "12h", "0.5h") to seconds
+# Wrapper around centralized ds01_parse_duration from init.sh
 parse_duration() {
     local duration="$1"
-
-    if [ "$duration" = "never" ] || [ "$duration" = "null" ] || [ "$duration" = "None" ] || [ "$duration" = "indefinite" ]; then
-        echo "-1"  # Never remove
-        return
-    fi
-
-    # Extract numeric value (supporting decimals)
-    local value=$(echo "$duration" | grep -oE '[0-9.]+')
-    local unit=$(echo "$duration" | grep -oE '[a-z]+')
-
-    # Use bc for decimal support
-    case "$unit" in
-        h) echo "scale=0; $value * 3600 / 1" | bc ;;
-        d) echo "scale=0; $value * 86400 / 1" | bc ;;
-        w) echo "scale=0; $value * 604800 / 1" | bc ;;
-        *) echo "43200" ;;  # Default 12h
-    esac
+    ds01_parse_duration "$duration"
 }
 
 log "Starting stale container cleanup (Docker-native)..."

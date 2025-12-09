@@ -21,16 +21,12 @@ CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 STATE_DIR="/var/lib/ds01/container-states"
 LOG_FILE="/var/log/ds01/idle-cleanup.log"
 
+# Source shared library for colors and utilities
+source "$INFRA_ROOT/scripts/lib/init.sh"
+
 # Create state directory
 mkdir -p "$STATE_DIR"
 mkdir -p "$(dirname "$LOG_FILE")"
-
-# Colors for logging
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
@@ -68,88 +64,30 @@ is_high_demand() {
 
 # Get high demand settings from config
 get_high_demand_settings() {
-    CONFIG_FILE="$CONFIG_FILE" python3 - <<'PYEOF'
-import yaml
-import os
-import sys
-
-try:
-    config_file = os.environ['CONFIG_FILE']
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
-
-    policies = config.get('policies', {})
-    threshold = policies.get('high_demand_threshold', 0.8)
-    reduction = policies.get('high_demand_idle_reduction', 0.5)
-
-    print(f"{threshold} {reduction}")
-except Exception as e:
-    print("0.8 0.5")
-PYEOF
+    # Use centralized get_resource_limits.py CLI instead of embedded heredoc
+    local threshold=$(python3 "$INFRA_ROOT/scripts/docker/get_resource_limits.py" - --high-demand-threshold)
+    local reduction=$(python3 "$INFRA_ROOT/scripts/docker/get_resource_limits.py" - --high-demand-reduction)
+    echo "$threshold $reduction"
 }
 
 # Get idle timeout for user (in hours)
 get_idle_timeout() {
     local username="$1"
-    
-    # Use Python to parse YAML and get timeout
-    USERNAME="$username" CONFIG_FILE="$CONFIG_FILE" python3 - <<'PYEOF'
-import yaml
-import sys
-import os
-
-try:
-    username = os.environ['USERNAME']
-    config_file = os.environ['CONFIG_FILE']
-
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
-
-    # Check user overrides first
-    if 'user_overrides' in config and config['user_overrides'] is not None:
-        if username in config['user_overrides']:
-            timeout = config['user_overrides'][username].get('idle_timeout')
-            if timeout:
-                print(timeout)
-                sys.exit(0)
-
-    # Check groups
-    if 'groups' in config and config['groups'] is not None:
-        for group_name, group_config in config['groups'].items():
-            if 'members' in group_config and username in group_config['members']:
-                timeout = group_config.get('idle_timeout')
-                if timeout:
-                    print(timeout)
-                    sys.exit(0)
-
-    # Default timeout
-    default_timeout = config.get('defaults', {}).get('idle_timeout', '48h')
-    print(default_timeout)
-except Exception as e:
-    print("48h", file=sys.stderr)
-    sys.exit(1)
-PYEOF
+    # Use centralized get_resource_limits.py CLI instead of embedded heredoc
+    python3 "$INFRA_ROOT/scripts/docker/get_resource_limits.py" "$username" --idle-timeout
 }
 
 # Convert timeout string (e.g., "48h", "7d") to seconds
+# Uses centralized ds01_parse_duration from init.sh
 timeout_to_seconds() {
     local timeout="$1"
-    
-    if [[ "$timeout" == "null" ]] || [[ -z "$timeout" ]]; then
-        echo "0"  # No timeout
-        return
+    local result=$(ds01_parse_duration "$timeout")
+    # ds01_parse_duration returns -1 for null/never, convert to 0 for "no timeout"
+    if [ "$result" = "-1" ]; then
+        echo "0"
+    else
+        echo "$result"
     fi
-    
-    local value="${timeout%[a-z]*}"
-    local unit="${timeout#${value}}"
-    
-    # Use bc for decimal support (e.g., 0.02h)
-    case "$unit" in
-        h) echo "scale=0; $value * 3600 / 1" | bc ;;
-        d) echo "scale=0; $value * 86400 / 1" | bc ;;
-        w) echo "scale=0; $value * 604800 / 1" | bc ;;
-        *) echo "172800" ;;  # Default 48h
-    esac
 }
 
 # Get last activity time for container

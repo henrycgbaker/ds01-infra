@@ -181,6 +181,84 @@ class TestResourceLimitParser:
         assert limits.get("idle_timeout") is None  # Should be None, not error
 
 
+class TestLifecycleLimitsJson:
+    """Tests for get_lifecycle_limits_json() method."""
+
+    @pytest.fixture
+    def parser_with_config(self, temp_config_file):
+        """Create parser with test config file."""
+        from get_resource_limits import ResourceLimitParser
+        return ResourceLimitParser(config_path=str(temp_config_file))
+
+    @pytest.mark.unit
+    def test_lifecycle_json_returns_all_fields(self, parser_with_config):
+        """Lifecycle JSON contains all expected fields."""
+        import json
+        result = parser_with_config.get_lifecycle_limits_json("student1")
+        data = json.loads(result)
+
+        assert "idle_timeout" in data
+        assert "max_runtime" in data
+        assert "gpu_hold_after_stop" in data
+        assert "container_hold_after_stop" in data
+
+    @pytest.mark.unit
+    def test_lifecycle_json_is_valid_json(self, parser_with_config):
+        """Lifecycle JSON is valid JSON."""
+        import json
+        result = parser_with_config.get_lifecycle_limits_json("student1")
+        # Should not raise
+        data = json.loads(result)
+        assert isinstance(data, dict)
+
+
+class TestPoliciesMethods:
+    """Tests for get_policies() method."""
+
+    @pytest.fixture
+    def parser_with_policies(self, temp_dir):
+        """Create parser with config containing policies."""
+        config = {
+            "defaults": {
+                "max_mig_instances": 1,
+                "max_cpus": 8,
+                "memory": "32g",
+                "priority": 50
+            },
+            "groups": {},
+            "user_overrides": {},
+            "policies": {
+                "high_demand_threshold": 0.75,
+                "high_demand_idle_reduction": 0.6
+            }
+        }
+        import yaml
+        config_file = temp_dir / "policy-config.yaml"
+        with open(config_file, "w") as f:
+            yaml.safe_dump(config, f)
+
+        from get_resource_limits import ResourceLimitParser
+        return ResourceLimitParser(str(config_file))
+
+    @pytest.mark.unit
+    def test_get_policies_returns_dict(self, parser_with_policies):
+        """get_policies() returns a dictionary."""
+        policies = parser_with_policies.get_policies()
+        assert isinstance(policies, dict)
+
+    @pytest.mark.unit
+    def test_get_policies_contains_threshold(self, parser_with_policies):
+        """Policies contain high_demand_threshold."""
+        policies = parser_with_policies.get_policies()
+        assert policies.get("high_demand_threshold") == 0.75
+
+    @pytest.mark.unit
+    def test_get_policies_contains_reduction(self, parser_with_policies):
+        """Policies contain high_demand_idle_reduction."""
+        policies = parser_with_policies.get_policies()
+        assert policies.get("high_demand_idle_reduction") == 0.6
+
+
 class TestResourceLimitParserIntegration:
     """Integration tests using real config file."""
 

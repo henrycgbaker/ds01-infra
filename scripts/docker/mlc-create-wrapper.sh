@@ -317,15 +317,25 @@ log_info "Workspace: $WORKSPACE_DIR"
 # Get user's resource limits and group
 if [ -f "$RESOURCE_PARSER" ] && [ -f "$CONFIG_FILE" ]; then
     log_info "Loading resource limits from configuration..."
+    # Capture exit codes separately to avoid $? being overwritten
+    set +e
     RESOURCE_LIMITS=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --docker-args 2>/dev/null)
-    USER_GROUP=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --group 2>/dev/null || echo "student")
+    LIMITS_EXIT=$?
+    USER_GROUP=$(python3 "$RESOURCE_PARSER" "$CURRENT_USER" --group 2>/dev/null)
+    GROUP_EXIT=$?
+    set -e
 
-    if [ $? -eq 0 ] && [ -n "$RESOURCE_LIMITS" ]; then
+    # Use defaults if either command failed or returned empty
+    if [ $LIMITS_EXIT -eq 0 ] && [ -n "$RESOURCE_LIMITS" ]; then
         log_info "Resource limits applied:"
         echo "$RESOURCE_LIMITS" | tr ' ' '\n' | sed 's/^/  /'
     else
         log_warning "Could not parse resource limits, using defaults"
         RESOURCE_LIMITS="--cpus=16 --memory=32g --memory-swap=32g --shm-size=16g --pids-limit=4096"
+    fi
+
+    # Default group if not determined
+    if [ $GROUP_EXIT -ne 0 ] || [ -z "$USER_GROUP" ]; then
         USER_GROUP="student"
     fi
 else

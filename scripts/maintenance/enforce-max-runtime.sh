@@ -16,16 +16,12 @@ CONFIG_FILE="$INFRA_ROOT/config/resource-limits.yaml"
 STATE_DIR="/var/lib/ds01/container-runtime"
 LOG_FILE="/var/log/ds01/runtime-enforcement.log"
 
+# Source shared library for colors and utilities
+source "$INFRA_ROOT/scripts/lib/init.sh"
+
 # Create state and log directories
 mkdir -p "$STATE_DIR"
 mkdir -p "$(dirname "$LOG_FILE")"
-
-# Colors for logging
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-GREEN='\033[0;32m'
-BLUE='\033[0;34m'
-NC='\033[0m'
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"
@@ -38,65 +34,21 @@ log_color() {
 # Get max runtime for user (in hours)
 get_max_runtime() {
     local username="$1"
-
-    # Use Python to parse YAML and get max_runtime
-    USERNAME="$username" CONFIG_FILE="$CONFIG_FILE" python3 - <<'PYEOF'
-import yaml
-import sys
-import os
-
-try:
-    username = os.environ['USERNAME']
-    config_file = os.environ['CONFIG_FILE']
-
-    with open(config_file) as f:
-        config = yaml.safe_load(f)
-
-    # Check user overrides first
-    if 'user_overrides' in config and config['user_overrides'] is not None:
-        if username in config['user_overrides']:
-            runtime = config['user_overrides'][username].get('max_runtime')
-            if runtime:
-                print(runtime)
-                sys.exit(0)
-
-    # Check groups
-    if 'groups' in config and config['groups'] is not None:
-        for group_name, group_config in config['groups'].items():
-            if 'members' in group_config and username in group_config['members']:
-                runtime = group_config.get('max_runtime')
-                if runtime:
-                    print(runtime)
-                    sys.exit(0)
-
-    # Default runtime
-    default_runtime = config.get('defaults', {}).get('max_runtime', 'null')
-    print(default_runtime)
-except Exception as e:
-    print("null", file=sys.stderr)
-    sys.exit(1)
-PYEOF
+    # Use centralized get_resource_limits.py CLI instead of embedded heredoc
+    python3 "$INFRA_ROOT/scripts/docker/get_resource_limits.py" "$username" --max-runtime
 }
 
 # Convert runtime string (e.g., "48h", "7d") to seconds
+# Uses centralized ds01_parse_duration from init.sh
 runtime_to_seconds() {
     local runtime="$1"
-
-    if [[ "$runtime" == "null" ]] || [[ -z "$runtime" ]]; then
-        echo "0"  # No limit
-        return
+    local result=$(ds01_parse_duration "$runtime")
+    # ds01_parse_duration returns -1 for null/never, convert to 0 for "no limit"
+    if [ "$result" = "-1" ]; then
+        echo "0"
+    else
+        echo "$result"
     fi
-
-    local value="${runtime%[a-z]*}"
-    local unit="${runtime#${value}}"
-
-    # Use bc for decimal support (e.g., 0.05h)
-    case "$unit" in
-        h) echo "scale=0; $value * 3600 / 1" | bc ;;
-        d) echo "scale=0; $value * 86400 / 1" | bc ;;
-        w) echo "scale=0; $value * 604800 / 1" | bc ;;
-        *) echo "0" ;;  # Default no limit
-    esac
 }
 
 # Get container start time in epoch seconds

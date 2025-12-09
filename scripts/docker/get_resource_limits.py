@@ -67,34 +67,43 @@ class ResourceLimitParser:
         """Load group members from config/groups/{group}.members file.
 
         File format: One username per line, # comments ignored.
-        Returns list of usernames or empty list if file doesn't exist.
+        Returns list of usernames or empty list if file doesn't exist or isn't readable.
         """
         member_file = self.config_dir / "groups" / f"{group_name}.members"
-        if not member_file.exists():
-            return []
+        try:
+            if not member_file.exists():
+                return []
 
-        members = []
-        with open(member_file) as f:
-            for line in f:
-                # Remove comments and whitespace
-                line = line.split('#')[0].strip()
-                if line:
-                    members.append(line)
-        return members
+            members = []
+            with open(member_file) as f:
+                for line in f:
+                    # Remove comments and whitespace
+                    line = line.split('#')[0].strip()
+                    if line:
+                        members.append(line)
+            return members
+        except PermissionError:
+            # Group member files may be restricted to admins only
+            # Fall back to inline members in YAML config
+            return []
 
     def _load_user_overrides(self):
         """Load user overrides from config/user-overrides.yaml.
 
-        Returns dict of username -> override settings, or empty dict if file doesn't exist.
+        Returns dict of username -> override settings, or empty dict if file doesn't exist or isn't readable.
         """
         override_file = self.config_dir / "user-overrides.yaml"
-        if not override_file.exists():
+        try:
+            if not override_file.exists():
+                return {}
+
+            with open(override_file) as f:
+                overrides = yaml.safe_load(f)
+
+            return overrides if overrides else {}
+        except PermissionError:
+            # User overrides file may be restricted to admins only
             return {}
-
-        with open(override_file) as f:
-            overrides = yaml.safe_load(f)
-
-        return overrides if overrides else {}
 
     def _load_external_files(self):
         """Load external member files and user overrides, merging into config."""
@@ -284,11 +293,52 @@ class ResourceLimitParser:
         """Get gpu_allocation section from config"""
         return self.config.get('gpu_allocation', {})
 
+    def get_policies(self):
+        """Get policies section from config"""
+        return self.config.get('policies', {})
+
+    def get_lifecycle_limits_json(self, username):
+        """Get all lifecycle limits for a user as JSON.
+
+        This method returns a JSON object with all lifecycle-related limits,
+        which can be used by maintenance scripts instead of embedded heredocs.
+
+        Returns:
+            JSON string with keys: idle_timeout, max_runtime,
+            gpu_hold_after_stop, container_hold_after_stop
+        """
+        import json
+        limits = self.get_user_limits(username)
+
+        lifecycle = {
+            'idle_timeout': limits.get('idle_timeout'),
+            'max_runtime': limits.get('max_runtime'),
+            'gpu_hold_after_stop': limits.get('gpu_hold_after_stop'),
+            'container_hold_after_stop': limits.get('container_hold_after_stop'),
+        }
+        return json.dumps(lifecycle)
+
 
 def main():
     """CLI interface for testing"""
     if len(sys.argv) < 2:
-        print("Usage: get_resource_limits.py <username> [--docker-args|--group|--max-gpus|--max-containers|--max-mig-per-container|--mig-instances-per-gpu|--allow-full-gpu|--priority|--gpu-hold-time|--container-hold-time|--idle-timeout|--max-runtime]")
+        print("Usage: get_resource_limits.py <username> [options]")
+        print("Options:")
+        print("  --docker-args          Docker run arguments for resource limits")
+        print("  --group                User's group name")
+        print("  --max-gpus             Max GPUs for user")
+        print("  --max-containers       Max containers for user")
+        print("  --max-mig-per-container  Max MIG instances per container")
+        print("  --mig-instances-per-gpu  MIG instances per physical GPU")
+        print("  --allow-full-gpu       Whether user can use full GPUs (true/false)")
+        print("  --priority             User's priority level")
+        print("  --gpu-hold-time        GPU hold time after stop")
+        print("  --container-hold-time  Container hold time after stop")
+        print("  --idle-timeout         Idle timeout duration")
+        print("  --max-runtime          Max container runtime")
+        print("  --all-lifecycle        All lifecycle limits as JSON")
+        print("  --high-demand-threshold  GPU allocation threshold for high demand mode")
+        print("  --high-demand-reduction  Idle timeout reduction factor in high demand")
         sys.exit(1)
 
     username = sys.argv[1]
@@ -345,6 +395,16 @@ def main():
         limits = parser.get_user_limits(username)
         max_runtime = limits.get('max_runtime')
         print(max_runtime if max_runtime is not None else "None")
+    elif '--all-lifecycle' in sys.argv:
+        print(parser.get_lifecycle_limits_json(username))
+    elif '--high-demand-threshold' in sys.argv:
+        policies = parser.get_policies()
+        threshold = policies.get('high_demand_threshold', 0.8)
+        print(threshold)
+    elif '--high-demand-reduction' in sys.argv:
+        policies = parser.get_policies()
+        reduction = policies.get('high_demand_idle_reduction', 0.5)
+        print(reduction)
     else:
         print(parser.format_for_display(username))
 

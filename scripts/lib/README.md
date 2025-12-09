@@ -250,7 +250,94 @@ SAFE_NAME=$(sanitize_username_for_slice "h.baker@hertie-school.lan")
 3. Update CLAUDE.md Script Organization section
 4. Deploy with `sudo deploy`
 
+## Core Libraries (New)
+
+### init.sh
+
+**Purpose:** Standard initialization for all DS01 bash scripts. Provides consistent paths, colors, and utility functions.
+
+**Usage:**
+
+```bash
+#!/bin/bash
+source /opt/ds01-infra/scripts/lib/init.sh
+
+# Now you have:
+# - $DS01_ROOT, $DS01_CONFIG, $DS01_SCRIPTS paths
+# - $RED, $GREEN, $YELLOW, $BLUE, $NC color codes
+# - ds01_get_limit, ds01_parse_duration functions
+```
+
+**Variables:**
+
+| Variable | Description |
+|----------|-------------|
+| `DS01_ROOT` | Base path: `/opt/ds01-infra` |
+| `DS01_CONFIG` | Config path: `$DS01_ROOT/config` |
+| `DS01_SCRIPTS` | Scripts path: `$DS01_ROOT/scripts` |
+| `DS01_LIB` | Lib path: `$DS01_SCRIPTS/lib` |
+| `RED`, `GREEN`, `YELLOW`, `BLUE`, `CYAN`, `MAGENTA` | ANSI color codes |
+| `BOLD`, `DIM`, `NC` | Text styling codes |
+
+**Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `ds01_get_limit <user> <flag>` | Get resource limit value (e.g., `--idle-timeout`) |
+| `ds01_get_config <flag>` | Get global config value (e.g., `--high-demand-threshold`) |
+| `ds01_parse_duration <duration>` | Parse duration string to seconds (e.g., "2h" → 7200) |
+| `ds01_format_duration <seconds>` | Format seconds to human-readable duration |
+| `ds01_error <msg>` | Print error message to stderr |
+| `ds01_warn <msg>` | Print warning message |
+| `ds01_success <msg>` | Print success message |
+| `ds01_info <msg>` | Print info message |
+| `ds01_log <msg> [logfile]` | Log message with timestamp |
+| `ds01_require_root` | Exit if not running as root |
+| `ds01_current_user` | Get current username |
+
+---
+
 ## Python Libraries
+
+### ds01_core.py
+
+**Purpose:** Core Python utilities for centralized, deduplicated infrastructure logic.
+
+**Usage:**
+
+```python
+from ds01_core import parse_duration, format_duration, Colors
+
+# Parse duration strings
+seconds = parse_duration("2h")  # Returns 7200
+seconds = parse_duration("0.5h")  # Returns 1800
+seconds = parse_duration("null")  # Returns -1 (unlimited)
+
+# Format durations
+text = format_duration(7200)  # Returns "2h"
+text = format_duration(-1)  # Returns "unlimited"
+
+# Use colors
+print(f"{Colors.GREEN}Success{Colors.NC}")
+```
+
+**Classes:**
+
+| Class | Description |
+|-------|-------------|
+| `Colors` | ANSI color constants (RED, GREEN, YELLOW, BLUE, etc.) |
+
+**Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `parse_duration(s)` | Parse duration string to seconds |
+| `format_duration(secs)` | Format seconds to human-readable |
+| `get_container_owner(name)` | Get container owner from AIME naming convention |
+| `get_container_gpu(name)` | Get GPU allocation for container |
+| `get_user_containers(user)` | List user's containers |
+
+---
 
 ### username_utils.py
 
