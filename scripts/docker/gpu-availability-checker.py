@@ -68,6 +68,82 @@ class GPUAvailabilityChecker:
 
         return mig_instances
 
+    def _get_physical_gpus(self) -> Dict[str, Dict]:
+        """
+        Get all physical GPUs from nvidia-smi.
+        Returns dict: {"0": {"uuid": "GPU-xxx", ...}, "1": {...}, etc.}
+        """
+        physical_gpus = {}
+
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "-L"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            for line in result.stdout.split('\n'):
+                # Match GPU line: "GPU 0: NVIDIA A100 (UUID: GPU-xxx)"
+                gpu_match = re.match(r'GPU (\d+):\s+([^(]+)\s+\(UUID:\s+(GPU-[a-f0-9-]+)\)', line)
+                if gpu_match:
+                    gpu_id = gpu_match.group(1)
+                    gpu_name = gpu_match.group(2).strip()
+                    gpu_uuid = gpu_match.group(3)
+                    physical_gpus[gpu_id] = {
+                        'id': gpu_id,
+                        'name': gpu_name,
+                        'uuid': gpu_uuid
+                    }
+
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            pass
+
+        return physical_gpus
+
+    def _get_full_gpus_available(self) -> Dict[str, Dict]:
+        """
+        Get available full GPUs in priority order:
+        1. Real unpartitioned GPUs (no MIG instances defined on them)
+        2. Virtual full GPUs (all MIG slots free on a physical GPU)
+        """
+        all_migs = self._get_all_mig_instances()
+        allocations = self.state_reader.get_all_allocations()
+        all_physical_gpus = self._get_physical_gpus()
+
+        full_available = {}
+
+        for gpu_id, gpu_info in all_physical_gpus.items():
+            mig_slots_on_gpu = [s for s in all_migs if all_migs[s]['physical_gpu'] == gpu_id]
+
+            if not mig_slots_on_gpu:
+                # Real full GPU - no MIG partitions exist on this GPU
+                if gpu_id not in allocations:
+                    full_available[gpu_id] = {
+                        'slot': gpu_id,
+                        'uuid': gpu_info['uuid'],
+                        'type': 'full',
+                        'mig_slots': [],
+                        'profile': 'full-gpu',
+                        'physical_gpu': gpu_id,
+                        'status': 'available'
+                    }
+            else:
+                # Check if ALL MIG slots on this GPU are free
+                all_free = all(slot not in allocations for slot in mig_slots_on_gpu)
+                if all_free:
+                    full_available[gpu_id] = {
+                        'slot': gpu_id,
+                        'uuid': gpu_info['uuid'],
+                        'type': 'virtual_full',
+                        'mig_slots': mig_slots_on_gpu,
+                        'profile': 'virtual-full-gpu',
+                        'physical_gpu': gpu_id,
+                        'status': 'available'
+                    }
+
+        return full_available
+
     def get_available_gpus(self) -> Dict[str, Dict]:
         """
         Get all available (unallocated) GPUs.
@@ -151,6 +227,7 @@ class GPUAvailabilityChecker:
 
         Returns:
             Dict with 'gpu_slot', 'gpu_uuid', or error if none available
+            For full GPUs, also includes 'mig_slots' list if it's a virtual full GPU
         """
         if exclude_slots is None:
             exclude_slots = []
@@ -164,6 +241,41 @@ class GPUAvailabilityChecker:
                 'user_current': availability['user_current_count'],
                 'user_max': max_gpus
             }
+
+        # If requiring full GPU, check full GPU availability first
+        if require_full_gpu:
+            full_gpus = self._get_full_gpus_available()
+
+            # Exclude already-reserved slots
+            for slot in exclude_slots:
+                full_gpus.pop(slot, None)
+                # Also exclude virtual full GPUs whose MIG slots overlap
+                for gpu_id, gpu_info in list(full_gpus.items()):
+                    if slot in gpu_info.get('mig_slots', []):
+                        full_gpus.pop(gpu_id, None)
+
+            if full_gpus:
+                # Prefer real full GPUs over virtual full GPUs
+                sorted_gpus = sorted(
+                    full_gpus.items(),
+                    key=lambda x: (0 if x[1]['type'] == 'full' else 1, x[0])
+                )
+                gpu_id, gpu_info = sorted_gpus[0]
+                return {
+                    'success': True,
+                    'gpu_slot': gpu_id,
+                    'gpu_uuid': gpu_info['uuid'],
+                    'profile': gpu_info['profile'],
+                    'physical_gpu': gpu_info['physical_gpu'],
+                    'type': gpu_info['type'],
+                    'mig_slots': gpu_info.get('mig_slots', [])
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': 'No full GPUs available (all GPUs have allocated MIG instances)',
+                    'user_current': availability['user_current_count']
+                }
 
         available = availability['available_gpus']
 
@@ -183,10 +295,6 @@ class GPUAvailabilityChecker:
         for slot, info in available.items():
             is_full = self._is_full_gpu(slot)
 
-            # If user requires full GPU, only include full GPUs
-            if require_full_gpu and not is_full:
-                continue
-
             # If user is not allowed full GPUs, exclude them
             if not allow_full_gpu and is_full:
                 continue
@@ -194,13 +302,7 @@ class GPUAvailabilityChecker:
             filtered_available[slot] = info
 
         if not filtered_available:
-            if require_full_gpu:
-                return {
-                    'success': False,
-                    'error': 'No full GPUs available (only MIG instances free)',
-                    'user_current': availability['user_current_count']
-                }
-            elif not allow_full_gpu:
+            if not allow_full_gpu:
                 return {
                     'success': False,
                     'error': 'No MIG instances available (only full GPUs free, user not permitted)',

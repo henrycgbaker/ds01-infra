@@ -32,12 +32,11 @@ get_limits() {
     python3 "$SCRIPT_DIR/docker/get_resource_limits.py" "$USERNAME" 2>/dev/null
 }
 
-# Get current GPU allocations
+# Get current GPU allocations (MIG-equivalent count)
 get_gpu_usage() {
     local count
-    # Count lines with GPU allocation (format: "  🟢 container: GPU X.X [interface]")
-    count=$(python3 "$SCRIPT_DIR/docker/gpu-state-reader.py" user "$USERNAME" 2>/dev/null | \
-        grep -c "GPU [0-9]" 2>/dev/null) || count=0
+    # Use gpu-state-reader user-mig-total for accurate MIG-equivalent count
+    count=$(python3 "$SCRIPT_DIR/docker/gpu-state-reader.py" user-mig-total "$USERNAME" 2>/dev/null) || count=0
     echo "${count:-0}"
 }
 
@@ -122,7 +121,7 @@ main() {
     # Parse key limits (from get_resource_limits.py human-readable output)
     local max_mig=$(echo "$limits" | grep -oP 'Max GPUs \(simultaneous\):\s*\K\S+' || echo "2")
     local max_containers=$(echo "$limits" | grep -oP 'Max containers:\s*\K\S+' || echo "3")
-    local allow_full_gpu=$(echo "$limits" | grep -i "Full GPU access" | grep -q "Allowed" && echo "true" || echo "false")
+    local allow_full_gpu=$(echo "$limits" | grep -i "Allow full GPU" | grep -q "Yes" && echo "true" || echo "false")
     local max_gpus_per_container=$(echo "$limits" | grep -oP 'Max GPUs per container:\s*\K\S+' || echo "1")
     local group=$(echo "$limits" | grep -oP '\(group:\s*\K[^)]+' || echo "student")
     local storage=$(echo "$limits" | grep -oP 'Workspace.*:\s*\K\S+' || echo "100G")
@@ -147,13 +146,21 @@ main() {
 
     # GPU Usage
     echo -e "${BOLD}GPU Allocation:${NC}"
+    echo -e "  ${BOLD}Total limit:${NC}"
     if [[ "$max_mig" == "unlimited" ]]; then
-        echo -e "  Current: $gpu_count GPUs/MIGs"
+        echo -e "    Current: $gpu_count GPUs/MIGs"
+        echo -n "    "
         usage_bar "$gpu_count" "unlimited"
     else
-        echo -n "  "
+        # Calculate remaining quota
+        local remaining_quota=$((max_mig - gpu_count))
+        [[ $remaining_quota -lt 0 ]] && remaining_quota=0
+        echo -n "    "
         usage_bar "$gpu_count" "$max_mig"
+        echo -e "    Remaining quota: ${BOLD}$remaining_quota${NC} MIG partition(s)"
     fi
+
+    echo -e "  ${BOLD}Per container:${NC} up to $max_gpus_per_container MIG partition(s)"
 
     # Full GPU access
     if [[ "$allow_full_gpu" == "True" || "$allow_full_gpu" == "true" ]]; then
@@ -161,7 +168,6 @@ main() {
     else
         echo -e "  Full GPU access: ${YELLOW}✗ MIG instances only${NC}"
     fi
-    echo -e "  Max GPUs per container: $max_gpus_per_container"
     echo ""
 
     # Container Usage

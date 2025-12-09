@@ -175,39 +175,71 @@ def get_mig_utilization(mig_instances):
         return mig_instances
 
 
-def get_container_mig_allocations():
-    """Get which containers have MIG instances allocated."""
-    try:
-        result = subprocess.run(
-            [
-                DOCKER_BIN, "ps",
-                "--filter", "label=ds01.gpu.allocated",
-                "--format", "{{.Names}}|{{.Label \"ds01.user\"}}|{{.Label \"ds01.gpu.allocated\"}}|{{.Label \"ds01.gpu.uuid\"}}"
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10
-        )
+# Cache the gpu-state-reader module for performance
+_gpu_state_module = None
 
-        allocations = []
-        for line in result.stdout.strip().split('\n'):
-            if not line.strip():
-                continue
-            parts = line.split('|')
-            if len(parts) >= 3:
-                gpu_slot = parts[2] if len(parts) > 2 else ""
-                # Only include MIG allocations (format: X.Y where X is GPU, Y is MIG device)
-                if '.' in gpu_slot:
-                    allocations.append({
-                        "container": parts[0],
-                        "user": parts[1] if len(parts) > 1 else "unknown",
-                        "mig_slot": gpu_slot,
-                        "mig_uuid": parts[3] if len(parts) > 3 else ""
-                    })
-        return allocations
+def _get_gpu_state_module():
+    """Get cached gpu-state-reader module (imported once, reused)."""
+    global _gpu_state_module
+    if _gpu_state_module is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            'gpu_state_reader',
+            '/opt/ds01-infra/scripts/docker/gpu-state-reader.py'
+        )
+        _gpu_state_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_gpu_state_module)
+    return _gpu_state_module
+
+
+def get_container_mig_allocations():
+    """Get which containers have MIG instances allocated.
+
+    Uses gpu-state-reader.py as the SINGLE SOURCE OF TRUTH for allocations.
+    Falls back to direct Docker query if gpu-state-reader fails.
+    """
+    try:
+        # Primary: Use gpu-state-reader (single source of truth)
+        gpu_state = _get_gpu_state_module()
+        return gpu_state.get_mig_allocations()
+
     except Exception as e:
-        print(f"Error getting container allocations: {e}", file=sys.stderr)
-        return []
+        # Fallback: Direct Docker query (for resilience)
+        try:
+            result = subprocess.run(
+                [
+                    DOCKER_BIN, "ps",
+                    "--filter", "label=ds01.gpu.slots",
+                    "--format", "{{.Names}}|{{.Label \"ds01.user\"}}|{{.Label \"ds01.gpu.slots\"}}|{{.Label \"ds01.gpu.uuids\"}}"
+                ],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+
+            allocations = []
+            for line in result.stdout.strip().split('\n'):
+                if not line.strip():
+                    continue
+                parts = line.split('|')
+                if len(parts) >= 3:
+                    container = parts[0]
+                    user = parts[1] if len(parts) > 1 else "unknown"
+                    gpu_slots = [s.strip() for s in parts[2].split(',') if s.strip()]
+                    gpu_uuids = [u.strip() for u in (parts[3] if len(parts) > 3 else "").split(',') if u.strip()]
+
+                    for i, slot in enumerate(gpu_slots):
+                        if '.' in slot:
+                            allocations.append({
+                                "container": container,
+                                "user": user,
+                                "mig_slot": slot,
+                                "mig_uuid": gpu_uuids[i] if i < len(gpu_uuids) else ""
+                            })
+            return allocations
+        except Exception as fallback_error:
+            print(f"Error getting allocations (both methods failed): {e}, {fallback_error}", file=sys.stderr)
+            return []
 
 
 def can_write_log():

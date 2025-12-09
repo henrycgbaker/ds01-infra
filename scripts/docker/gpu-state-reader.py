@@ -198,20 +198,29 @@ class GPUStateReader:
         Extract GPU assignment from Docker container inspect data.
         Returns dict with gpu_uuid, gpu_slot, interface, etc. or None if no GPU.
         Now supports multiple GPU devices per container.
+
+        GPU info sources (in order of preference):
+        1. HostConfig.DeviceRequests (from --gpus flag) - single MIG
+        2. DS01 labels (ds01.gpu.uuids, ds01.gpu.slots) - multi-MIG with --runtime=nvidia
         """
         try:
-            # Get HostConfig.DeviceRequests
+            # Get HostConfig.DeviceRequests (used for single MIG with --gpus)
             device_requests = container_data.get('HostConfig', {}).get('DeviceRequests', [])
+            device_ids = []
 
-            if not device_requests:
-                return None
+            if device_requests:
+                # Look for GPU device IDs in first DeviceRequest
+                first_request = device_requests[0]
+                device_ids = first_request.get('DeviceIDs', [])
 
-            # Look for GPU device IDs in first DeviceRequest
-            first_request = device_requests[0]
-            device_ids = first_request.get('DeviceIDs', [])
+            # If no DeviceRequests, check DS01 labels (used for multi-MIG with --runtime=nvidia)
+            labels = container_data.get('Config', {}).get('Labels', {}) or {}
+            if not device_ids and labels.get('ds01.gpu.uuids'):
+                # Multi-MIG: read from labels
+                device_ids = labels.get('ds01.gpu.uuids', '').split(',')
+                device_ids = [uid.strip() for uid in device_ids if uid.strip()]
 
             if not device_ids:
-                # Might be using 'all' GPUs - not supported in DS01
                 return None
 
             # Map all UUIDs to slot IDs
@@ -236,8 +245,7 @@ class GPUStateReader:
             gpu_uuid = device_ids[0]
             gpu_slot = gpu_slots[0] if gpu_slots else gpu_uuid
 
-            # Extract from Docker labels if available
-            labels = container_data.get('Config', {}).get('Labels', {}) or {}
+            # Extract additional info from Docker labels (labels already loaded above)
             allocated_at = labels.get('ds01.gpu.allocated_at', '')
             priority = labels.get('ds01.gpu.priority', '')
             user = labels.get('ds01.user') or labels.get('aime.mlc.USER', '')
@@ -299,20 +307,26 @@ class GPUStateReader:
             if not gpu_info:
                 continue  # Container has no GPU
 
-            gpu_slot = gpu_info['gpu_slot']
             user = gpu_info['user']
             interface = gpu_info.get('interface', INTERFACE_DOCKER)
 
-            # Add to allocations
-            allocations[gpu_slot]['containers'].append(container_name)
-            allocations[gpu_slot]['users'][user] += 1
-            allocations[gpu_slot]['uuid'] = gpu_info['gpu_uuid']
-            allocations[gpu_slot]['docker_id'] = gpu_info['gpu_uuid']
-            allocations[gpu_slot]['interfaces'][interface] += 1
+            # Process ALL gpu_slots for multi-MIG containers
+            all_gpu_slots = gpu_info.get('gpu_slots', [gpu_info['gpu_slot']])
+            all_gpu_uuids = gpu_info.get('gpu_uuids', [gpu_info['gpu_uuid']])
 
-            # Try to determine profile from UUID or slot
-            if 'MIG' in gpu_info['gpu_uuid']:
-                allocations[gpu_slot]['profile'] = '1g.10gb'  # Default, could parse from nvidia-smi
+            for i, gpu_slot in enumerate(all_gpu_slots):
+                gpu_uuid = all_gpu_uuids[i] if i < len(all_gpu_uuids) else ''
+
+                # Add to allocations
+                allocations[gpu_slot]['containers'].append(container_name)
+                allocations[gpu_slot]['users'][user] += 1
+                allocations[gpu_slot]['uuid'] = gpu_uuid
+                allocations[gpu_slot]['docker_id'] = gpu_uuid
+                allocations[gpu_slot]['interfaces'][interface] += 1
+
+                # Try to determine profile from UUID or slot
+                if 'MIG' in gpu_uuid:
+                    allocations[gpu_slot]['profile'] = '1g.10gb'  # Default, could parse from nvidia-smi
 
         # Convert defaultdict to regular dict
         result = {}
@@ -487,6 +501,103 @@ class GPUStateReader:
         """
         allocations = self.get_user_allocations(username)
         return sum(alloc.get('mig_equiv', 1) for alloc in allocations)
+
+
+# ============================================================================
+# MODULE-LEVEL API FUNCTIONS (for importing by other scripts)
+# These provide a simple interface for other DS01 scripts to get GPU state.
+# gpu-state-reader.py is the SINGLE SOURCE OF TRUTH for GPU allocations.
+# ============================================================================
+
+_reader_instance = None
+
+def get_reader() -> GPUStateReader:
+    """Get singleton GPUStateReader instance."""
+    global _reader_instance
+    if _reader_instance is None:
+        _reader_instance = GPUStateReader()
+    return _reader_instance
+
+
+def get_mig_allocations() -> List[Dict]:
+    """
+    Get all MIG allocations in a format compatible with monitors.
+    Returns list of dicts with: container, user, mig_slot, mig_uuid
+    """
+    reader = get_reader()
+    allocations = reader.get_all_allocations()
+
+    result = []
+    for slot, data in allocations.items():
+        # Only include MIG slots (format: X.Y)
+        if '.' in str(slot):
+            for container in data.get('containers', []):
+                # Find user for this container
+                users = data.get('users', {})
+                user = list(users.keys())[0] if users else 'unknown'
+                result.append({
+                    'container': container,
+                    'user': user,
+                    'mig_slot': slot,
+                    'mig_uuid': data.get('uuid', '')
+                })
+    return result
+
+
+def get_gpu_allocations() -> List[Dict]:
+    """
+    Get all full GPU allocations (non-MIG) in a format compatible with monitors.
+    Returns list of dicts with: container, user, gpu_slot, gpu_uuid
+    """
+    reader = get_reader()
+    allocations = reader.get_all_allocations()
+
+    result = []
+    for slot, data in allocations.items():
+        # Only include full GPU slots (no decimal point)
+        if '.' not in str(slot):
+            for container in data.get('containers', []):
+                users = data.get('users', {})
+                user = list(users.keys())[0] if users else 'unknown'
+                result.append({
+                    'container': container,
+                    'user': user,
+                    'gpu_slot': slot,
+                    'gpu_uuid': data.get('uuid', '')
+                })
+    return result
+
+
+def get_all_gpu_allocations_by_slot() -> Dict:
+    """
+    Get all GPU/MIG allocations indexed by slot.
+    Returns the raw allocation dict from GPUStateReader.
+    """
+    return get_reader().get_all_allocations()
+
+
+def get_all_allocations_flat() -> List[Dict]:
+    """
+    Get ALL allocations (both MIG and full GPU) as a flat list.
+    Returns list of dicts with: container, user, gpu_slot, gpu_uuid
+
+    This is the primary API for monitors that need to track all GPU usage.
+    """
+    reader = get_reader()
+    allocations = reader.get_all_allocations()
+
+    result = []
+    for slot, data in allocations.items():
+        for container in data.get('containers', []):
+            users = data.get('users', {})
+            user = list(users.keys())[0] if users else 'unknown'
+            result.append({
+                'container': container,
+                'user': user,
+                'gpu_slot': str(slot),
+                'gpu_uuid': data.get('uuid', '')
+            })
+    return result
 
 
 def main():

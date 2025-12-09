@@ -25,12 +25,30 @@ STATE_DIR = Path("/var/lib/ds01")
 LOG_DIR = Path("/var/log/ds01")
 UTILIZATION_LOG = LOG_DIR / "gpu-utilization.jsonl"
 EVENT_LOGGER = INFRA_ROOT / "scripts/docker/event-logger.py"
+GPU_STATE_READER = INFRA_ROOT / "scripts/docker/gpu-state-reader.py"
 # Use real docker binary directly (bypass wrapper filtering)
 DOCKER_BIN = "/usr/bin/docker"
 
 # Thresholds
 WASTE_THRESHOLD = 5  # GPU utilization below this % is considered "wasted"
 WASTE_DURATION_MINUTES = 30  # Must be wasted for this long to alert
+
+# Cache for gpu-state-reader module (imported once, reused)
+_gpu_state_module = None
+
+
+def _get_gpu_state_module():
+    """Get cached gpu-state-reader module (imported once, reused)."""
+    global _gpu_state_module
+    if _gpu_state_module is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            'gpu_state_reader',
+            str(GPU_STATE_READER)
+        )
+        _gpu_state_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(_gpu_state_module)
+    return _gpu_state_module
 
 
 def now_utc():
@@ -82,13 +100,25 @@ def get_gpu_utilization():
 
 
 def get_container_gpu_allocations():
-    """Get which containers have GPUs allocated."""
+    """
+    Get which containers have GPUs allocated.
+    Uses gpu-state-reader.py as SINGLE SOURCE OF TRUTH with fallback.
+    """
+    # Primary: Use gpu-state-reader for consistent allocation reading
     try:
+        gpu_state = _get_gpu_state_module()
+        return gpu_state.get_gpu_allocations()
+    except Exception as e:
+        # Fallback: Direct Docker query for resilience
+        pass
+
+    # Fallback: Direct Docker query (supports both single and multi-GPU)
+    try:
+        # Query containers with either label format
         result = subprocess.run(
             [
                 DOCKER_BIN, "ps",
-                "--filter", "label=ds01.gpu.allocated",
-                "--format", "{{.Names}}|{{.Label \"ds01.user\"}}|{{.Label \"ds01.gpu.allocated\"}}|{{.Label \"ds01.gpu.uuid\"}}"
+                "--format", "{{.Names}}|{{.Label \"ds01.user\"}}|{{.Label \"ds01.gpu.allocated\"}}|{{.Label \"ds01.gpu.uuid\"}}|{{.Label \"ds01.gpu.slots\"}}|{{.Label \"ds01.gpu.uuids\"}}"
             ],
             capture_output=True,
             text=True,
@@ -101,12 +131,29 @@ def get_container_gpu_allocations():
                 continue
             parts = line.split('|')
             if len(parts) >= 3:
-                allocations.append({
-                    "container": parts[0],
-                    "user": parts[1] if len(parts) > 1 else "unknown",
-                    "gpu_slot": parts[2] if len(parts) > 2 else "",
-                    "gpu_uuid": parts[3] if len(parts) > 3 else ""
-                })
+                # Check for multi-GPU labels first (ds01.gpu.slots)
+                gpu_slots = parts[4] if len(parts) > 4 and parts[4] else ""
+                gpu_uuids = parts[5] if len(parts) > 5 and parts[5] else ""
+
+                if gpu_slots:
+                    # Multi-GPU: split into multiple entries
+                    slots_list = [s.strip() for s in gpu_slots.split(',') if s.strip()]
+                    uuids_list = [u.strip() for u in gpu_uuids.split(',') if u.strip()] if gpu_uuids else []
+
+                    for i, slot in enumerate(slots_list):
+                        allocations.append({
+                            "container": parts[0],
+                            "user": parts[1] if parts[1] else "unknown",
+                            "gpu_slot": slot,
+                            "gpu_uuid": uuids_list[i] if i < len(uuids_list) else ""
+                        })
+                elif parts[2]:  # Single GPU: ds01.gpu.allocated
+                    allocations.append({
+                        "container": parts[0],
+                        "user": parts[1] if parts[1] else "unknown",
+                        "gpu_slot": parts[2],
+                        "gpu_uuid": parts[3] if len(parts) > 3 else ""
+                    })
         return allocations
     except Exception as e:
         print(f"Error getting container allocations: {e}", file=sys.stderr)

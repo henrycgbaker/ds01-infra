@@ -774,49 +774,88 @@ CONTAINER_TAG="${CONTAINER_NAME}._.${USER_ID}"
 # - User already specified --num-migs on command line
 
 if [ "$CPU_ONLY" != true ] && [ "$NUM_MIGS" -eq 1 ]; then
-    # Get user's max_mig_per_container and allow_full_gpu
+    # Get user's limits
     MAX_MIG_PER_CONTAINER=$(python3 "$RESOURCE_PARSER" "$USERNAME" --max-mig-per-container 2>/dev/null || echo "1")
+    MAX_MIG_TOTAL=$(python3 "$RESOURCE_PARSER" "$USERNAME" --max-gpus 2>/dev/null || echo "2")
     ALLOW_FULL_GPU=$(python3 "$RESOURCE_PARSER" "$USERNAME" --allow-full-gpu 2>/dev/null || echo "false")
     MIG_PER_GPU=$(python3 "$RESOURCE_PARSER" "$USERNAME" --mig-instances-per-gpu 2>/dev/null || echo "4")
+
+    # Get user's current allocation count
+    CURRENT_ALLOC=$(python3 "$SCRIPT_DIR/docker/gpu-state-reader.py" user-mig-total "$USERNAME" 2>/dev/null || echo "0")
+
+    # Calculate remaining quota
+    if [ "$MAX_MIG_TOTAL" = "unlimited" ] || [ "$MAX_MIG_TOTAL" = "null" ]; then
+        REMAINING_QUOTA=999
+    else
+        REMAINING_QUOTA=$((MAX_MIG_TOTAL - CURRENT_ALLOC))
+        [ "$REMAINING_QUOTA" -lt 0 ] && REMAINING_QUOTA=0
+    fi
 
     # Only show MIG selection if user can have more than 1 MIG per container
     if [ "$MAX_MIG_PER_CONTAINER" != "1" ] && [ "$MAX_MIG_PER_CONTAINER" != "" ]; then
         # Get total available MIGs on system
         TOTAL_MIGS=$(nvidia-smi -L 2>/dev/null | grep -c MIG || echo "4")
 
-        # Determine max option to show
+        # Determine max option: min(per_container_limit, remaining_quota, system_available)
         if [ "$MAX_MIG_PER_CONTAINER" = "unlimited" ] || [ "$MAX_MIG_PER_CONTAINER" = "null" ]; then
-            MAX_OPTION=$TOTAL_MIGS
+            MAX_OPTION=$REMAINING_QUOTA
         else
             MAX_OPTION=$MAX_MIG_PER_CONTAINER
-            [ "$MAX_OPTION" -gt "$TOTAL_MIGS" ] && MAX_OPTION=$TOTAL_MIGS
+            [ "$MAX_OPTION" -gt "$REMAINING_QUOTA" ] && MAX_OPTION=$REMAINING_QUOTA
+        fi
+        [ "$MAX_OPTION" -gt "$TOTAL_MIGS" ] && MAX_OPTION=$TOTAL_MIGS
+
+        # Check if user has any remaining quota
+        if [ "$MAX_OPTION" -le 0 ]; then
+            echo -e "${RED}Cannot allocate GPU resources.${NC}"
+            echo ""
+            echo "Your limits:"
+            echo "  • Per container: up to $MAX_MIG_PER_CONTAINER MIG partition(s)"
+            echo "  • Total (all containers): up to $MAX_MIG_TOTAL MIG partition(s)"
+            echo ""
+            echo "Current usage:"
+            echo "  • You have $CURRENT_ALLOC MIG partition(s) allocated"
+            echo "  • Remaining quota: $REMAINING_QUOTA"
+            echo ""
+            echo -e "${CYAN}To free up resources:${NC}"
+            echo "  container-retire <name>   # Remove a container and free its GPU"
+            echo "  check-limits              # View your current usage"
+            exit 1
         fi
 
-        echo -e "${BOLD}GPU Allocation:${NC}"
-        echo ""
-        echo "Your account allows up to $MAX_MIG_PER_CONTAINER MIG partitions per container."
-        echo "System has $TOTAL_MIGS MIG partitions total."
-        echo ""
-        echo "How many MIG partitions do you need? (1 full GPU = $MIG_PER_GPU MIGs)"
-        echo ""
+        # Only show selection menu if user can allocate more than 1
+        if [ "$MAX_OPTION" -gt 1 ]; then
+            echo -e "${BOLD}GPU Allocation:${NC}"
+            echo ""
+            if [ "$CURRENT_ALLOC" -gt 0 ]; then
+                echo "Current allocation: $CURRENT_ALLOC MIG partition(s)"
+            fi
+            echo "Available for this container: up to $MAX_OPTION MIG partition(s)"
+            echo ""
+            echo "How many MIG partitions do you need? (1 full GPU = $MIG_PER_GPU MIGs)"
+            echo ""
 
-        # Show dynamic options based on available MIGs
-        for i in $(seq 1 $MAX_OPTION); do
-            GPU_EQUIV=""
-            if [ "$((i % MIG_PER_GPU))" -eq 0 ]; then
-                GPU_COUNT=$((i / MIG_PER_GPU))
-                GPU_EQUIV=" = ${GPU_COUNT} full GPU(s)"
-            fi
-            if [ "$i" -eq 1 ]; then
-                echo -e "  ${BOLD}${i})${NC} ${i} MIG${GPU_EQUIV} ${GREEN}(recommended)${NC}"
-            else
-                echo -e "  ${BOLD}${i})${NC} ${i} MIGs${GPU_EQUIV}"
-            fi
-        done
-        echo ""
-        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-        read -p "Enter number of MIGs [1-$MAX_OPTION, default: 1]: " MIG_CHOICE </dev/tty
-        MIG_CHOICE=${MIG_CHOICE:-1}
+            # Show dynamic options based on available MIGs
+            for i in $(seq 1 $MAX_OPTION); do
+                GPU_EQUIV=""
+                if [ "$((i % MIG_PER_GPU))" -eq 0 ]; then
+                    GPU_COUNT=$((i / MIG_PER_GPU))
+                    GPU_EQUIV=" = ${GPU_COUNT} full GPU(s)"
+                fi
+                if [ "$i" -eq 1 ]; then
+                    echo -e "  ${BOLD}${i})${NC} ${i} MIG${GPU_EQUIV} ${GREEN}(recommended)${NC}"
+                else
+                    echo -e "  ${BOLD}${i})${NC} ${i} MIGs${GPU_EQUIV}"
+                fi
+            done
+            echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+            read -p "Enter number of MIGs [1-$MAX_OPTION, default: 1]: " MIG_CHOICE </dev/tty
+            MIG_CHOICE=${MIG_CHOICE:-1}
+        else
+            # User can only allocate 1 MIG, skip selection
+            MIG_CHOICE=1
+        fi
 
         # Validate choice
         if [[ "$MIG_CHOICE" =~ ^[0-9]+$ ]] && [ "$MIG_CHOICE" -ge 1 ] && [ "$MIG_CHOICE" -le "$MAX_OPTION" ]; then
@@ -828,12 +867,25 @@ if [ "$CPU_ONLY" != true ] && [ "$NUM_MIGS" -eq 1 ]; then
 
         # Full GPU option (only if user has allow_full_gpu and requesting 4+ MIGs)
         if [ "$ALLOW_FULL_GPU" = "true" ] && [ "$NUM_MIGS" -ge "$MIG_PER_GPU" ]; then
+            # Calculate full GPUs and remaining MIGs dynamically
+            num_full_gpus=$((NUM_MIGS / MIG_PER_GPU))
+            remaining_migs=$((NUM_MIGS % MIG_PER_GPU))
+
+            # Build description for option 2
+            full_gpu_desc=""
+            if [ "$num_full_gpus" -eq 1 ]; then
+                full_gpu_desc="1 Full GPU"
+            else
+                full_gpu_desc="$num_full_gpus Full GPUs"
+            fi
+            if [ "$remaining_migs" -gt 0 ]; then
+                full_gpu_desc="$full_gpu_desc + $remaining_migs MIG partition(s)"
+            fi
+
             echo -e "${BOLD}GPU Type Preference:${NC}"
             echo ""
-            echo "You requested $NUM_MIGS MIG partitions. Would you prefer a full GPU instead?"
-            echo ""
-            echo -e "  ${BOLD}1)${NC} $NUM_MIGS MIG partitions ${GREEN}(default - better for shared resources)${NC}"
-            echo -e "  ${BOLD}2)${NC} 1 Full GPU (better memory bandwidth, NVLink)"
+            echo -e "  ${BOLD}1)${NC} $NUM_MIGS distributed MIG partitions ${GREEN}(default - better for shared resources)${NC}"
+            echo -e "  ${BOLD}2)${NC} $full_gpu_desc (better memory bandwidth, NVLink)"
             echo ""
             read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Choice [1-2, default: 1]: " FULL_CHOICE </dev/tty
@@ -841,7 +893,7 @@ if [ "$CPU_ONLY" != true ] && [ "$NUM_MIGS" -eq 1 ]; then
 
             if [ "$FULL_CHOICE" = "2" ]; then
                 PREFER_FULL=true
-                echo -e "${GREEN}✓${NC} Using full GPU"
+                echo -e "${GREEN}✓${NC} Using $full_gpu_desc"
             fi
             echo ""
         fi
@@ -851,10 +903,9 @@ if [ "$CPU_ONLY" != true ] && [ "$NUM_MIGS" -eq 1 ]; then
             echo -e "${YELLOW}⚠ Multi-GPU containers consume shared resources.${NC}"
             echo -e "  Requesting: ${BOLD}$NUM_MIGS MIG partitions${NC}"
             echo ""
-            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-            read -p "Proceed? [Y/n]: " CONFIRM </dev/tty
+            read -p "Proceed? [Y/n, default: Y]: " CONFIRM </dev/tty
             CONFIRM=${CONFIRM:-Y}
-            if [[ "${CONFIRM,,}" != "y" && "${CONFIRM,,}" != "yes" ]]; then
+            if [[ "${CONFIRM,,}" != "y" && "${CONFIRM,,}" != "yes" && -n "$CONFIRM" ]]; then
                 echo -e "${CYAN}Cancelled${NC}"
                 exit 0
             fi

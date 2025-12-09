@@ -182,9 +182,24 @@ class ResourceLimitParser:
 
         cpus = limits.get('max_cpus') or limits.get('cpus', 16)
 
+        # Get max_gpus_per_container (support both old and new config names)
+        # Note: None means unlimited, so check explicitly (don't use 'or' which treats None as falsy)
+        max_gpus_container = limits.get('max_mig_per_container')
+        if max_gpus_container is None:
+            max_gpus_container = limits.get('max_gpus_per_container')
+        if max_gpus_container is None:
+            max_gpus_container_str = "unlimited"
+        else:
+            max_gpus_container_str = str(max_gpus_container)
+
+        # Get allow_full_gpu setting
+        allow_full = limits.get('allow_full_gpu', False)
+
         output = f"\nResource limits for user '{username}' (group: {group}):\n"
         output += f"\n  GPU Limits:\n"
         output += f"    Max GPUs (simultaneous):  {max_gpus_str}\n"
+        output += f"    Max GPUs per container:   {max_gpus_container_str}\n"
+        output += f"    Allow full GPU:           {'Yes' if allow_full else 'No'}\n"
         output += f"    Priority level:           {limits.get('priority', 10)}\n"
         output += f"    Max containers:           {limits.get('max_containers_per_user', 3)}\n"
         output += f"\n  Compute (per container):\n"

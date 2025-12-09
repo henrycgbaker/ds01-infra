@@ -1426,13 +1426,16 @@ def build_docker_run_command(
     """
     
     # Shared base command
+    # ========== DS01 PATCH: No --privileged - preserves MIG isolation ==========
     base_docker_cmd = [
         'docker', 'run',
         '-v', f'{workspace_dir}:{workspace}',
         '-w', workspace,
         '--name', container_tag,
         '--tty',
-        '--privileged',
+        '--cap-add', 'SYS_PTRACE',      # For debugging (gdb, strace)
+        '--cap-add', 'SYS_ADMIN',       # For user setup (adduser, etc.)
+        '--security-opt', 'seccomp=unconfined',  # For CUDA profiling
         '--network', 'host',
         '--device', '/dev/snd',
         '--ipc', 'host',
@@ -1440,6 +1443,7 @@ def build_docker_run_command(
         '--ulimit', 'stack=67108864',
         '-v', '/tmp/.X11-unix:/tmp/.X11-unix',
     ]
+    # ========== END DS01 PATCH ==========
 
     # ========== DS01 PATCH: Handle multi-MIG GPU allocation ==========
     if num_gpus and num_gpus.startswith('device='):
@@ -1452,18 +1456,18 @@ def build_docker_run_command(
             cuda_extras = [
                 '--runtime=nvidia',
                 '-e', f'NVIDIA_VISIBLE_DEVICES={device_ids}',
-                '--device', '/dev/video0',
+                # DS01: /dev/video0 removed - not needed for GPU compute
             ]
         else:
             # Single MIG/GPU: Use standard --gpus device=... syntax
             cuda_extras = [
                 '--gpus', num_gpus,
-                '--device', '/dev/video0',
+                # DS01: /dev/video0 removed - not needed for GPU compute
             ]
     else:
         cuda_extras = [
             '--gpus', num_gpus,
-            '--device', '/dev/video0',
+            # DS01: /dev/video0 removed - not needed for GPU compute
         ]
     # ========== END DS01 PATCH ==========
 
@@ -1655,11 +1659,20 @@ def build_docker_create_command(
         # ========== END DS01 PATCH ==========
         '--user', f'{user_id}:{group_id}',
         '--tty',
-        '--privileged',
         '--interactive',
         '--network', 'host',
         '--device', '/dev/snd'
     ]
+
+    # ========== DS01 PATCH: No privileged mode - preserves MIG isolation ==========
+    # --privileged gives full device access and BREAKS MIG isolation
+    # Use specific capabilities instead of full privileged mode
+    base_docker_cmd.extend([
+        '--cap-add', 'SYS_PTRACE',      # For debugging (gdb, strace)
+        '--cap-add', 'SYS_ADMIN',       # For user setup (adduser, etc.)
+        '--security-opt', 'seccomp=unconfined',  # For CUDA profiling
+    ])
+    # ========== END DS01 PATCH ==========
 
     # ========== DS01 PATCH: Resource Limits ==========
     # Handle IPC mode: --ipc host vs --shm-size are mutually exclusive
@@ -1703,11 +1716,11 @@ def build_docker_create_command(
 
         if num_devices > 1:
             # Multi-MIG: Use --runtime=nvidia with NVIDIA_VISIBLE_DEVICES env var
+            # NOTE: Do NOT set CUDA_VISIBLE_DEVICES for multi-MIG - it conflicts with NVIDIA enumeration
             cuda_extras = [
                 '--runtime=nvidia',
                 '-e', f'NVIDIA_VISIBLE_DEVICES={device_ids}',
-                '-e', f'CUDA_VISIBLE_DEVICES={",".join(str(i) for i in range(num_devices))}',
-                '--device', '/dev/video0',
+                # DS01: /dev/video0 removed - not needed for GPU compute
                 '--group-add', 'sudo'
             ]
         else:
@@ -1715,14 +1728,14 @@ def build_docker_create_command(
             cuda_extras = [
                 '--gpus', num_gpus,
                 '-e', f'CUDA_VISIBLE_DEVICES={device_ids}',
-                '--device', '/dev/video0',
+                # DS01: /dev/video0 removed - not needed for GPU compute
                 '--group-add', 'sudo'
             ]
     else:
         # Non-device format (e.g., "all", "2", etc.)
         cuda_extras = [
             '--gpus', num_gpus,
-            '--device', '/dev/video0',
+            # DS01: /dev/video0 removed - not needed for GPU compute
             '--group-add', 'sudo'
         ]
     # ========== END DS01 PATCH ==========

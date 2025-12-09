@@ -405,8 +405,16 @@ class GPUAllocatorSmart:
                         exclude_slots=allocated_slots
                     )
                     if suggestion['success']:
-                        allocated_slots.append(suggestion['gpu_slot'])
-                        total_mig_equiv += mig_per_gpu
+                        # Handle virtual full GPU (all MIG slots from one physical GPU)
+                        mig_slots = suggestion.get('mig_slots', [])
+                        if mig_slots:
+                            # Virtual full GPU: use individual MIG slots for Docker
+                            allocated_slots.extend(mig_slots)
+                            total_mig_equiv += len(mig_slots)
+                        else:
+                            # Real full GPU: use the GPU slot directly
+                            allocated_slots.append(suggestion['gpu_slot'])
+                            total_mig_equiv += mig_per_gpu
                     else:
                         # No more full GPUs available, try MIGs
                         remaining_migs_needed += mig_per_gpu

@@ -6,7 +6,7 @@
 # Default limits for all users (unless overridden below)
 defaults:
   # GPU limits
-  max_mig_instances: 2              # Max MIG/GPU instances user can have allocated (across all containers)
+  max_mig_instances: 3              # Max MIG/GPU instances user can have allocated (across all containers)
   max_mig_per_container: 1          # Max MIG-equivalents per single container
   allow_full_gpu: false             # Can user request full (non-MIG) GPU? Default: no
   gpu_memory: null                  # GPU memory limit in GB (null = no limit, already enforced by MIG)
@@ -42,12 +42,13 @@ default_group: student
 groups:
   student:
     members: []  # TO DO: autopopulate from LDAP group 'ds01-students'
-    allow_full_gpu: false           # Students can ONLY use MIG instances
-    max_mig_per_container: 2        # Up to 2 MIGs per container
+    allow_full_gpu: false           
+    max_mig_per_container: 3        
 
   researcher:
-    members: [s.kaiser@hertie-school.lan, 204214@hertie-school.lan, 204214, c.fusarbassini@hertie-school.lan, c.fusarbassini]
-    allow_full_gpu: true            # Researchers CAN request full GPUs
+    # List both student ID and name formats for LDAP robustness
+    members: [s.kaiser@hertie-school.lan, 204214@hertie-school.lan, c.fusarbassini@hertie-school.lan]
+    allow_full_gpu: true            
     max_mig_per_container: 4        # Up to 4 MIG-equivalents per container (= 1 full GPU)
     max_mig_instances: 8            # Can use up to 8 MIG instances or equivalent
     max_cpus: 64                    # Increased for CPU-heavy workloads (sklearn)
@@ -56,8 +57,8 @@ groups:
     shm_size: 32g
     storage_workspace: 500G
     storage_data: 1T
-    max_runtime: 72h                # 3 days for LLM fine-tuning
-    idle_timeout: 4h                # More lenient
+    max_runtime: 24h                
+    idle_timeout: 1h                
     max_tasks: 65536                # High for parallel workloads
     max_containers_per_user: 5
 
@@ -72,16 +73,26 @@ groups:
     shm_size: 64g
     storage_workspace: 2T
     storage_data: 5T
-    idle_timeout: null              # No timeout
-    max_runtime: null               # No limit
+    idle_timeout: 1h              
+    max_runtime: 24h               
     gpu_hold_after_stop: 1h         # Hold GPU for 1h after stop
-    container_hold_after_stop: null # Never auto-remove
     max_containers_per_user: 10
     max_tasks: null
 
 # Per-user overrides (takes precedence over group settings)
 # These override any group settings for specific users
 user_overrides:
+  # Temporary exemption from cleanup - will be included in cron jobs later
+  # Silke Kaiser (both ID and name formats for robustness)
+  204214@hertie-school.lan:
+    idle_timeout: null               # No idle timeout (exempt from auto-stop)
+    max_runtime: null                # No runtime limit
+    container_hold_after_stop: null  # Don't auto-remove stopped containers
+  s.kaiser@hertie-school.lan:
+    idle_timeout: null
+    max_runtime: null
+    container_hold_after_stop: null
+
   # Example time-based reservation:
   # john_doe:
   #   max_mig_instances: 4
