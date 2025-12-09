@@ -5,27 +5,21 @@
 
 set -e
 
+# Source DS01 standard library (colors, paths, utilities)
+source "${DS01_ROOT:-/opt/ds01-infra}/scripts/lib/init.sh"
+
 # Source DS01 libraries
-if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+if [[ -f "${DS01_LIB}/ds01-context.sh" ]]; then
+    source "${DS01_LIB}/ds01-context.sh"
 fi
 
-if [[ -f "/opt/ds01-infra/scripts/lib/project-metadata.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/project-metadata.sh
+if [[ -f "${DS01_LIB}/project-metadata.sh" ]]; then
+    source "${DS01_LIB}/project-metadata.sh"
 fi
 
 # Set orchestration context
 export DS01_CONTEXT="orchestration"
 export DS01_INTERFACE="orchestration"
-
-# Colors
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
@@ -91,9 +85,9 @@ show_info() {
 
 show_concepts() {
     echo -e ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Understanding Project Launch${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e ""
     echo -e "${BOLD}What is 'project launch'?${NC}"
     echo -e ""
@@ -241,6 +235,7 @@ select_project() {
     if [[ ${#projects[@]} -eq 0 ]]; then
         echo -e "${YELLOW}No projects found in ~/workspace/${NC}"
         echo -e ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Create a new project? [Y/n]: " CREATE_PROJECT </dev/tty
         CREATE_PROJECT=${CREATE_PROJECT:-Y}
         if [[ "$CREATE_PROJECT" =~ ^[Yy]$ ]]; then
@@ -256,6 +251,7 @@ select_project() {
     echo -e "  ${BOLD}0)${NC} Create new project ${DIM}(runs project-init)${NC}"
     echo -e ""
 
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [0-$((i-1))]: " CHOICE </dev/tty
 
     if [[ "$CHOICE" == "0" ]]; then
@@ -349,6 +345,7 @@ if [ "$IMAGE_EXISTS" = false ]; then
         echo -e ""
     fi
 
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Create image now? [Y/n]: " CREATE_IMAGE </dev/tty
     CREATE_IMAGE=${CREATE_IMAGE:-Y}
 

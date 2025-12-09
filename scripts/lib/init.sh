@@ -153,3 +153,90 @@ ds01_require_root() {
 ds01_current_user() {
     echo "${USER:-$(whoami)}"
 }
+
+# ============================================================================
+# Resource Limit Convenience Functions
+# ============================================================================
+
+# Get max GPUs/MIG instances for a user
+# Usage: max_gpus=$(ds01_get_max_gpus [username])
+ds01_get_max_gpus() {
+    local username="${1:-$(whoami)}"
+    python3 "${DS01_SCRIPTS}/docker/get_resource_limits.py" "$username" --max-gpus 2>/dev/null || echo "1"
+}
+
+# Get idle timeout for a user
+# Usage: timeout=$(ds01_get_idle_timeout [username])
+ds01_get_idle_timeout() {
+    local username="${1:-$(whoami)}"
+    python3 "${DS01_SCRIPTS}/docker/get_resource_limits.py" "$username" --idle-timeout 2>/dev/null || echo "2h"
+}
+
+# Get max runtime for a user
+# Usage: max_runtime=$(ds01_get_max_runtime [username])
+ds01_get_max_runtime() {
+    local username="${1:-$(whoami)}"
+    python3 "${DS01_SCRIPTS}/docker/get_resource_limits.py" "$username" --max-runtime 2>/dev/null || echo "24h"
+}
+
+# Get max containers for a user
+# Usage: max_containers=$(ds01_get_max_containers [username])
+ds01_get_max_containers() {
+    local username="${1:-$(whoami)}"
+    python3 "${DS01_SCRIPTS}/docker/get_resource_limits.py" "$username" --max-containers 2>/dev/null || echo "3"
+}
+
+# Get docker args (--cpus, --memory, etc.) for a user
+# Usage: docker_args=$(ds01_get_docker_args [username])
+ds01_get_docker_args() {
+    local username="${1:-$(whoami)}"
+    python3 "${DS01_SCRIPTS}/docker/get_resource_limits.py" "$username" --docker-args 2>/dev/null
+}
+
+# Check if user can access full GPUs (not just MIG)
+# Usage: if ds01_allow_full_gpu [username]; then ...
+ds01_allow_full_gpu() {
+    local username="${1:-$(whoami)}"
+    local allow
+    allow=$(python3 "${DS01_SCRIPTS}/docker/get_resource_limits.py" "$username" --allow-full-gpu 2>/dev/null || echo "false")
+    [[ "$allow" == "true" ]]
+}
+
+# ============================================================================
+# Logging Functions (for scripts that need log_info, log_error, etc.)
+# ============================================================================
+
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# ============================================================================
+# UI Drawing Functions
+# ============================================================================
+
+# Draw a header box (used in many commands)
+# Usage: ds01_draw_header "Title"
+ds01_draw_header() {
+    local title="$1"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}${title}${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+# Draw a section separator
+# Usage: ds01_draw_separator
+ds01_draw_separator() {
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}

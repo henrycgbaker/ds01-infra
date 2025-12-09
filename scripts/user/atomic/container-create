@@ -5,20 +5,13 @@
 
 set -e
 
-# Source DS01 context library for conditional output
-if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/ds01-context.sh
-fi
+# Source DS01 standard library (colors, paths, utilities)
+source "${DS01_ROOT:-/opt/ds01-infra}/scripts/lib/init.sh"
 
-# Colors
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'
+# Source DS01 context library for conditional output
+if [[ -f "${DS01_LIB}/ds01-context.sh" ]]; then
+    source "${DS01_LIB}/ds01-context.sh"
+fi
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
@@ -613,15 +606,18 @@ if [ -z "$CONTAINER_NAME" ]; then
             fi
             echo ""
 
-            # Ask for container name
+            # Ask for container name (loop until valid)
             echo -e "${BOLD}Container Name${NC}"
             echo ""
-            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-            read -p "Container name: " CONTAINER_NAME </dev/tty
-            if [ -z "$CONTAINER_NAME" ]; then
-                echo -e "${RED}✗ Container name cannot be empty${NC}"
-                exit 1
-            fi
+            while true; do
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Container name: " CONTAINER_NAME </dev/tty
+                if [ -z "$CONTAINER_NAME" ]; then
+                    echo -e "${YELLOW}Container name required. Please try again.${NC}"
+                    continue
+                fi
+                break
+            done
 
             # Sanitize name
             CONTAINER_NAME=$(echo "$CONTAINER_NAME" | tr '[:upper:]' '[:lower:]' | tr ' ' '-')
@@ -920,6 +916,7 @@ if [ "$CPU_ONLY" != true ] && [ "$NUM_MIGS" -eq 1 ]; then
             echo ""
             echo -e "  ${DIM}See: https://ds01-hub.hertie-school.org/docs/multi-mig-training${NC}"
             echo ""
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Proceed with multi-MIG? [Y/n, default: Y]: " CONFIRM </dev/tty
             CONFIRM=${CONFIRM:-Y}
             if [[ "${CONFIRM,,}" != "y" && "${CONFIRM,,}" != "yes" && -n "$CONFIRM" ]]; then

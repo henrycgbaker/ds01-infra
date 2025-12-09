@@ -5,9 +5,12 @@
 
 set -e
 
+# Source DS01 standard library (colors, paths, utilities)
+source "${DS01_ROOT:-/opt/ds01-infra}/scripts/lib/init.sh"
+
 # Source DS01 context library
-if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+if [[ -f "${DS01_LIB}/ds01-context.sh" ]]; then
+    source "${DS01_LIB}/ds01-context.sh"
 fi
 
 # Set orchestration context - suppresses atomic command "Next steps" output
@@ -17,15 +20,8 @@ export DS01_INTERFACE="orchestration"
 # Legacy compatibility
 export DS01_ORCHESTRATOR=deploy
 
-# Colors
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
+# Additional color (DIM not in init.sh)
 DIM='\033[2m'
-NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
@@ -257,11 +253,13 @@ select_workspace() {
     options+=("custom")
     echo -e ""
 
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1-$i, default: 1]: " CHOICE </dev/tty
     CHOICE=${CHOICE:-1}
 
     if [[ "$CHOICE" == "$i" ]]; then
         # Custom path
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Enter workspace path: " CUSTOM_PATH </dev/tty
         # Expand ~ and validate
         CUSTOM_PATH="${CUSTOM_PATH/#\~/$HOME}"
@@ -364,6 +362,7 @@ if [ "$GUIDED" = true ]; then
     echo "  1. Creates a new container from an image"
     echo "  2. Starts the container (background or with terminal)"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Press Enter to continue..." </dev/tty
     echo ""
 fi
@@ -507,6 +506,7 @@ if [ -z "$START_MODE" ]; then
     echo -e "     ${DIM}Opens interactive shell inside container${NC}"
     echo -e "     ${DIM}Uses: container-run${NC}"
     echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1-2, default: 2]: " CHOICE </dev/tty
     CHOICE=${CHOICE:-2}
 
@@ -646,6 +646,7 @@ case $START_MODE in
                 echo -e "${YELLOW}💡 Think of it like:${NC}"
                 echo "  Keep = close laptop lid  |  Retire = shut down (files safe)"
                 echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
                 read -p "Press Enter to continue..." </dev/tty
                 echo ""
             fi
@@ -657,6 +658,7 @@ case $START_MODE in
             echo ""
 
             # Prompt with default to Keep running (safest - prevents accidental removal)
+            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
             read -p "Choose [1=keep, 2=retire] (default: 1): " CHOICE </dev/tty
             echo ""
 

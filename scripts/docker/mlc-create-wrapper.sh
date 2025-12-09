@@ -810,6 +810,39 @@ if ! docker inspect "$CONTAINER_TAG" &>/dev/null; then
     exit 1
 fi
 
+# === GPU ALLOCATION RACE CONDITION CHECK ===
+# Verify the GPU in the container matches what we allocated.
+# This prevents double-allocation when two processes allocate the same GPU
+# between lock release (in gpu_allocator_v2.py) and container creation.
+if [ -n "$DOCKER_ID" ]; then
+    ACTUAL_GPU=$(docker inspect -f '{{index .Config.Labels "ds01.gpu.uuids"}}' "$CONTAINER_TAG" 2>/dev/null || echo "")
+
+    # Fall back to single GPU label
+    if [ -z "$ACTUAL_GPU" ] || [ "$ACTUAL_GPU" = "<no value>" ]; then
+        ACTUAL_GPU=$(docker inspect -f '{{index .Config.Labels "ds01.gpu.uuid"}}' "$CONTAINER_TAG" 2>/dev/null || echo "")
+    fi
+
+    # Check if another container grabbed our GPU first
+    if [ -n "$ACTUAL_GPU" ] && [ "$ACTUAL_GPU" != "<no value>" ] && [ "$ACTUAL_GPU" != "$DOCKER_ID" ]; then
+        log_error "GPU allocation race condition detected!"
+        log_error "Expected GPU: $DOCKER_ID"
+        log_error "Container has: $ACTUAL_GPU"
+        echo ""
+        echo -e "${YELLOW}Another container was created with the same GPU at nearly the same time.${NC}"
+        echo -e "${YELLOW}Removing this container and releasing allocation...${NC}"
+
+        # Clean up the conflicting container
+        docker rm -f "$CONTAINER_TAG" &>/dev/null || true
+        python3 "$GPU_ALLOCATOR" release "$CONTAINER_TAG" &>/dev/null || true
+
+        echo ""
+        echo -e "${GREEN}Please retry your command:${NC}"
+        echo -e "  container-deploy $CONTAINER_NAME"
+        echo ""
+        exit 1
+    fi
+fi
+
 # Build docker update command
 UPDATE_CMD="docker update"
 

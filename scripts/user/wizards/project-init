@@ -6,31 +6,34 @@
 
 set -e
 
+# Source DS01 standard library (colors, paths, utilities)
+source "${DS01_ROOT:-/opt/ds01-infra}/scripts/lib/init.sh"
+
 # Source DS01 context library
-if [[ -f "/opt/ds01-infra/scripts/lib/ds01-context.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/ds01-context.sh
+if [[ -f "${DS01_LIB}/ds01-context.sh" ]]; then
+    source "${DS01_LIB}/ds01-context.sh"
 fi
 
 # Source skill assessment library for helper functions
-if [[ -f "/opt/ds01-infra/scripts/lib/skill-assessment.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/skill-assessment.sh
+if [[ -f "${DS01_LIB}/skill-assessment.sh" ]]; then
+    source "${DS01_LIB}/skill-assessment.sh"
 fi
 
 # Source project metadata library
-if [[ -f "/opt/ds01-infra/scripts/lib/project-metadata.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/project-metadata.sh
+if [[ -f "${DS01_LIB}/project-metadata.sh" ]]; then
+    source "${DS01_LIB}/project-metadata.sh"
 fi
 
 # Source AIME images library for base image resolution
-if [[ -f "/opt/ds01-infra/scripts/lib/aime-images.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/aime-images.sh
+if [[ -f "${DS01_LIB}/aime-images.sh" ]]; then
+    source "${DS01_LIB}/aime-images.sh"
 fi
 
 # Source shared Dockerfile generator
-if [[ -f "/opt/ds01-infra/scripts/lib/dockerfile-generator.sh" ]]; then
-    source /opt/ds01-infra/scripts/lib/dockerfile-generator.sh
+if [[ -f "${DS01_LIB}/dockerfile-generator.sh" ]]; then
+    source "${DS01_LIB}/dockerfile-generator.sh"
 else
-    echo "Error: dockerfile-generator.sh not found at /opt/ds01-infra/scripts/lib/" >&2
+    echo "Error: dockerfile-generator.sh not found at ${DS01_LIB}/" >&2
     exit 1
 fi
 
@@ -43,15 +46,6 @@ fi
 # Set orchestration context - suppresses atomic command "Next steps" output
 export DS01_CONTEXT="orchestration"
 export DS01_INTERFACE="orchestration"
-
-BLUE='\033[0;36m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'
 
 USERNAME=$(whoami)
 USER_ID=$(id -u)
@@ -129,9 +123,9 @@ show_info() {
 
 show_concepts() {
     echo -e ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}Understanding DS01 Projects${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e ""
     echo -e "${BOLD}What is a Project?${NC}"
     echo -e ""
@@ -266,17 +260,17 @@ fi
 # =============================================================================
 
 echo -e ""
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 if [ "$GUIDED" = true ]; then
-    echo -e "  ${BOLD}DS01 Project Init (Guided Mode)${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Project Init (Guided Mode)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e ""
     echo -e "${GREEN}${BOLD}Welcome to DS01!${NC}"
     echo -e "  This wizard will create a complete ML project with all required files."
     echo -e "  ${DIM}For experienced users: run without --guided flag${NC}"
 else
-    echo -e "  ${BOLD}DS01 Project Init${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}DS01 Project Init${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 fi
 
 if [ "$INTERACTIVE" = true ] && [ "$GUIDED" = false ]; then
@@ -309,6 +303,7 @@ if [ -n "$PROJECT_NAME_ARG" ]; then
     echo -e "Project name: ${CYAN}$PROJECT_NAME${NC}"
 else
     while true; do
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Project name (e.g., thesis, cv-experiments): " PROJECT_NAME </dev/tty
         PROJECT_NAME=$(echo "$PROJECT_NAME" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')
 
@@ -330,6 +325,7 @@ if [ -d "$PROJECT_DIR" ]; then
     echo -e "  ${BOLD}2)${NC} Overwrite ${DIM}(delete and recreate)${NC}"
     echo -e "  ${BOLD}3)${NC} Cancel"
     echo -e ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1]: " DIR_CHOICE </dev/tty
     DIR_CHOICE=${DIR_CHOICE:-1}
     
@@ -388,6 +384,7 @@ elif [ "$INTERACTIVE" = true ]; then
     echo -e "  ${BOLD}7)${NC} LLM/GenAI ${DIM}(vllm, bitsandbytes, langchain)${NC}"
     echo -e "  ${BOLD}8)${NC} Custom ${DIM}(specify packages manually later)${NC}"
     echo -e ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Choice [1-8, default: 1]: " TYPE_CHOICE </dev/tty
 
     case $TYPE_CHOICE in
@@ -409,6 +406,7 @@ if [ -n "$PROJECT_DESC_ARG" ]; then
     PROJECT_DESC="$PROJECT_DESC_ARG"
 elif [ "$INTERACTIVE" = true ]; then
     echo -e ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Project description (optional, Enter to skip): " PROJECT_DESC </dev/tty
 else
     PROJECT_DESC=""
@@ -440,6 +438,7 @@ if [ "$EXISTING_PROJECT" = false ]; then
         echo -e "  ${BOLD}2)${NC} Blank directory"
         echo -e "     ${DIM}Empty folder - set up your own structure${NC}"
         echo -e ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
         read -p "Choice [1-2, default: 1]: " STRUCTURE_CHOICE </dev/tty
 
         if [ "$STRUCTURE_CHOICE" = "2" ]; then
@@ -535,6 +534,7 @@ echo -e "${BOLD}Step 5: Git Version Control${NC}"
 if [ "$SKIP_GIT" = true ]; then
     echo -e "  ${DIM}Skipping Git setup (--no-git)${NC}"
 elif [ "$INTERACTIVE" = true ]; then
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
     read -p "Initialize Git repository? [Y/n]: " INIT_GIT </dev/tty
     INIT_GIT=${INIT_GIT:-Y}
 
@@ -585,9 +585,9 @@ fi
 # =============================================================================
 
 echo -e ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e "${GREEN}${BOLD}Project Setup Complete!${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo -e ""
 echo -e "${BOLD}Project:${NC} ${CYAN}$PROJECT_NAME${NC}"
 echo -e "${BOLD}Type:${NC}    $PROJECT_TYPE"

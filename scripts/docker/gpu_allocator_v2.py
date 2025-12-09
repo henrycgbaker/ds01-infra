@@ -182,11 +182,12 @@ class GPUAllocatorSmart:
         if reason:
             args.append(f'reason={reason}')
 
-        # Log to centralized event system (fail silently)
+        # Log to centralized event system (fail silently - logging should never block allocation)
         try:
             subprocess.run(args, capture_output=True, check=False)
-        except Exception:
-            pass
+        except (subprocess.SubprocessError, OSError) as e:
+            # Log failures to stderr for debugging, but don't block
+            print(f"Warning: event logging failed: {e}", file=sys.stderr)
 
         # Also write to legacy log file for backwards compatibility
         timestamp = datetime.now().isoformat()
@@ -194,8 +195,9 @@ class GPUAllocatorSmart:
         try:
             with open(self.log_file, 'a') as f:
                 f.write(log_entry)
-        except Exception:
-            pass
+        except (IOError, OSError) as e:
+            # Log failures to stderr for debugging, but don't block
+            print(f"Warning: legacy log write failed: {e}", file=sys.stderr)
 
     def _get_container_interface(self, container: str) -> str:
         """
@@ -522,8 +524,10 @@ class GPUAllocatorSmart:
                     if slot_id == gpu_slot:
                         return uuid
 
-        except (subprocess.CalledProcessError, Exception):
-            pass
+        except subprocess.CalledProcessError as e:
+            print(f"Warning: nvidia-smi query failed: {e}", file=sys.stderr)
+        except (json.JSONDecodeError, KeyError, IndexError) as e:
+            print(f"Warning: parsing nvidia-smi output failed: {e}", file=sys.stderr)
 
         # Fallback: return slot ID
         return gpu_slot

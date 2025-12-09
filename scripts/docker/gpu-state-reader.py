@@ -44,7 +44,13 @@ class GPUStateReader:
                 import yaml
                 with open(self.config_path) as f:
                     self._config = yaml.safe_load(f)
-            except Exception:
+            except FileNotFoundError:
+                self._config = {}
+            except (IOError, OSError) as e:
+                print(f"Warning: could not read config file: {e}", file=sys.stderr)
+                self._config = {}
+            except yaml.YAMLError as e:
+                print(f"Warning: could not parse config file: {e}", file=sys.stderr)
                 self._config = {}
         return self._config
 
@@ -272,7 +278,11 @@ class GPUStateReader:
                 'interface': interface
             }
 
-        except Exception:
+        except (KeyError, IndexError, TypeError) as e:
+            # Malformed container data - return None
+            return None
+        except subprocess.CalledProcessError:
+            # nvidia-smi query failed - GPU extraction failed
             return None
 
     def get_all_allocations(self) -> Dict:

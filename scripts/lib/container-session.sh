@@ -87,25 +87,27 @@ container_is_paused() {
 validate_gpu_available() {
     local name="$1"
     local tag="${name}._.${USER_ID}"
-    local metadata_file="/var/lib/ds01/container-metadata/${tag}.json"
 
-    if [[ -f "$metadata_file" ]]; then
-        local allocated_gpu=$(grep -o '"allocated_gpu": *"[^"]*"' "$metadata_file" 2>/dev/null | cut -d'"' -f4)
-        if [[ -n "$allocated_gpu" && "$allocated_gpu" != "null" ]]; then
-            local gpu_id
-            if [[ "$allocated_gpu" == *":"* ]]; then
-                gpu_id=$(echo "$allocated_gpu" | cut -d':' -f1)
-            else
-                gpu_id="$allocated_gpu"
-            fi
-            if ! nvidia-smi -i "$gpu_id" &>/dev/null; then
-                echo -e "${RED}GPU $allocated_gpu is no longer available${NC}"
+    # Query Docker labels (single source of truth) for GPU allocation
+    local gpu_uuids=$(docker inspect -f '{{index .Config.Labels "ds01.gpu.uuids"}}' "$tag" 2>/dev/null || echo "")
+
+    # Fall back to single GPU label if multi-GPU label not set
+    if [[ -z "$gpu_uuids" || "$gpu_uuids" == "<no value>" ]]; then
+        gpu_uuids=$(docker inspect -f '{{index .Config.Labels "ds01.gpu.uuid"}}' "$tag" 2>/dev/null || echo "")
+    fi
+
+    if [[ -n "$gpu_uuids" && "$gpu_uuids" != "<no value>" && "$gpu_uuids" != "null" ]]; then
+        # Validate each GPU UUID still exists in hardware
+        IFS=',' read -ra UUID_ARRAY <<< "$gpu_uuids"
+        for gpu_uuid in "${UUID_ARRAY[@]}"; do
+            if [[ -n "$gpu_uuid" ]] && ! nvidia-smi -L 2>/dev/null | grep -q "$gpu_uuid"; then
+                echo -e "${RED}GPU $gpu_uuid is no longer available${NC}"
                 echo ""
                 echo -e "Recreate container: ${GREEN}container-remove $name && container-create $name${NC}"
                 echo -e "Workspace files are safe in: ${DIM}~/workspace/$name/${NC}"
                 return 1
             fi
-        fi
+        done
     fi
     return 0
 }

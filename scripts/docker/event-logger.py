@@ -82,8 +82,8 @@ class EventLogger:
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 backup = self.log_file.with_suffix(f".{timestamp}.jsonl")
                 self.log_file.rename(backup)
-        except Exception:
-            pass  # Rotation is best-effort
+        except (IOError, OSError):
+            pass  # Rotation is best-effort, don't break logging
 
     def tail(self, n: int = 20) -> List[Dict]:
         """Get last N events."""
@@ -100,8 +100,8 @@ class EventLogger:
                         events.append(json.loads(line.strip()))
                     except json.JSONDecodeError:
                         continue
-        except Exception:
-            pass
+        except (IOError, OSError):
+            pass  # File read error, return empty list
 
         return events
 
@@ -123,8 +123,8 @@ class EventLogger:
                                 break
                         except json.JSONDecodeError:
                             continue
-        except Exception:
-            pass
+        except (IOError, OSError):
+            pass  # File read error, return partial results
 
         return events
 
