@@ -112,9 +112,10 @@ GPU/MIG allocation & 'dashboard'
 
 
 # Refactor
-- [ ] do a full refactor of code here
-- [ ] better deploy process 
-- [ ] Docuemnt ALL relevant configs / setups on this server. They are to be FULLY documented in configs/ - either as mirror / yaml / whatever files/scripts, alongside their deploy scripts. Also, let's build out a proper deploy dispatcher, so we can deploy specific components as needed
+- [x] do a full refactor of code here
+- [x] better deploy process 
+- [x] Docuemnt ALL relevant configs / setups on this server. They are to be FULLY documented in configs/ - either as mirror / yaml / whatever files/scripts, alongside their deploy scripts. Also, let's build out a proper deploy dispatcher, so we can deploy specific components as needed
+- [ ] some of the GPU allocation proces
 
 # Testing
 - [ ] set up unit, functional, integraton tests
