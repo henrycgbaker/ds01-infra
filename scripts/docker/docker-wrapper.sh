@@ -150,8 +150,11 @@ ensure_user_slice() {
 #
 # Access control is now handled entirely by OPA authorization plugin.
 
-# Check if user is an admin (ds01-admin group) - kept for potential future use
+# Check if user is an admin (root or ds01-admin group)
 is_admin() {
+    # Root is always admin (needed for cron jobs running as root)
+    [ "$CURRENT_UID" -eq 0 ] && return 0
+    # Check ds01-admin group membership
     groups "$CURRENT_USER" 2>/dev/null | grep -qE '\bds01-admin\b'
 }
 

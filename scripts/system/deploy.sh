@@ -1,7 +1,7 @@
 #!/bin/bash
 # DS01 Infrastructure - Command Deployment
 # Copies all DS01 commands to /usr/local/bin (not symlinks)
-# Run with: sudo /opt/ds01-infra/scripts/system/deploy-commands.sh
+# Run with: sudo /opt/ds01-infra/scripts/system/deploy.sh
 #
 # Security: Copies files instead of symlinking to keep /opt/ds01-infra secure
 # This allows /opt/ds01-infra to have restrictive permissions (700) while
@@ -187,7 +187,7 @@ echo ""
 
 # --- Deployment ---
 echo -e "${BOLD}Deployment:${NC}"
-create_symlink "$INFRA_ROOT/scripts/system/deploy-commands.sh" "deploy" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
+create_symlink "$INFRA_ROOT/scripts/system/deploy.sh" "deploy" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
 
 # --- Dashboard & Monitoring ---
@@ -237,6 +237,9 @@ echo -e "${BOLD}INTERNAL (Tier 1 - not advertised)${NC}"
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
+# Docker wrapper - intercepts docker commands for cgroup injection and labeling
+# This overrides /usr/bin/docker with our wrapper at /usr/local/bin/docker
+create_symlink "$INFRA_ROOT/scripts/docker/docker-wrapper.sh" "docker" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/docker/mlc-create-wrapper.sh" "mlc-create" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 create_symlink "$INFRA_ROOT/scripts/monitoring/mlc-stats-wrapper.sh" "mlc-stats" && ((SUCCESS_COUNT++)) || ((FAIL_COUNT++))
 echo ""
