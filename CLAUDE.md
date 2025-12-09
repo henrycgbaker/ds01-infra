@@ -210,6 +210,7 @@ container retire my-thesis           # Cleanup
 **Module-specific READMEs (detailed docs):**
 - `scripts/docker/README.md` - Resource management, GPU allocation, container creation
 - `scripts/user/README.md` - User commands, workflows, tier system details
+- `scripts/admin/README.md` - Admin tools, system dashboards, user management
 - `scripts/lib/README.md` - Shared libraries (dockerfile-generator, context, utilities)
 - `scripts/system/README.md` - System administration, deployment, user management
 - `scripts/monitoring/README.md` - Monitoring tools, dashboards, metrics collection
@@ -413,7 +414,8 @@ scripts/
 ├── docker/              # L0/L1 - Container creation, GPU allocation
 │   ├── mlc-create-wrapper.sh, mlc-patched.py    # L1 (HIDDEN)
 │   ├── get_resource_limits.py, gpu_allocator_v2.py
-│   ├── docker-wrapper.sh                         # Universal enforcement
+│   ├── docker-wrapper.sh                         # Universal enforcement (cgroup + label injection)
+│   ├── container-init.sh                         # Container initialization handler
 │   ├── gpu-state-reader.py, event-logger.py
 ├── user/                # L2/L3/L4 - User-facing commands
 │   ├── L2 (Atomic): container-{create|start|attach|run|stop|remove|list|stats|exit}
@@ -422,7 +424,18 @@ scripts/
 │   ├── L3 (Orchestrators): container-{deploy|retire}
 │   ├── L4 (Wizards): user-setup, project-init, project-launch, *-dispatcher.sh
 │   └── v1-backup/       # Backup of container workflow scripts before refactor
+├── admin/               # Admin tools (see scripts/admin/README.md)
+│   ├── dashboard        # Main admin dashboard (GPU, containers, system status)
+│   ├── ds01-logs        # Log viewer and search
+│   ├── ds01-users       # User management utilities
+│   ├── ds01-mig-partition  # MIG configuration tool
+│   ├── alias-create, alias-list  # Command alias management
+│   ├── help, version    # System information
+│   └── bypass-enforce-containers.sh  # Emergency bypass
 ├── lib/                 # Shared libraries (see scripts/lib/README.md)
+│   ├── init.sh          # Standard bash initialization (paths, colors, utilities)
+│   ├── ds01_core.py     # Core Python utilities (duration parsing, container utils)
+│   ├── username_utils.py  # Python username sanitization
 │   ├── dockerfile-generator.sh  # Shared Dockerfile generation (used by project-init, image-create)
 │   ├── ds01-context.sh          # Context detection for conditional output
 │   ├── interactive-select.sh    # Container selection UI
@@ -440,12 +453,18 @@ scripts/
 ├── monitoring/          # Metrics and auditing
 │   ├── ds01-health-check, detect-bare-metal.py
 │   ├── ds01-events, validate-state.py      # Event log and state validation
+│   ├── gpu-utilization-monitor.py          # Real-time GPU usage tracking
+│   ├── mig-utilization-monitor.py          # MIG instance utilization
+│   ├── container-dashboard.sh              # Container resource dashboard
 │   ├── gpu-status-dashboard.py, check-idle-containers.sh
 │   ├── collect-*-metrics.sh, audit-*.sh
 ├── maintenance/         # Cleanup and housekeeping
 │   ├── enforce-max-runtime.sh, check-idle-containers.sh
 │   ├── cleanup-stale-gpu-allocations.sh
 │   └── cleanup-stale-containers.sh
+├── backup/              # System backup and restore
+│   ├── backup.sh                            # Backup script
+│   └── restore-datasciencelab-sudo.sh       # Restore script
 
 testing/
 ├── cleanup-automation/  # Automated cleanup system tests

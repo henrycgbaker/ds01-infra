@@ -250,11 +250,11 @@ SAFE_NAME=$(sanitize_username_for_slice "h.baker@hertie-school.lan")
 3. Update CLAUDE.md Script Organization section
 4. Deploy with `sudo deploy`
 
-## Core Libraries (New)
+## Core Libraries
 
 ### init.sh
 
-**Purpose:** Standard initialization for all DS01 bash scripts. Provides consistent paths, colors, and utility functions.
+**Purpose:** Standard initialization for all DS01 bash scripts. Provides consistent paths, colors, and utility functions. Reduces code duplication across 50+ scripts.
 
 **Usage:**
 
@@ -264,11 +264,12 @@ source /opt/ds01-infra/scripts/lib/init.sh
 
 # Now you have:
 # - $DS01_ROOT, $DS01_CONFIG, $DS01_SCRIPTS paths
+# - $DS01_STATE, $DS01_LOG state/log directory paths
 # - $RED, $GREEN, $YELLOW, $BLUE, $NC color codes
-# - ds01_get_limit, ds01_parse_duration functions
+# - ds01_get_limit, ds01_parse_duration utility functions
 ```
 
-**Variables:**
+**Exported Variables:**
 
 | Variable | Description |
 |----------|-------------|
@@ -276,8 +277,11 @@ source /opt/ds01-infra/scripts/lib/init.sh
 | `DS01_CONFIG` | Config path: `$DS01_ROOT/config` |
 | `DS01_SCRIPTS` | Scripts path: `$DS01_ROOT/scripts` |
 | `DS01_LIB` | Lib path: `$DS01_SCRIPTS/lib` |
+| `DS01_STATE` | State directory: `/var/lib/ds01` |
+| `DS01_LOG` | Log directory: `/var/log/ds01` |
 | `RED`, `GREEN`, `YELLOW`, `BLUE`, `CYAN`, `MAGENTA` | ANSI color codes |
-| `BOLD`, `DIM`, `NC` | Text styling codes |
+| `BOLD`, `DIM`, `UNDERLINE` | Text styling codes |
+| `NC` | Reset color/style (No Color) |
 
 **Functions:**
 
@@ -295,56 +299,100 @@ source /opt/ds01-infra/scripts/lib/init.sh
 | `ds01_require_root` | Exit if not running as root |
 | `ds01_current_user` | Get current username |
 
+**Example:**
+
+```bash
+#!/bin/bash
+source /opt/ds01-infra/scripts/lib/init.sh
+
+ds01_info "Starting container cleanup..."
+IDLE_TIMEOUT=$(ds01_get_limit "$USER" "--idle-timeout")
+TIMEOUT_SECS=$(ds01_parse_duration "$IDLE_TIMEOUT")
+ds01_success "Cleanup complete"
+```
+
 ---
 
 ## Python Libraries
 
 ### ds01_core.py
 
-**Purpose:** Core Python utilities for centralized, deduplicated infrastructure logic.
+**Purpose:** Core Python utilities for centralized, deduplicated infrastructure logic. Provides duration parsing, container utilities, and ANSI colors. Centralizes logic previously duplicated in heredocs across multiple scripts.
 
 **Usage:**
 
 ```python
 from ds01_core import parse_duration, format_duration, Colors
+from ds01_core import get_container_owner, get_user_containers
 
 # Parse duration strings
-seconds = parse_duration("2h")  # Returns 7200
-seconds = parse_duration("0.5h")  # Returns 1800
-seconds = parse_duration("null")  # Returns -1 (unlimited)
+seconds = parse_duration("2h")      # Returns 7200
+seconds = parse_duration("0.5h")    # Returns 1800
+seconds = parse_duration("null")    # Returns -1 (unlimited)
+seconds = parse_duration("1d")      # Returns 86400
 
 # Format durations
-text = format_duration(7200)  # Returns "2h"
-text = format_duration(-1)  # Returns "unlimited"
+text = format_duration(7200)        # Returns "2h"
+text = format_duration(1800)        # Returns "30m"
+text = format_duration(-1)          # Returns "unlimited"
 
 # Use colors
 print(f"{Colors.GREEN}Success{Colors.NC}")
+print(f"{Colors.YELLOW}Warning: {Colors.NC}Resource limit approaching")
+
+# Container utilities
+owner = get_container_owner("my-project._.alice")  # Returns "alice"
+containers = get_user_containers("alice")          # Returns list of container names
+gpu_id = get_container_gpu("my-project._.alice")   # Returns GPU ID from state
 ```
 
 **Classes:**
 
 | Class | Description |
 |-------|-------------|
-| `Colors` | ANSI color constants (RED, GREEN, YELLOW, BLUE, etc.) |
+| `Colors` | ANSI color constants (RED, GREEN, YELLOW, BLUE, CYAN, MAGENTA, BOLD, DIM, NC) |
 
 **Functions:**
 
 | Function | Description |
 |----------|-------------|
-| `parse_duration(s)` | Parse duration string to seconds |
-| `format_duration(secs)` | Format seconds to human-readable |
-| `get_container_owner(name)` | Get container owner from AIME naming convention |
-| `get_container_gpu(name)` | Get GPU allocation for container |
-| `get_user_containers(user)` | List user's containers |
+| `parse_duration(s: str) -> int` | Parse duration string to seconds (supports h/m/s/d/w, "null" → -1) |
+| `format_duration(secs: int) -> str` | Format seconds to human-readable (e.g., 7200 → "2h") |
+| `get_container_owner(name: str) -> str` | Extract owner from AIME naming convention (container._.user) |
+| `get_container_gpu(name: str) -> Optional[str]` | Get GPU allocation from state file |
+| `get_user_containers(user: str) -> List[str]` | List user's container names from Docker |
+
+**Rationale:** Reduces code duplication by centralizing common logic previously embedded in Python heredocs. Makes code more maintainable and testable.
 
 ---
 
 ### username_utils.py
 
-Python equivalent of username-utils.sh for scripts that need username sanitization in Python.
+**Purpose:** Python username sanitization for systemd compatibility. Converts LDAP usernames to valid systemd slice names.
+
+**Usage:**
 
 ```python
 from username_utils import sanitize_username_for_slice
 
-safe_name = sanitize_username_for_slice("h.baker@hertie-school.lan")
+# LDAP username with dots and @ symbol
+ldap_user = "h.baker@hertie-school.lan"
+
+# Sanitize for systemd (dots → underscores, @ → underscores)
+safe_name = sanitize_username_for_slice(ldap_user)
+# Returns: "h_baker_hertie-school_lan"
+
+# Use in slice name
+slice_name = f"ds01-researchers-{safe_name}.slice"
+# Result: "ds01-researchers-h_baker_hertie-school_lan.slice"
 ```
+
+**Functions:**
+
+| Function | Description |
+|----------|-------------|
+| `sanitize_username_for_slice(username: str) -> str` | Convert username to systemd-safe format (underscores for dots/@) |
+
+**Rationale:** Systemd slice names cannot contain dots or @ symbols. This library provides consistent sanitization across Python scripts. See also `username-utils.sh` for bash equivalent.
+
+**Important:** Sanitization is ONLY for systemd slice names. Container names and Docker labels use original usernames.

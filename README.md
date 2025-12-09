@@ -33,23 +33,21 @@ ds01-dashboard
 
 ## Architecture
 
-### Tiered Hierarchical Design
+### Layered Hierarchical Design
 
-DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically rather than replacing it:
+DS01 uses a **5-layer modular architecture** that wraps AIME MLC strategically rather than replacing it:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ TIER 4: Workflow Wizards                                        │
-│ Complete onboarding experiences (user-setup)                     │
+│ L4: Workflow Wizards (user-setup, project-init, project-launch) │
 ├─────────────────────────────────────────────────────────────────┤
-│ TIER 3: Workflow Orchestrators                                  │
-│ Multi-step workflows (project-init)                             │
+│ L3: Orchestrators (container deploy/retire)                     │
 ├─────────────────────────────────────────────────────────────────┤
-│ TIER 2: Modular Unit Commands                                   │
-│ Single-purpose, reusable (container-*, image-*, setup modules)  │
+│ L2: Atomic Commands (container-*, image-*)                      │
 ├─────────────────────────────────────────────────────────────────┤
-│ TIER 1: Base System (aime-ml-containers v2)                     │
-│ Core mlc commands + 150+ framework images                       │
+│ L1: MLC Layer (mlc-patched.py) - HIDDEN from users              │
+├─────────────────────────────────────────────────────────────────┤
+│ L0: Docker (foundational runtime)                               │
 └─────────────────────────────────────────────────────────────────┘
         ↓ Enhanced with ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -65,7 +63,7 @@ DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically ra
 - **Wrap, don't replace**: Use AIME's proven container management
 - **Modular and reusable**: Single-purpose commands compose into workflows
 - **4-tier help system**: `--help`, `--info`, `--concepts`, `--guided` for all commands
-- **Single source of truth**: No code duplication between tiers
+- **Single source of truth**: No code duplication between layers
 - **Consistent CLI/UX**: Follow [ds01-UI_UX_GUIDE.md](ds01-UI_UX_GUIDE.md) for all commands
 
 **Help system:**
@@ -77,8 +75,10 @@ DS01 uses a **4-tier modular architecture** that wraps AIME MLC strategically ra
 | `--guided` | Interactive learning during execution |
 
 **See detailed architecture docs:**
-- [scripts/user/README.md](scripts/user/README.md) - Command tiers and user workflows
+- [scripts/user/README.md](scripts/user/README.md) - Command layers and user workflows
 - [scripts/docker/README.md](scripts/docker/README.md) - Container creation and GPU allocation
+- [scripts/admin/README.md](scripts/admin/README.md) - Admin tools and dashboards
+- [scripts/lib/README.md](scripts/lib/README.md) - Shared libraries and utilities
 - [config/README.md](config/README.md) - Resource limits and configuration
 
 ### AIME Integration
@@ -119,35 +119,47 @@ ds01-infra/
 │   │   ├── README.md            # Detailed implementation docs
 │   │   ├── mlc-patched.py       # AIME patch for custom images
 │   │   ├── mlc-create-wrapper.sh
+│   │   ├── docker-wrapper.sh    # Universal enforcement wrapper
 │   │   ├── get_resource_limits.py
-│   │   └── gpu_allocator.py
+│   │   └── gpu_allocator_v2.py
 │   │
-│   ├── user/                    # User-facing commands
+│   ├── user/                    # User-facing commands (L2/L3/L4)
 │   │   ├── README.md            # User command reference
-│   │   ├── user-setup           # Tier 4: Complete onboarding wizard
-│   │   ├── project-init         # Tier 3: Project setup orchestrator
-│   │   ├── container-*          # Tier 2: Container management
-│   │   ├── image-*              # Tier 2: Image management
-│   │   └── {dir|git|...}-*      # Tier 2: Setup modules
+│   │   ├── user-setup           # L4: Complete onboarding wizard
+│   │   ├── project-init         # L4: Project setup wizard
+│   │   ├── container-deploy     # L3: Deploy orchestrator
+│   │   ├── container-*          # L2: Container management
+│   │   ├── image-*              # L2: Image management
+│   │   └── {dir|git|...}-*      # L2: Setup modules
+│   │
+│   ├── admin/                   # Admin tools and dashboards
+│   │   ├── README.md            # Admin tools reference
+│   │   ├── dashboard            # Main system dashboard
+│   │   ├── ds01-logs            # Log viewer
+│   │   └── ds01-users           # User management
+│   │
+│   ├── lib/                     # Shared libraries
+│   │   ├── README.md            # Library reference
+│   │   ├── init.sh              # Bash initialization
+│   │   ├── ds01_core.py         # Python core utilities
+│   │   └── username-utils.sh    # Username sanitization
 │   │
 │   ├── system/                  # System administration
 │   │   ├── README.md            # Admin operations guide
 │   │   ├── setup-resource-slices.sh
 │   │   ├── add-user-to-docker.sh
-│   │   └── deploy-commands.sh
+│   │   └── deploy.sh
 │   │
 │   ├── monitoring/              # Monitoring & metrics
 │   │   ├── README.md            # Monitoring guide
-│   │   ├── gpu-status-dashboard.py
-│   │   └── collect-*-metrics.sh
+│   │   ├── gpu-utilization-monitor.py
+│   │   └── mig-utilization-monitor.py
 │   │
-│   ├── maintenance/             # Cleanup automation
-│   │   ├── README.md            # Maintenance automation guide
-│   │   ├── check-idle-containers.sh
-│   │   ├── enforce-max-runtime.sh
-│   │   └── cleanup-*.sh
-│   │
-│   └── lib/                     # Shared libraries
+│   └── maintenance/             # Cleanup automation
+│       ├── README.md            # Maintenance automation guide
+│       ├── check-idle-containers.sh
+│       ├── enforce-max-runtime.sh
+│       └── cleanup-*.sh
 │
 └── testing/                     # Test suites
     ├── README.md                # Testing overview
@@ -411,7 +423,9 @@ sudo scripts/system/deploy-commands.sh
 **Detailed documentation for each subsystem:**
 
 - **[scripts/docker/README.md](scripts/docker/README.md)** - Resource management, GPU allocation, container creation internals
-- **[scripts/user/README.md](scripts/user/README.md)** - User commands, tier system, workflow details
+- **[scripts/user/README.md](scripts/user/README.md)** - User commands, layer system, workflow details
+- **[scripts/admin/README.md](scripts/admin/README.md)** - Admin tools, dashboards, user management utilities
+- **[scripts/lib/README.md](scripts/lib/README.md)** - Shared libraries, bash/Python utilities
 - **[scripts/system/README.md](scripts/system/README.md)** - System administration, deployment, user management
 - **[scripts/monitoring/README.md](scripts/monitoring/README.md)** - Monitoring tools, dashboards, metrics collection
 - **[scripts/maintenance/README.md](scripts/maintenance/README.md)** - Cleanup automation, cron jobs, lifecycle management
@@ -433,5 +447,5 @@ Internal use for Data Science Lab infrastructure.
 
 ---
 
-**Last Updated:** November 2025
+**Last Updated:** December 2025
 **Documentation:** See module-specific READMEs for detailed information

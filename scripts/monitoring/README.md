@@ -54,8 +54,18 @@ dashboard alerts             # Active alerts and warnings
 
 **gpu-utilization-monitor.py** - Real-time GPU utilization tracking
 
-Track actual GPU usage (not just allocation) and identify underutilized GPUs.
+Tracks actual GPU usage (not just allocation) and identifies underutilized GPUs. Monitors GPU utilization percentage, memory usage, and power consumption.
 
+**Purpose:** Distinguish between "allocated" (reserved by DS01) and "utilized" (actively used by workloads). Helps identify wasted allocations.
+
+**Features:**
+- Real-time utilization snapshot
+- Historical utilization recording (for trending)
+- Waste detection (allocated but idle GPUs)
+- Per-GPU and per-container breakdown
+- JSON output for automation
+
+**Usage:**
 ```bash
 # Current snapshot
 gpu-utilization-monitor
@@ -68,12 +78,43 @@ sudo gpu-utilization-monitor --record
 
 # Check for wasted allocations (>80% idle over 30min)
 sudo gpu-utilization-monitor --check-waste
+
+# Watch mode (continuous monitoring)
+watch -n 2 gpu-utilization-monitor
 ```
+
+**Output:**
+```
+GPU Utilization Status (2025-12-09 14:30:00)
+
+GPU 0: 85% utilized | 45GB/80GB memory | 250W
+  Container: my-project._.alice (running)
+
+GPU 1: 12% utilized | 5GB/80GB memory | 75W
+  Container: experiment._.bob (running) [UNDERUTILIZED]
+```
+
+**Cron Integration:** Run every 5 minutes to record utilization history:
+```bash
+*/5 * * * * root /usr/local/bin/gpu-utilization-monitor --record >> /var/log/ds01/gpu-utilization.log
+```
+
+---
 
 **mig-utilization-monitor.py** - MIG instance-specific monitoring
 
-Track utilization per MIG instance with container mapping.
+Track utilization per MIG instance with container mapping. Essential for MIG-enabled systems where multiple containers share a physical GPU.
 
+**Purpose:** Monitor individual MIG instances separately, showing which containers are actively using their allocated MIG slices.
+
+**Features:**
+- Per-MIG instance utilization tracking
+- Container-to-MIG mapping
+- Waste detection for MIG instances
+- Historical recording
+- JSON output
+
+**Usage:**
 ```bash
 # Current MIG snapshot
 mig-utilization-monitor
@@ -86,6 +127,131 @@ sudo mig-utilization-monitor --record
 
 # Check for wasted MIG allocations
 sudo mig-utilization-monitor --check-waste
+
+# Watch mode
+watch -n 2 mig-utilization-monitor
+```
+
+**Output:**
+```
+MIG Utilization Status (2025-12-09 14:30:00)
+
+GPU 0 (MIG-enabled):
+  Instance 0:0 (2g.20gb): 78% utilized | Container: thesis._.alice
+  Instance 0:1 (2g.20gb): 15% utilized | Container: test._.bob [UNDERUTILIZED]
+  Instance 0:2 (2g.20gb): FREE
+```
+
+**Cron Integration:** Run every 5 minutes alongside gpu-utilization-monitor:
+```bash
+*/5 * * * * root /usr/local/bin/mig-utilization-monitor --record >> /var/log/ds01/mig-utilization.log
+```
+
+**Notes:**
+- Requires MIG to be enabled and configured (`gpu_allocation.enable_mig: true`)
+- Uses `nvidia-smi mig -lgi` to discover MIG instances
+- Cross-references with DS01 GPU state to map containers
+
+---
+
+### Container Monitoring
+
+**container-dashboard.sh** - Container resource dashboard
+
+Displays resource usage for all running containers with color-coded status indicators.
+
+**Purpose:** Quick overview of container CPU, memory, and GPU usage across the system.
+
+**Features:**
+- Color-coded resource usage (green <50%, yellow 50-80%, red >80%)
+- Per-container CPU and memory breakdown
+- GPU allocation display
+- Idle container detection
+- User grouping
+
+**Usage:**
+```bash
+# Default view
+container-dashboard
+
+# Group by user
+container-dashboard --by-user
+
+# Show only high-usage containers (>80%)
+container-dashboard --high-usage
+
+# JSON output
+container-dashboard --json
+
+# Watch mode
+watch -n 2 container-dashboard
+```
+
+**Output:**
+```
+Container Resource Dashboard (2025-12-09 14:30:00)
+
+USER: alice
+  my-project._.alice    CPU: 45% | MEM: 32GB | GPU: 0 (85% util)
+  thesis._.alice        CPU: 2%  | MEM: 4GB  | GPU: 0:0 (78% util)
+
+USER: bob
+  experiment._.bob      CPU: 5%  | MEM: 8GB  | GPU: 1 (12% util) [IDLE]
+```
+
+---
+
+### State Validation
+
+**validate-state.py** - State validation and consistency checker
+
+Validates consistency between DS01 state files, Docker runtime, and GPU hardware.
+
+**Purpose:** Detect and report inconsistencies in system state (orphaned allocations, missing containers, GPU mismatches).
+
+**Features:**
+- GPU allocation vs. running containers validation
+- Container metadata vs. Docker state validation
+- MIG configuration consistency checks
+- Orphaned allocation detection
+- Automatic repair suggestions
+
+**Usage:**
+```bash
+# Run validation
+validate-state
+
+# Show detailed report
+validate-state --verbose
+
+# Check specific subsystem
+validate-state --gpu          # GPU allocations only
+validate-state --containers   # Container metadata only
+validate-state --mig          # MIG configuration only
+
+# Auto-repair (with confirmation)
+sudo validate-state --repair
+
+# JSON output
+validate-state --json
+```
+
+**Output:**
+```
+DS01 State Validation Report (2025-12-09 14:30:00)
+
+[OK] GPU State File: /var/lib/ds01/gpu-state.json
+[OK] Container Metadata: 12 containers, all valid
+[WARN] Orphaned GPU Allocation: GPU 2 allocated to deleted container test._.charlie
+[OK] MIG Configuration: 9 instances match expected configuration
+
+Suggestions:
+  - Run: sudo python3 /opt/ds01-infra/scripts/docker/gpu_allocator.py release --container test._.charlie
+```
+
+**Cron Integration:** Run daily to detect state drift:
+```bash
+0 2 * * * root /usr/local/bin/validate-state --repair >> /var/log/ds01/state-validation.log
 ```
 
 ### Resource Alerts

@@ -160,23 +160,182 @@ gpu_allocation:
 
 ### Utility Scripts
 
-**container-entrypoint.sh** - Container initialization
-- Sets up container environment on first run
-- Configures user shell, aliases, environment variables
+**docker-wrapper.sh** - Universal enforcement wrapper
+- Intercepts all Docker commands at `/usr/local/bin/docker`
+- Injects per-user systemd cgroup (`ds01-{group}-{user}.slice`)
+- Injects ownership labels (`ds01.user`, `ds01.managed`)
+- Ensures all containers (from any interface) are subject to resource limits
+- Transparently passes through to `/usr/bin/docker`
+
+**container-init.sh** - Container initialization handler
+- DS01-specific container setup on first start
+- Configures workspace mounts and permissions
+- Sets up user environment variables
 - Called by AIME MLC on container start
 
-**container-init.sh** - Container setup hooks
-- Additional DS01-specific initialization
-- Sets up workspace mounts, permissions
+**container-entrypoint.sh** - Container entrypoint script
+- Legacy container initialization (deprecated, use container-init.sh)
+- Configures user shell, aliases, environment variables
 
 **gpu-availability-checker.py** - GPU availability validation
 - Checks if GPUs are accessible via nvidia-smi
 - Validates MIG instance availability
-- Used during container start
+- Used during container start to validate GPU still exists
 
 **emergency-container-stop.sh** - Force stop containers
 - Emergency shutdown script
 - Bypasses normal cleanup hooks
+- Use only in emergencies
+
+## Design Decisions
+
+### `set -e` Not Used in mlc-create-wrapper.sh
+
+**Problem:** Container creation was failing with "exit code: 2" and no diagnostic output.
+
+**Root Cause:** The wrapper script used `set -e` (exit on error), which caused the script to exit immediately when capturing command output in a `$()` substitution. Error handling code never ran.
+
+**Solution:** Temporarily disable `set -e` around the mlc-patched.py call:
+```bash
+set +e  # Disable exit-on-error to allow error handling
+MLC_OUTPUT=$(python3 "$MLC_PATCHED" $MLC_ARGS 2>&1)
+MLC_EXIT_CODE=$?
+set -e  # Re-enable
+```
+
+**Rationale:** Allows the script to capture exit codes and provide user-friendly error messages instead of silent failures.
+
+**Prevention:** When writing wrapper scripts, always use `set +e` / `set -e` pairs around command substitutions that may fail, OR use `|| true` pattern.
+
+See: [testing/cleanup-automation/FINDINGS.md](../../testing/cleanup-automation/FINDINGS.md) for detailed analysis.
+
+---
+
+### GPU Allocation File Locking
+
+**Problem:** Race conditions when multiple container-create commands ran simultaneously, causing duplicate GPU allocations.
+
+**Solution:** Use Python `fcntl.flock()` for file-based locking in `gpu_allocator.py`:
+```python
+import fcntl
+with open(STATE_FILE, 'r+') as f:
+    fcntl.flock(f.fileno(), fcntl.LOCK_EX)  # Exclusive lock
+    # ... read, modify, write state ...
+    # Lock released automatically on file close
+```
+
+**Rationale:** File locking ensures atomic read-modify-write operations on GPU state, preventing race conditions without requiring a database.
+
+**Alternative Considered:** Advisory locks via `flock` command were rejected due to inconsistent behavior across shells.
+
+---
+
+### CUDA_VISIBLE_DEVICES for MIG Isolation
+
+**Problem:** When allocating a single MIG instance (e.g., `0:1`), need to ensure container only sees that instance, not all MIG instances on the physical GPU.
+
+**Solution:** Set `CUDA_VISIBLE_DEVICES` environment variable to the specific MIG UUID:
+```bash
+# For single MIG: export CUDA_VISIBLE_DEVICES=<MIG-UUID>
+# For multiple MIG: export CUDA_VISIBLE_DEVICES=<UUID1>,<UUID2>
+# For full GPU: use --gpus device=0 (no CUDA_VISIBLE_DEVICES needed)
+```
+
+**Rationale:** Docker's `--gpus device=X:Y` syntax does not isolate MIG instances at the CUDA runtime level. Setting `CUDA_VISIBLE_DEVICES` ensures CUDA applications only see their allocated MIG instance.
+
+**Reference:** NVIDIA MIG documentation on CUDA visibility.
+
+---
+
+### IPC Mode vs shm-size Mutual Exclusivity
+
+**Problem:** Docker does not allow `--ipc=host` and `--shm-size` to be specified together (returns error).
+
+**Solution:** In resource limits, use either `ipc_mode: host` OR `shm_size: 16g`, never both:
+```yaml
+# Option 1: IPC host mode (shared memory unlimited via host)
+ipc_mode: host
+
+# Option 2: Custom shared memory size (isolated IPC namespace)
+shm_size: 16g
+```
+
+**Rationale:** This is a Docker constraint. Host IPC mode gives unlimited shared memory but reduces isolation. Custom shm-size provides isolation but requires explicit limit.
+
+**Current Default:** `shm_size: 16g` for better isolation. Groups requiring unlimited shared memory can use `ipc_mode: host` override.
+
+---
+
+### GID Mapping Fix ("I have no name!" error)
+
+**Problem:** Containers showed "I have no name!" error when LDAP GID didn't exist in container's `/etc/group`.
+
+**Root Cause:** AIME MLC's `mlc-create` only created the user, not the group. When host LDAP GID (e.g., 5025) doesn't exist in container, user has no group name.
+
+**Solution:** 6-step robust user/group creation in `mlc-patched.py`:
+```python
+# 1. Check if GID exists
+# 2. If not, create group with matching GID
+# 3. Check if UID exists
+# 4. If not, create user with matching UID/GID
+# 5. Verify user creation
+# 6. Set ownership of home directory
+```
+
+**Rationale:** Ensures both user AND group exist in container with matching host UID/GID, fixing name resolution issues.
+
+**Testing:** Verified with LDAP users having non-standard GIDs (5000-6000 range).
+
+---
+
+### Python Heredoc Variable Substitution
+
+**Problem:** Variables in Python heredocs were not being substituted, causing scripts to use literal `$VAR` strings instead of values.
+
+**Root Cause:** Bash heredoc delimiters must be unquoted for variable substitution to occur. Using `<<'PYEOF'` prevents substitution.
+
+**Solution:** Pass variables via environment instead of heredoc substitution:
+```bash
+# Bad: Variables in heredoc (doesn't work with quoted delimiter)
+python3 <<'PYEOF'
+user = "$USERNAME"  # Literal string "$USERNAME"
+PYEOF
+
+# Good: Pass via environment
+export DS01_USERNAME="$USERNAME"
+python3 <<'PYEOF'
+import os
+user = os.environ['DS01_USERNAME']  # Correctly receives value
+PYEOF
+```
+
+**Rationale:** Using quoted delimiters (`<<'EOF'`) is safer (prevents unintended variable expansion), and environment variables are the standard way to pass data to subprocesses.
+
+**Convention:** All Python heredocs use quoted delimiters and environment variables for inputs.
+
+---
+
+### LDAP Username Sanitization
+
+**Problem:** LDAP usernames with dots and `@` symbols (e.g., `h.baker@hertie-school.lan`) cannot be used in systemd slice names (hyphens are the only valid separators).
+
+**Solution:** Sanitize usernames for systemd using underscores:
+```bash
+# Original: h.baker@hertie-school.lan
+# Sanitized: h_baker_hertie-school_lan
+sanitize_username_for_slice() {
+    echo "$1" | sed 's/@/_/g; s/\./_/g'
+}
+```
+
+**Rationale:** Systemd slice names have strict character requirements. Underscores are valid and preserve readability. This is applied consistently in:
+- `docker-wrapper.sh` (cgroup injection)
+- `username-utils.sh` (library function)
+- `username_utils.py` (Python equivalent)
+
+**Important:** Container names and Docker labels still use original username for user identification. Sanitization is ONLY for systemd slice names.
+
+---
 
 ## Container Creation Flow
 
