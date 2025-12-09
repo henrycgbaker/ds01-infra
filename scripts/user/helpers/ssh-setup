@@ -270,7 +270,7 @@ verify_ssh_setup() {
         echo -e "  ${GREEN}✓${NC} Private key exists: $PRIVATE_KEY"
     else
         echo -e "  ${RED}✗${NC} Private key missing: $PRIVATE_KEY"
-        ((issues++))
+        issues=$((issues + 1))
     fi
 
     # Check 2: Public key exists
@@ -278,7 +278,7 @@ verify_ssh_setup() {
         echo -e "  ${GREEN}✓${NC} Public key exists: $PUBLIC_KEY"
     else
         echo -e "  ${RED}✗${NC} Public key missing: $PUBLIC_KEY"
-        ((issues++))
+        issues=$((issues + 1))
     fi
 
     # Check 3: Public key in authorized_keys
@@ -286,7 +286,7 @@ verify_ssh_setup() {
         echo -e "  ${GREEN}✓${NC} Public key in authorized_keys"
     else
         echo -e "  ${YELLOW}○${NC} Public key not in authorized_keys"
-        ((issues++))
+        issues=$((issues + 1))
     fi
 
     # Check 4: SSH localhost connection test
@@ -319,8 +319,8 @@ if [ -f "$PRIVATE_KEY" ] && [ "$FORCE" = false ]; then
     echo -e "${GREEN}✓${NC} SSH keys already exist"
     echo -e ""
 
-    # Run verification
-    verify_ssh_setup
+    # Run verification (ignore non-zero return - it's the issue count, not an error)
+    verify_ssh_setup || true
 
     # Always offer to review/regenerate
     echo -e "${BOLD}Options:${NC}"
