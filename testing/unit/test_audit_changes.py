@@ -352,7 +352,7 @@ class TestOPAPolicy:
 
     @pytest.fixture
     def opa_policy_path(self):
-        return Path("/opt/ds01-infra/config/opa/docker-authz.rego")
+        return Path("/opt/ds01-infra/config/deploy/opa/docker-authz.rego")
 
     @pytest.mark.unit
     def test_opa_policy_exists(self, opa_policy_path):

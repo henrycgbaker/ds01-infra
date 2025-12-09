@@ -62,27 +62,32 @@ sudo /opt/ds01-infra/scripts/system/deploy-commands.sh
 2. Copies all commands to `/usr/local/bin/` (not symlinks, for security)
 3. Makes commands accessible to all users
 
-Deploys all 40+ commands organized by tier:
+Deploys all 50+ commands organized by tier:
 
 **Tier 4 (Wizards):**
-- `user-setup` → `scripts/user/user-setup`
-- Legacy aliases: `new-user` → `user-setup`
+- `user-setup` → `scripts/user/wizards/user-setup`
+- `project-init` → `scripts/user/wizards/project-init`
+- `project-launch` → `scripts/user/wizards/project-launch`
+- Legacy aliases: `new-user` → `user-setup`, `new-project` → `project-init`
 
 **Tier 3 (Orchestrators):**
-- `project-init` → `scripts/user/project-init`
-- Dispatchers: `user`, `project`, `container`, `image`
-- Legacy aliases: `new-project` → `project-init`
+- `container-deploy` → `scripts/user/orchestrators/container-deploy`
+- `container-retire` → `scripts/user/orchestrators/container-retire`
+- Dispatchers: `user`, `project`, `container`, `image` → `scripts/user/dispatchers/`
 
-**Tier 2 (Modules):**
-- Container: `container-{create|run|start|stop|list|stats|remove|exit}`
-- Image: `image-{create|list|update|delete}`
-- Setup: `dir-create`, `git-init`, `readme-create`, `ssh-setup`, `vscode-setup`
+**Tier 2 (Atomic):**
+- Container: `container-{create|run|start|stop|list|stats|remove|exit}` → `scripts/user/atomic/`
+- Image: `image-{create|list|update|delete}` → `scripts/user/atomic/`
+
+**Helpers:**
+- Setup: `shell-setup`, `ssh-setup`, `vscode-setup`, `jupyter-setup` → `scripts/user/helpers/`
+- Project: `dir-create`, `git-init`, `readme-create`, `check-limits` → `scripts/user/helpers/`
 
 **Admin commands:**
 - `alias-list` → `scripts/admin/alias-list`
 - `ds01-dashboard` → `scripts/monitoring/gpu-status-dashboard.py`
-- `ds01-status` → `scripts/user/ds01-status`
-- `get-limits` → `scripts/user/get-limits`
+- `ds01-status` → `scripts/user/helpers/ds01-status`
+- `check-limits` → `scripts/user/helpers/check-limits`
 
 **When to run:**
 - After initial deployment

@@ -1,7 +1,7 @@
 # DS01 Infrastructure Log Rotation Configuration
-# /opt/ds01-infra/config/logrotate.d/ds01
+# /opt/ds01-infra/config/deploy/logrotate.d/ds01
 #
-# Install: sudo cp /opt/ds01-infra/config/logrotate.d/ds01 /etc/logrotate.d/
+# Install: sudo cp /opt/ds01-infra/config/deploy/logrotate.d/ds01 /etc/logrotate.d/
 
 # Main DS01 logs
 /var/log/ds01/*.log {

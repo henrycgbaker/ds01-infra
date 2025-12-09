@@ -16,7 +16,7 @@ set -euo pipefail
 
 # Configuration
 INFRA_ROOT="/opt/ds01-infra"
-OPA_POLICY="$INFRA_ROOT/config/opa/docker-authz.rego"
+OPA_POLICY="$INFRA_ROOT/config/deploy/opa/docker-authz.rego"
 OPA_PLUGIN_DIR="/opt/opa-docker-authz"
 OPA_SOCKET="/run/docker/plugins/opa-docker-authz.sock"
 SYSTEMD_SERVICE="/etc/systemd/system/opa-docker-authz.service"

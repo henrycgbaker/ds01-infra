@@ -198,7 +198,7 @@ test_soft_limit_thresholds() {
 test_cron_config() {
     log_test "Testing cron configuration..."
 
-    local cron_file="$INFRA_ROOT/config/cron.d/ds01-maintenance"
+    local cron_file="$INFRA_ROOT/config/deploy/cron.d/ds01-maintenance"
     assert_file_exists "$cron_file" "Cron config file exists"
 
     local cron_content

@@ -79,7 +79,7 @@ All user-facing commands must follow these patterns:
 **Dispatcher Pattern (space-separated subcommands):**
 - Use `command subcommand` format: `container deploy`, `code attach`, `image create`
 - Hyphenated aliases also work: `container-deploy`, `code-attach`
-- Dispatchers route to underlying scripts: `scripts/user/{command}-dispatcher.sh`
+- Dispatchers route to underlying scripts: `scripts/user/dispatchers/{command}-dispatcher.sh`
 
 **Interactive by Default:**
 - Commands without arguments launch interactive wizard/GUI
@@ -300,7 +300,7 @@ shell-setup --check        # Verify PATH
 shell-setup --guided       # With explanations
 
 # If commands not accessible:
-/opt/ds01-infra/scripts/user/shell-setup
+/opt/ds01-infra/scripts/user/helpers/shell-setup
 ```
 
 ### Development/Testing
@@ -416,14 +416,23 @@ scripts/
 │   ├── get_resource_limits.py, gpu_allocator_v2.py
 │   ├── docker-wrapper.sh                         # Universal enforcement (cgroup + label injection)
 │   ├── container-init.sh                         # Container initialization handler
-│   ├── gpu-state-reader.py, event-logger.py
-├── user/                # L2/L3/L4 - User-facing commands
-│   ├── L2 (Atomic): container-{create|start|attach|run|stop|remove|list|stats|exit}
-│   ├── L2 (Atomic): image-{create|list|update|delete}
-│   ├── L2 (Atomic): {dir|git|readme|ssh|vscode}-*
-│   ├── L3 (Orchestrators): container-{deploy|retire}
-│   ├── L4 (Wizards): user-setup, project-init, project-launch, *-dispatcher.sh
-│   └── v1-backup/       # Backup of container workflow scripts before refactor
+│   └── gpu-state-reader.py, event-logger.py
+├── user/                # L2/L3/L4 - User-facing commands (organized by layer)
+│   ├── atomic/          # L2: Single-purpose commands
+│   │   ├── container-{create|start|attach|run|stop|remove|list|stats|exit|pause}
+│   │   └── image-{create|list|update|delete}
+│   ├── orchestrators/   # L3: Multi-step workflows
+│   │   ├── container-deploy
+│   │   └── container-retire
+│   ├── wizards/         # L4: Complete guided workflows
+│   │   ├── user-setup, project-init, project-launch
+│   │   └── onboarding-create
+│   ├── helpers/         # Supporting commands
+│   │   ├── shell-setup, ssh-setup, vscode-setup
+│   │   ├── check-limits, dir-create, git-init
+│   │   └── readme-create, jupyter-setup, ds01-run
+│   └── dispatchers/     # Command routers
+│       └── *-dispatcher.sh (container, image, project, user, check, get)
 ├── admin/               # Admin tools (see scripts/admin/README.md)
 │   ├── dashboard        # Main admin dashboard (GPU, containers, system status)
 │   ├── ds01-logs        # Log viewer and search
@@ -456,15 +465,29 @@ scripts/
 │   ├── gpu-utilization-monitor.py          # Real-time GPU usage tracking
 │   ├── mig-utilization-monitor.py          # MIG instance utilization
 │   ├── container-dashboard.sh              # Container resource dashboard
-│   ├── gpu-status-dashboard.py, check-idle-containers.sh
-│   ├── collect-*-metrics.sh, audit-*.sh
+│   └── gpu-status-dashboard.py, check-idle-containers.sh
 ├── maintenance/         # Cleanup and housekeeping
 │   ├── enforce-max-runtime.sh, check-idle-containers.sh
 │   ├── cleanup-stale-gpu-allocations.sh
 │   └── cleanup-stale-containers.sh
-├── backup/              # System backup and restore
-│   ├── backup.sh                            # Backup script
-│   └── restore-datasciencelab-sudo.sh       # Restore script
+└── backup/              # System backup and restore
+    ├── backup.sh                            # Backup script
+    └── restore-datasciencelab-sudo.sh       # Restore script
+
+config/
+├── resource-limits.yaml     # Source of truth: resource limits, groups, policies
+├── user-overrides.yaml      # Source of truth: per-user exceptions
+├── groups/                  # Source of truth: group member lists
+│   └── *.members
+├── deploy/                  # Deploy sources: files to copy TO /etc/
+│   ├── cron.d/              # Cron job definitions
+│   ├── logrotate.d/         # Log rotation configs
+│   ├── profile.d/           # Shell PATH configs
+│   ├── systemd/             # Service unit files
+│   ├── docker/              # Docker daemon configs
+│   └── opa/                 # OPA policy files
+├── etc-mirrors/             # Reference mirrors: copies FROM /etc/ for version control
+└── usr-mirrors/             # Reference mirrors: copies FROM /usr/ for version control
 
 testing/
 ├── cleanup-automation/  # Automated cleanup system tests

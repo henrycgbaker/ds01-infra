@@ -1,4 +1,4 @@
-# /opt/ds01-infra/config/opa/docker-authz.rego
+# /opt/ds01-infra/config/deploy/opa/docker-authz.rego
 # DS01 Docker Authorization Policy
 #
 # This policy enforces:
@@ -14,7 +14,7 @@
 #   https://github.com/open-policy-agent/opa-docker-authz
 #
 # Deploy:
-#   opa-docker-authz -policy-file /opt/ds01-infra/config/opa/docker-authz.rego \
+#   opa-docker-authz -policy-file /opt/ds01-infra/config/deploy/opa/docker-authz.rego \
 #                    -data-file /var/lib/ds01/opa/container-owners.json
 
 package docker.authz

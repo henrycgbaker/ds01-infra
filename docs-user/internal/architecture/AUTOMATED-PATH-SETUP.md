@@ -35,7 +35,7 @@
 
 ┌─────────────────────────────────────────────────────────────┐
 │ Layer 5: shell-setup command (Manual fallback)              │
-│ ✓ User-run command: /opt/ds01-infra/scripts/user/shell-setup│
+│ ✓ User-run command: /opt/ds01-infra/scripts/user/helpers/shell-setup│
 │ ✓ Creates/fixes ~/.bashrc if needed                         │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -230,7 +230,7 @@ cat /etc/pam.d/common-session     # Check Layer 2
 bash
 
 # Persistent: Run shell-setup
-/opt/ds01-infra/scripts/user/shell-setup
+/opt/ds01-infra/scripts/user/helpers/shell-setup
 source ~/.bashrc
 ```
 

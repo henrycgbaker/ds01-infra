@@ -6,6 +6,42 @@ User-facing commands organised in a 5-layer modular architecture.
 
 This directory contains all user-facing DS01 commands, organised into **5 layers** that build from foundational Docker commands into complete workflow wizards.
 
+## Directory Structure
+
+Commands are organized into subdirectories by layer and purpose:
+
+```
+scripts/user/
+├── atomic/           # L2: Single-purpose commands
+│   ├── container-create, container-start, container-stop, container-remove
+│   ├── container-run, container-attach, container-list, container-stats
+│   ├── container-exit, container-pause
+│   └── image-create, image-list, image-update, image-delete
+├── orchestrators/    # L3: Multi-step workflows
+│   ├── container-deploy    # create + start
+│   └── container-retire    # stop + remove + free GPU
+├── wizards/          # L4: Complete guided workflows
+│   ├── user-setup          # SSH → project-init → vscode
+│   ├── project-init        # pyproject.toml → Dockerfile → requirements.txt
+│   ├── project-launch      # check image → image-create → container deploy
+│   └── onboarding-create   # Create onboarding materials
+├── helpers/          # Supporting commands (not layer-specific)
+│   ├── shell-setup, ssh-setup, vscode-setup, jupyter-setup
+│   ├── check-limits, dir-create, git-init, readme-create
+│   ├── ds01-run, ds01-login-check, ds01-status
+│   ├── quota-check, install-to-image.sh
+│   └── git-ml-repo-setup.sh
+├── dispatchers/      # Command routers (*-dispatcher.sh)
+│   ├── container-dispatcher.sh   # container <subcommand>
+│   ├── image-dispatcher.sh       # image <subcommand>
+│   ├── project-dispatcher.sh     # project <subcommand>
+│   ├── user-dispatcher.sh        # user <subcommand>
+│   ├── check-dispatcher.sh       # check <subcommand>
+│   └── get-dispatcher.sh         # get <subcommand>
+├── README.md
+└── USER-CLI-UIUX-GUIDE.md
+```
+
 ## Layer System
 
 ### Design Philosophy
@@ -20,22 +56,25 @@ This directory contains all user-facing DS01 commands, organised into **5 layers
 
 ```
 L4: WIZARDS              user-setup (complete onboarding)
-                              ↓
-L3: ORCHESTRATORS        container-deploy, container-retire, project-init
-                              ↓
-L2: ATOMIC               container-*, image-*, setup modules
-                              ↓
+     wizards/                 ↓
+L3: ORCHESTRATORS        container-deploy, container-retire
+     orchestrators/           ↓
+L2: ATOMIC               container-*, image-*
+     atomic/                  ↓
 L1: MLC (HIDDEN)         mlc commands (AIME MLC v2)
-                              ↓
+     scripts/docker/          ↓
 L0: DOCKER               docker run, build, etc.
 ```
 
 ## L4: Workflow Wizards
 
+**Location:** `scripts/user/wizards/`
+
 Complete onboarding experiences for first-time users.
 
 ### user-setup
 
+**Path:** `wizards/user-setup`
 **Purpose:** Complete first-time onboarding wizard
 **Audience:** New users, students unfamiliar with containers
 **Style:** Educational with detailed explanations
@@ -68,14 +107,27 @@ new-user         # Legacy alias
 - Container: `<project>._.username` with GPU allocation
 - VS Code configuration instructions
 
-**Code:** `user-setup` (285 lines, orchestrates 3 workflows)
-
 ## L3: Workflow Orchestrators
+
+**Location:** `scripts/user/orchestrators/`
 
 Multi-step workflows that compose L2 atomic modules.
 
-### project-init
+### container-deploy
 
+**Path:** `orchestrators/container-deploy`
+**Purpose:** Create and start a container in one command
+**Workflow:** container-create + container-start
+
+### container-retire
+
+**Path:** `orchestrators/container-retire`
+**Purpose:** Stop, remove container, and free GPU
+**Workflow:** container-stop + container-remove + GPU release
+
+### project-init (Wizard)
+
+**Path:** `wizards/project-init`
 **Purpose:** Complete project setup workflow
 **Audience:** Users creating new projects
 **Style:** Streamlined (default) or educational (`--guided`)
@@ -110,42 +162,45 @@ new-project           # Legacy alias
 - Docker image: `ds01-<username>/<project>:latest`
 - Container: `<project>._.username`
 
-**Code:** `project-init` (397 lines)
+## Command Dispatchers
 
-### Command Dispatchers
+**Location:** `scripts/user/dispatchers/`
 
-Enable flexible command syntax.
+Enable flexible command syntax (space-separated subcommands).
 
 **container-dispatcher.sh** - Routes container subcommands
 ```bash
-container create    # → container-create
-container list      # → container-list
-container stop      # → container-stop
+container create    # → atomic/container-create
+container deploy    # → orchestrators/container-deploy
+container list      # → atomic/container-list
+container stop      # → atomic/container-stop
 ```
 
 **image-dispatcher.sh** - Routes image subcommands
 ```bash
-image create        # → image-create
-image list          # → image-list
-image update        # → image-update
+image create        # → atomic/image-create
+image list          # → atomic/image-list
+image update        # → atomic/image-update
 ```
 
 **project-dispatcher.sh** - Routes project subcommands
 ```bash
-project init        # → project-init
-project init --guided
+project init        # → wizards/project-init
+project launch      # → wizards/project-launch
 ```
 
 **user-dispatcher.sh** - Routes user subcommands
 ```bash
-user setup          # → user-setup
+user setup          # → wizards/user-setup
 ```
 
 ## L2: Atomic Commands
 
+**Location:** `scripts/user/atomic/`
+
 Single-purpose, reusable commands that work standalone or orchestrated.
 
-### Container Management
+### Container Management (atomic/)
 
 **container-create** - Create container with resource limits
 ```bash
@@ -235,7 +290,7 @@ container-exit [--guided]
 # Guided mode: Detailed explanations of container behavior
 ```
 
-### Image Management
+### Image Management (atomic/)
 
 **image-create** - Build custom Docker image
 ```bash
@@ -280,7 +335,11 @@ image-delete [<image-name>]
 # Warns before deletion
 ```
 
-### Project Setup Modules
+### Helper Commands (helpers/)
+
+**Location:** `scripts/user/helpers/`
+
+Supporting commands that aren't tied to a specific layer.
 
 **dir-create** - Create project directory structure
 ```bash
@@ -343,7 +402,7 @@ shell-setup --guided       # Educational mode
 shell-setup --force        # Reconfigure even if already correct
 
 # If commands not accessible:
-/opt/ds01-infra/scripts/user/shell-setup
+/opt/ds01-infra/scripts/user/helpers/shell-setup
 ```
 
 **Purpose:** Configure shell PATH for DS01 commands

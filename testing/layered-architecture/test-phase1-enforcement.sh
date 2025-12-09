@@ -65,7 +65,7 @@ fi
 # ============================================================================
 section "3. OPA Authorization Policy"
 
-OPA_POLICY="$INFRA_ROOT/config/opa/docker-authz.rego"
+OPA_POLICY="$INFRA_ROOT/config/deploy/opa/docker-authz.rego"
 
 assert_file_exists "$OPA_POLICY" "OPA policy file exists"
 

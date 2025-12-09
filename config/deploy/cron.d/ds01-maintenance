@@ -1,7 +1,7 @@
 # DS01 Infrastructure Maintenance Cron Jobs
-# /opt/ds01-infra/config/cron.d/ds01-maintenance
+# /opt/ds01-infra/config/deploy/cron.d/ds01-maintenance
 #
-# Install: sudo cp /opt/ds01-infra/config/cron.d/ds01-maintenance /etc/cron.d/
+# Install: sudo cp /opt/ds01-infra/config/deploy/cron.d/ds01-maintenance /etc/cron.d/
 #
 # All jobs run as root unless specified otherwise.
 

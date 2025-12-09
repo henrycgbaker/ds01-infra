@@ -449,7 +449,7 @@ echo -e ""
 # CREATE ONBOARDING DOCUMENT
 # ============================================================================
 
-/opt/ds01-infra/scripts/user/onboarding-create
+/opt/ds01-infra/scripts/user/wizards/onboarding-create
 
 # ============================================================================
 # JUPYTER ACCESS (brief mention)

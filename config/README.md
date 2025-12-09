@@ -4,7 +4,15 @@ Central configuration for DS01 resource management.
 
 ## Overview
 
-DS01 configuration is split into modular files for easier maintenance:
+DS01 configuration follows a **three-tier pattern**:
+
+| Tier | Directory | Purpose |
+|------|-----------|---------|
+| **Source of Truth** | `config/` root | Active configuration that DS01 reads |
+| **Deploy Sources** | `config/deploy/` | Files to copy TO /etc/ (cron, systemd, etc.) |
+| **Reference Mirrors** | `config/*-mirrors/` | Copies FROM /etc/ for version control |
+
+### Source of Truth Files
 
 | File | Purpose |
 |------|---------|
@@ -19,13 +27,77 @@ Related files:
 
 ```
 config/
-├── resource-limits.yaml     # Main configuration
-├── user-overrides.yaml      # Per-user exceptions
-├── groups/
+├── resource-limits.yaml     # Source of truth: main configuration
+├── user-overrides.yaml      # Source of truth: per-user exceptions
+├── groups/                  # Source of truth: group membership
 │   ├── student.members      # Student group members
 │   ├── researcher.members   # Researcher group members
 │   └── admin.members        # Admin group members
+├── deploy/                  # Deploy sources (files to copy TO /etc/)
+│   ├── cron.d/              # Cron job definitions → /etc/cron.d/
+│   ├── logrotate.d/         # Log rotation configs → /etc/logrotate.d/
+│   ├── profile.d/           # Shell PATH configs → /etc/profile.d/
+│   ├── systemd/             # Service unit files → /etc/systemd/system/
+│   ├── docker/              # Docker daemon configs
+│   └── opa/                 # OPA policy files
+├── etc-mirrors/             # Reference mirrors (copies FROM /etc/)
+│   ├── profile.d/           # Mirror of /etc/profile.d/ds01-*
+│   ├── skel/                # Mirror of /etc/skel/.bashrc
+│   ├── sudoers.d/           # Mirror of /etc/sudoers.d/ds01-*
+│   ├── pam.d/               # Mirror of PAM configuration
+│   └── cron.d/              # Mirror of /etc/cron.d/ds01-*
+├── usr-mirrors/             # Reference mirrors (copies FROM /usr/)
+│   └── local/lib/           # Mirror of /usr/local/lib/
 └── README.md                # This file
+```
+
+## Three-Tier Pattern Explained
+
+### 1. Source of Truth (config/ root)
+
+These are the active configuration files that DS01 scripts read at runtime:
+
+```bash
+# Scripts read these directly
+python3 scripts/docker/get_resource_limits.py alice
+# Reads: config/resource-limits.yaml, config/groups/*.members, config/user-overrides.yaml
+```
+
+### 2. Deploy Sources (config/deploy/)
+
+Files that need to be deployed to system directories. Use `deploy.sh` to copy them:
+
+```bash
+# Deploy all config files to /etc/
+sudo /opt/ds01-infra/scripts/system/deploy.sh
+
+# Manual deployment example
+sudo cp config/deploy/cron.d/ds01-cleanup /etc/cron.d/ds01-cleanup
+sudo cp config/deploy/profile.d/ds01-path.sh /etc/profile.d/ds01-path.sh
+```
+
+**Deploy directories:**
+- `cron.d/` - Scheduled tasks (cleanup, monitoring)
+- `logrotate.d/` - Log rotation rules
+- `profile.d/` - Shell PATH configuration
+- `systemd/` - Service definitions (proxy, monitors)
+- `docker/` - Docker daemon configuration
+- `opa/` - OPA authorization policies
+
+### 3. Reference Mirrors (*-mirrors/)
+
+Copies of files FROM /etc/ and /usr/ for version control. These let you:
+- Track what's actually deployed on the system
+- Detect drift between repo and system
+- Restore system config from git
+
+```bash
+# Update mirrors from live system
+cp /etc/profile.d/ds01-path.sh config/etc-mirrors/profile.d/
+cp /etc/skel/.bashrc config/etc-mirrors/skel/
+
+# Check for drift
+diff config/deploy/profile.d/ds01-path.sh /etc/profile.d/ds01-path.sh
 ```
 
 ## Member File Format

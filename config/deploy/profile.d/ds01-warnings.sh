@@ -1,9 +1,9 @@
 #!/bin/bash
-# /opt/ds01-infra/config/profile.d/ds01-warnings.sh
+# /opt/ds01-infra/config/deploy/profile.d/ds01-warnings.sh
 # DS01 Login Warnings
 #
 # Deploy to /etc/profile.d/ to enable for all users:
-#   sudo cp /opt/ds01-infra/config/profile.d/ds01-warnings.sh /etc/profile.d/
+#   sudo cp /opt/ds01-infra/config/deploy/profile.d/ds01-warnings.sh /etc/profile.d/
 #   sudo chmod 644 /etc/profile.d/ds01-warnings.sh
 
 # Only run for interactive shells
