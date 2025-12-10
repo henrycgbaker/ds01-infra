@@ -1,6 +1,4 @@
-# 5-Minute Quickstart
-
-Get from zero to working in <30 minutes.
+# 30-Minute Quickstart
 
 ---
 
@@ -18,10 +16,6 @@ If you don't have SSH keys set up, you'll be prompted for your usual Hertie Micr
 
 ## Step 2: Run First-Time Setup
 
-**Time:** ~20 minutes (incl initial image cache build)
-
-**Interactive:** Just answer the prompts - it walks you through everything.
-
 Once connected, run:
 
 ```bash
@@ -37,7 +31,7 @@ This interactive GUI will:
 Then run:
 
 ```bash
-project-init
+project-init --guided
 ```
 This interactive GUI will: 
 - Create your first project workspace 
@@ -52,7 +46,7 @@ This interactive GUI will:
 Then run:
 
 ```bash
-project-launch
+project-launch --guided
 ```
 
 This interactive GUI will: 
@@ -61,7 +55,9 @@ This interactive GUI will:
 - Deploy a container instance of the image onto a GPU/MIG
 - Either attach the terminal to running container, or start in background
 
-**Now you are have a fully deployed container!**
+---
+
+**You have successfully deployed a container!**
 
 ---
 
@@ -85,9 +81,12 @@ python -c "import torch; print(torch.cuda.is_available())"
 # Navigate to your workspace (if not already)
 cd /workspace
 
+# If you have a remote repo you wish to clone (otherwise project-init configures for you)
+git clone your-repo
+
 # Start running scripts in your project directory!
 ```
-*NB: `/workspace` inside the container is your project directory on the host (`~/workspace/<project-name>/`). This is a bind mount; files you save here persist even after retiring the container.* 
+*NB: `/workspace` inside the container is your project directory on the host (`~/workspace/<project-name>/`). This is a bind mount; your files persist even after retiring the container.* 
 
 ---
 
@@ -104,87 +103,47 @@ Once installed: Cmd + Shift + P to open the Command Pallete, and type `Dev Conta
 
 *NB: this ^^^ is all walked through by `user setup` CLI.*
 
-
 ## Step 4: Exit and Retire Container
 
-When done working:
+When done with the current job:
 
 ```bash
-# Exit the container
+# To exit the container from inside an attached terminal:
 exit
-# This will prompt to retire container (freeing GPU for others) or keep it running in background
 
-# If you keep it running, but later are finished with it:
-container retire my-project
+# If you have a container running in background (terminal not attached):
+container retire --guided
 ```
-
-**Your files in `~/workspace/` persist (logs, checkpoints, code)** - the container is just the temporary computing environment.
-
 ---
 
-## Future Routine
-
-In cloud computing platforms such as Hertie's DS01, **containers should be treated as ephemeral**. 
-- You deploy containers when you need to run a computationally-expensive job.
-- By setting up git with a GitHub remote in `project-init`, you are able to quickly push and pull work to/from the server and back to your personal computer (better practice than manually downloading/uploading files!)
-- This way, your files (code, models, logs, but also Dockerfile for reproducible environment) are version controlled and accessible from any computer.
-
-**Containers (and to some extent images) should be considered disposable; dockerfiles and mounted directories are where your project progress is stored.**
-
-
-```bash
-# To run a specific job
-project launch my-project 
-
-# Work...
-
-# When job completed
-exit
-container retire my-project
-```
-
-That's it!
+**That's it**. Files saved in `/workspace` are permanent.
 
 ---
 
 ## Next Steps
 
-→ [Understand the daily workflow](getting-started/daily-workflow.md)
+See [Index & Learning Paths](index.md) for entry points, or jump right in:
 
-→ [Create additional projects](guides/creating-projects.md)
+**I want to...**
 
-→ [Set up Jupyter notebooks](guides/jupyter-notebooks.md)
+→ [Set up DS01 for the first time](getting-started/first-time.md) - Run `user setup`
 
-→ [Connect VS Code](guides/vscode-remote.md)
+→ [First Container Guide](getting-started/first-container.md) for step-by-step
+
+→ [Understand the daily workflow](getting-started/daily-workflow.md) - Deploying & retiring containerised compute environments with ease
+
+→ [Create additional projects](guides/creating-projects.md) - `project init`
+
+→ [Build a custom environment](guides/custom-environments.md) - Add packages to your Dockerfile
+
+→ [Set up Jupyter notebooks](guides/jupyter-notebooks.md) - JupyterLab setup
+
+→ [Connect VS Code](guides/vscode-remote.md) - Connect your IDE
+
+→ [Fix a problem](troubleshooting/) - Common errors and solutions
 
 ---
 
-## Getting Help
+## Further Refs:
 
-Every command has built-in help:
-
-```bash
-<command> --help        # Quick reference
-<command> --info        # Comprehensive reference
-<command> --concepts    # Learn before running
-<command> --guided      # Step-by-step mode
-```
-
-**Show all available commands:**
-```bash
-commands
-```
-
-**Check system status:**
-```bash
-dashboard
-```
-
-**See your resource limits:**
-```bash
-check-limits
-```
-
-Further Refs:
-- → [First Container Guide](getting-started/first-container.md) for step-by-step
-- → [Quick Reference](quick-reference.md) for all commands
+[Quick Reference](quick-reference.md) for all commands

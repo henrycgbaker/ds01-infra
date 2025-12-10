@@ -12,18 +12,17 @@ Familiar if you're used to local Python/Jupyter development.
 
 ```bash
 # First time
-user-setup                           # Complete setup wizard
+user setup                           # Complete setup wizard
 
 # New project
-project init my-thesis --type=cv     # Create project
+project init my-thesis --type=llm    # Create project
 project launch my-thesis --open      # Start working
 
 # Resume work
 project launch my-thesis --open
 
-# Done for the day
+# Done 
 exit
-container retire my-thesis
 ```
 
 ### Container-Oriented (More Control)
@@ -32,11 +31,24 @@ Cloud-native style, closer to Docker/Kubernetes.
 
 ```bash
 # Deploy container directly
-container-deploy my-project --open
+container-deploy my-project --background
 
-# Done for the day
-exit
+# Attach terminal 
+container-attach my-project
+
+# Done
 container-retire my-project
+```
+
+---
+
+## Help Commands
+```bash
+# List available aliases
+commands                            # lists all commands
+
+# Return to workspace 
+home                                # = cd /home/<user-id>/
 ```
 
 ---
@@ -77,16 +89,18 @@ container-deploy my-project --dry-run     # Show what would happen
 container-retire [name]              # Interactive if no name
 container-retire my-project          # Named container
 container-retire my-project --force  # Skip confirmation
+container-retire my-project --save-packages # saves current pkgs to image (but not to Dockerfile!)
 
 # Status
 container-list                       # Your containers
 container-list --all                 # Include stopped
 container-stats                      # Resource usage
 
-# Individual steps (atomic - for power users)
+# Individual steps (atomic - for advanced users)
+container-create my-project          # Create container (& allocate resources)
+container-start my-project           # Start in background
 container-run my-project             # Start + enter
 container-attach my-project          # Enter running container
-container-start my-project           # Start in background
 container-stop my-project            # Stop only
 container-remove my-project          # Remove only
 ```
