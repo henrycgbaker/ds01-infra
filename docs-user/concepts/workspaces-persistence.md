@@ -556,17 +556,17 @@ project launch my-project
 
 **Understand why containers are temporary:**
 
-→ [Ephemeral Container Model](ephemeral-containers.md)
+- → [Ephemeral Container Model](ephemeral-containers.md)
 
 **Learn about images vs containers:**
 
-→ [Containers and Images](containers-and-images.md)
+- → [Containers and Images](containers-and-images.md)
 
 **Apply this knowledge:**
 
-→ [Daily Workflow](../getting-started/daily-workflow.md)
+- → [Daily Workflow](../getting-started/daily-workflow.md)
 
-→ [Creating Projects](../guides/creating-projects.md)
+- → [Creating Projects](../guides/creating-projects.md)
 
 ---
 

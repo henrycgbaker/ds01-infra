@@ -542,19 +542,19 @@ Database persists state
 
 **Understand the technical details:**
 
-→ [Containers and Images](containers-and-images.md) - How images/containers work
+- → [Containers and Images](containers-and-images.md) - How images/containers work
 
-→ [Workspaces and Persistence](workspaces-persistence.md) - Where files actually live
+- → [Workspaces and Persistence](workspaces-persistence.md) - Where files actually live
 
 **See DS01 in broader context:**
 
-→ [Industry Parallels](../background/industry-parallels.md) - Detailed cloud comparisons
+- → [Industry Parallels](../background/industry-parallels.md) - Detailed cloud comparisons
 
 **Apply this knowledge:**
 
-→ [Daily Workflow](../getting-started/daily-workflow.md) - Put ephemeral model into practice
+- → [Daily Workflow](../getting-started/daily-workflow.md) - Put ephemeral model into practice
 
-→ [Long-Running Jobs](../guides/long-running-jobs.md) - Multi-day experiments
+- → [Long-Running Jobs](../guides/long-running-jobs.md) - Multi-day experiments
 
 ---
 

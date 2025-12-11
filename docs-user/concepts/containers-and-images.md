@@ -435,18 +435,18 @@ container2 = DataScienceEnvironment()
 
 **Understand why containers are temporary:**
 
-→ [Ephemeral Container Model](ephemeral-containers.md)
+- → [Ephemeral Container Model](ephemeral-containers.md)
 
 **Learn where files are saved:**
 
-→ [Workspaces and Persistence](workspaces-persistence.md)
+- → [Workspaces and Persistence](workspaces-persistence.md)
 
 **See DS01 in industry context:**
 
-→ [Industry Parallels](../background/industry-parallels.md)
+- → [Industry Parallels](../background/industry-parallels.md)
 
 **Apply this knowledge:**
 
-→ [Creating Projects](../guides/creating-projects.md)
+- → [Creating Projects](../guides/creating-projects.md)
 
-→ [Custom Environments](../guides/custom-environments.md)
+- → [Custom Environments](../guides/custom-environments.md)

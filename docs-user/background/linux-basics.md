@@ -712,10 +712,10 @@ ls -a                       # Shows .bashrc
 ### Learn More
 
 **Container workflows:**
-→ [Containers Explained](containers-explained.md)
+- → [Containers Explained](containers-explained.md)
 
 **DS01 usage:**
-→ [Daily Usage Patterns](../guides/daily-workflow.md)
+- → [Daily Usage Patterns](../guides/daily-workflow.md)
 
 **Advanced topics:**
 → 

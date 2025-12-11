@@ -11,9 +11,11 @@ cat ~/.ds01-limits
 **Typical limits:**
 - Max GPUs: 1-2
 - Max Containers: 2-3
-- Memory: 64-128GB per container
-- Idle Timeout: 48 hours
-- Max Runtime: 168 hours (1 week)
+- Memory: 32-128GB per container
+- Idle Timeout: 30min-2h (varies by user)
+- Max Runtime: 24h-72h (varies by user)
+
+Run `check-limits` to see your current values.
 
 ## How Limits Work
 
@@ -55,5 +57,5 @@ container-deploy new-project
 
 ## Next Steps
 
-→ [Ephemeral Containers](ephemeral-containers.md)
-→ [Resource Limits Reference](../reference/resource-limits.md)
+- → [Ephemeral Containers](ephemeral-containers.md)
+- → [Resource Limits Reference](../reference/resource-limits.md)

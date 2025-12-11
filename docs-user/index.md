@@ -20,7 +20,7 @@ docs/
 
 1. [First-Time Setup](getting-started/first-time.md) - 15 minutes
 2. [Daily Workflow](getting-started/daily-workflow.md) - Core routine
-3. [Jupyter Setup](guides/jupyter-notebooks.md) - If using notebooks
+3. [Jupyter Setup](guides/jupyter.md) - If using notebooks
 4. [VS Code Remote](guides/vscode-remote.md) - If using VS Code
 
 **Use:** 
@@ -65,7 +65,7 @@ Step-by-step instructions for common tasks:
 - [Custom Images](guides/custom-images.md) - Install your own packages
 - [GPU Usage](guides/gpu-usage.md) - Request, monitor, release GPUs
 - [Long-Running Jobs](guides/long-running-jobs.md) - Overnight training
-- [Jupyter Setup](guides/jupyter-setup.md) - Jupyter Lab with SSH tunnels
+- [Jupyter Setup](guides/jupyter.md) - Jupyter Lab with SSH tunnels
 - [VSCode Remote](guides/vscode-remote.md) - Remote development
 
 [All guides →](guides/)
@@ -121,6 +121,6 @@ Find your problem:
 | See all commands | [Quick Reference](quick-reference.md) |
 | Understand containers | [Containers & Docker](background/containers-and-docker.md) |
 | Build a custom image | [Custom Images](guides/custom-images.md) |
-| Run Jupyter | [Jupyter Setup](guides/jupyter-setup.md) |
+| Run Jupyter | [Jupyter Setup](guides/jupyter.md) |
 | Fix an error | [Troubleshooting](troubleshooting/) |
 | Learn industry practices | [Industry Parallels](background/industry-parallels.md) |

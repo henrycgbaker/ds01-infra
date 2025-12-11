@@ -554,10 +554,10 @@ docker rmi ds01-$(whoami)/old-project:latest
 **Check both locations:**
 ```bash
 # On host
-ls ~/workspace/my-project/
+ls ~/workspace/<project-name>/
 
-# Inside container (should match)
-docker exec my-project._.$(whoami) ls /workspace/
+# Inside container (should match) - replace <project-name>
+docker exec <project-name>._.$(whoami) ls /workspace/
 ```
 
 ### "Files disappeared after container removal"
@@ -565,11 +565,11 @@ docker exec my-project._.$(whoami) ls /workspace/
 **Likely saved outside workspace:**
 ```bash
 # Check if files in workspace
-ls ~/workspace/my-project/
+ls ~/workspace/<project-name>/
 
-# If empty, check container (if still exists)
-docker exec my-project._.$(whoami) ls /tmp/
-docker exec my-project._.$(whoami) ls ~/
+# If empty, check container (if still exists) - replace <project-name>
+docker exec <project-name>._.$(whoami) ls /tmp/
+docker exec <project-name>._.$(whoami) ls ~/
 ```
 
 **Prevention:** Always save to `/workspace`
@@ -626,17 +626,17 @@ docker image prune
 ### Understand Containers
 
 **Learn how containers work:**
-→ [Containers Explained](containers-explained.md)
+- → [Containers Explained](containers-explained.md)
 
 ### Learn Daily Workflow
 
 **Put knowledge into practice:**
-→ [Daily Usage Patterns](../guides/daily-workflow.md)
+- → [Daily Usage Patterns](../guides/daily-workflow.md)
 
 ### Advanced Organization
 
 **Project structure:**
-→ [Project Structure](../guides/creating-projects.md)
+- → [Project Structure](../guides/creating-projects.md)
 
 ---
 

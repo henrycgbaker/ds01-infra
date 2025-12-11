@@ -25,7 +25,7 @@
 
 ### Containers and Images
 
-→ [Containers and Images](containers-and-images.md) - What they are, how they relate
+- → [Containers and Images](containers-and-images.md) - What they are, how they relate
 
 **Summary:** Images = recipes, containers = temporary instances created from recipes.
 
@@ -33,7 +33,7 @@
 
 ### Ephemeral Containers
 
-→ [Ephemeral Container Model](ephemeral-containers.md) - Why containers are temporary
+- → [Ephemeral Container Model](ephemeral-containers.md) - Why containers are temporary
 
 **Summary:** Containers are like rented workstations - use them, return them, your files stay safe.
 
@@ -43,11 +43,19 @@
 
 ### Workspaces and Persistence
 
-→ [Workspaces and Persistence](workspaces-persistence.md) - Where your files live
+- → [Workspaces and Persistence](workspaces-persistence.md) - Where your files live
 
 **Summary:** `/workspace` is mounted from host - survives container removal.
 
 **Key insight:** Only `/workspace` is permanent, everything else in container is temporary.
+
+### Python Environments
+
+- → [Python Environments](python-environments.md) - Why you don't need venv/conda
+
+**Summary:** Containers ARE your Python environment - complete isolation without virtual envs.
+
+**Key insight:** Each project's container provides the isolation venv/conda would give you.
 
 ---
 
@@ -55,7 +63,7 @@
 
 ### Linux Basics
 
-→ [Linux Basics](../background/linux-basics.md) - Command line essentials
+- → [Linux Basics](../background/linux-basics.md) - Command line essentials
 
 **For:** Users new to Linux terminals.
 
@@ -63,7 +71,7 @@
 
 ### Containers and Docker
 
-→ [Containers Explained](../background/containers-and-docker.md) - Docker fundamentals
+- → [Containers Explained](../background/containers-and-docker.md) - Docker fundamentals
 
 **For:** Users new to containers.
 
@@ -71,7 +79,7 @@
 
 ### Servers and HPC
 
-→ [Remote Computing](../background/servers-and-hpc.md) - How HPC systems work
+- → [Remote Computing](../background/servers-and-hpc.md) - How HPC systems work
 
 **For:** Understanding DS01 in context.
 
@@ -83,19 +91,19 @@
 
 ### Resource Management
 
-→ [Resource Limits](../background/resource-management.md) - Quotas and limits
+- → [Resource Limits](../background/resource-management.md) - Quotas and limits
 
 **Covers:** Why limits exist, how they're enforced, checking your quotas.
 
 ### Ephemeral Philosophy
 
-→ [Why Ephemeral?](../background/ephemeral-philosophy.md) - DS01's design philosophy
+- → [Why Ephemeral?](../background/ephemeral-philosophy.md) - DS01's design philosophy
 
 **Covers:** Benefits of stateless containers, industry alignment, best practices.
 
 ### Cloud Skills You're Learning
 
-→ [Industry Parallels](../background/industry-parallels.md) - DS01 vs AWS/GCP/K8s
+- → [Industry Parallels](../background/industry-parallels.md) - DS01 vs AWS/GCP/K8s
 
 **For:** Seeing how DS01 teaches cloud-native skills.
 

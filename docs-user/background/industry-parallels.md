@@ -690,9 +690,9 @@ spec:
 
 **Next Steps:**
 
-→ [Ephemeral Containers](ephemeral-containers.md) - Understand the philosophy
+- → [Ephemeral Containers](ephemeral-containers.md) - Understand the philosophy
 →  - Production-ready habits
-→ [Daily Usage Patterns](../guides/daily-workflow.md) - Put skills into practice
+- → [Daily Usage Patterns](../guides/daily-workflow.md) - Put skills into practice
 
 ---
 
