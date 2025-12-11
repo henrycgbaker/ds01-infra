@@ -34,7 +34,8 @@ RUN pip install transformers datasets accelerate
 
 **Rebuild:**
 ```bash
-image-update my-project
+image-update my-project            # Interactive mode
+image-update my-project --rebuild  # Rebuild without prompts
 ```
 
 ## Base Images

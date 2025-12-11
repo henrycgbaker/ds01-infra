@@ -357,6 +357,7 @@ usage() {
     echo "  --add \"pkg1 pkg2\"       Add packages directly (quick mode)"
     echo "  -r, --requirements FILE  Import packages from requirements.txt"
     echo "  --add-system \"pkg1\"     Add system packages directly"
+    echo "  --rebuild               Rebuild image without modifying Dockerfile"
     echo "  --edit                  Edit Dockerfile manually (advanced)"
     echo "  --guided                Show detailed explanations (educational)"
     echo "  --no-cache              Build without using cache (clean rebuild)"
@@ -415,6 +416,7 @@ detailed_help() {
     echo "  --add \"pkg1 pkg2\"        Add Python packages (space-separated)"
     echo "  -r, --requirements FILE   Import packages from requirements.txt"
     echo "  --add-system \"pkg1\"      Add system packages (apt packages)"
+    echo "  --rebuild                Rebuild image without modifying Dockerfile"
     echo "  --edit                   Open Dockerfile in editor"
     echo "  --guided                 Educational mode with explanations"
     echo "  --no-cache               Full rebuild without Docker cache"
@@ -1534,6 +1536,7 @@ guided_mode() {
 IMAGE_NAME=""
 EDIT_FIRST=false
 NO_CACHE=false
+REBUILD_ONLY=false
 QUICK_ADD_PACKAGES=""
 QUICK_ADD_SYSTEM=""
 REQUIREMENTS_FILE=""
@@ -1552,6 +1555,10 @@ while [[ $# -gt 0 ]]; do
         --add-system)
             QUICK_ADD_SYSTEM="$2"
             shift 2
+            ;;
+        --rebuild)
+            REBUILD_ONLY=true
+            shift
             ;;
         --edit)
             EDIT_FIRST=true
@@ -1707,7 +1714,14 @@ echo "  Size:    $CURRENT_SIZE"
 echo "  Created: $CURRENT_CREATED"
 
 # Handle different modes
-if [ "$EDIT_FIRST" = true ]; then
+if [ "$REBUILD_ONLY" = true ]; then
+    # Rebuild mode: skip Dockerfile modification, go straight to build
+    echo ""
+    echo -e "${CYAN}Rebuild Mode${NC}"
+    echo ""
+    echo "Rebuilding image from existing Dockerfile (no modifications)."
+
+elif [ "$EDIT_FIRST" = true ]; then
     # Advanced mode: direct edit
     echo ""
     EDITOR_CMD=$(find_editor)
@@ -1785,43 +1799,49 @@ else
     interactive_mode "$DOCKERFILE"
 fi
 
-# Phase 1: Dockerfile Updated ✓
-echo ""
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${GREEN}${BOLD}✓ Phase 1/3: Dockerfile Updated${NC}"
-echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo -e "Location: ${BLUE}$DOCKERFILE${NC}"
-echo ""
-
-# Phase 2: Rebuild Image?
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "${BOLD}Phase 2/3: Rebuild Docker Image?${NC}"
-echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-echo "This will rebuild the image with your changes."
-if [ "$NO_CACHE" = true ]; then
-    echo -e "${YELLOW}⚠ Building without cache (clean rebuild)${NC}"
+# Phase 1: Dockerfile Updated ✓ (skip for --rebuild mode)
+if [ "$REBUILD_ONLY" != true ]; then
+    echo ""
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}${BOLD}✓ Phase 1/3: Dockerfile Updated${NC}"
+    echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "Location: ${BLUE}$DOCKERFILE${NC}"
+    echo ""
 fi
-echo ""
-echo -e "${DIM}Time estimate: 3-5 minutes${NC}"
-echo ""
-read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-read -p "Rebuild image now? [Y/n]: " REBUILD_CONFIRM </dev/tty
-REBUILD_CONFIRM=${REBUILD_CONFIRM:-Y}
-echo ""
 
-if [[ ! "$REBUILD_CONFIRM" =~ ^[Yy]$ ]]; then
-    echo "Rebuild skipped."
+# Phase 2: Rebuild Image? (auto-confirm for --rebuild mode)
+if [ "$REBUILD_ONLY" = true ]; then
+    REBUILD_CONFIRM="Y"
+else
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${BOLD}Phase 2/3: Rebuild Docker Image?${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "Your Dockerfile has been updated."
-    echo "Rebuild later with:"
-    echo -e "  ${GREEN}image-update $IMAGE_NAME${NC}"
+    echo "This will rebuild the image with your changes."
+    if [ "$NO_CACHE" = true ]; then
+        echo -e "${YELLOW}⚠ Building without cache (clean rebuild)${NC}"
+    fi
+    echo ""
+    echo -e "${DIM}Time estimate: 3-5 minutes${NC}"
+    echo ""
+    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+    read -p "Rebuild image now? [Y/n]: " REBUILD_CONFIRM </dev/tty
+    REBUILD_CONFIRM=${REBUILD_CONFIRM:-Y}
     echo ""
 
-    # Remove backup since changes were intentional
-    rm -f "${DOCKERFILE}.bak"
-    exit 0
+    if [[ ! "$REBUILD_CONFIRM" =~ ^[Yy]$ ]]; then
+        echo "Rebuild skipped."
+        echo ""
+        echo "Your Dockerfile has been updated."
+        echo "Rebuild later with:"
+        echo -e "  ${GREEN}image-update $IMAGE_NAME${NC}"
+        echo ""
+
+        # Remove backup since changes were intentional
+        rm -f "${DOCKERFILE}.bak"
+        exit 0
+    fi
 fi
 
 # Build command with user setup build args (required for DS01 user/group creation)

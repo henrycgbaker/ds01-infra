@@ -106,6 +106,7 @@ image-create                 # Interactive
 
 # Update/rebuild image
 image-update <project>
+image-update <project> --rebuild
 
 # Quick install (non-reproducible)
 image-install <packages>
