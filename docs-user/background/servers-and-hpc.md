@@ -1,6 +1,10 @@
 # Servers & High-Performance Computing
 
-> **Just want to deploy?** Skip to [First Container](../getting-started/first-container.md)
+**Understanding shared computing environments and how they prepare you for the cloud.**
+
+> **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
+>
+> **Just want to use DS01?** Skip to [First Container](../getting-started/first-container.md).
 
 Understanding servers and shared computing prepares you for cloud platforms, HPC clusters, and production ML systems.
 

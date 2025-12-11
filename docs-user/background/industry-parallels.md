@@ -1,6 +1,10 @@
-# Industry Practices
+# Industry Parallels
 
-DS01 isn't just for learning - it's designed around industry-standard practices used in production ML systems, cloud platforms, and enterprise software. This guide shows how DS01 prepares you for professional work.
+**How DS01 prepares you for AWS, Kubernetes, and production ML.**
+
+> **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
+
+DS01 is designed around industry-standard practices used in production ML systems, cloud platforms, and enterprise software. This guide shows how your DS01 skills transfer to professional work.
 
 ---
 

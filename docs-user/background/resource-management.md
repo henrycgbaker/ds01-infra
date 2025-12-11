@@ -1,6 +1,10 @@
 # Resource Management
 
-Understanding DS01's resource allocation and limits.
+**Understanding quotas, fair sharing, and resource allocation in shared computing.**
+
+> **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
+
+Resource management is a core concept in cloud computing, HPC, and multi-tenant systems. This guide explains DS01's resource allocation and how these patterns apply to production systems.
 
 ## Your Resource Limits
 

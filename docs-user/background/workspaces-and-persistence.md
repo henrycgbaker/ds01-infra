@@ -1,6 +1,12 @@
 # Workspaces & Persistence
 
-Understanding what's saved and what's temporary is critical for DS01. This guide explains persistence, file organization, and backup strategies.
+**Deep dive into stateless compute, persistent storage, and cloud architecture patterns.**
+
+> **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
+>
+> **Just want the essentials?** See [Key Concepts: Workspaces and Persistence](../concepts/workspaces-persistence.md) for a shorter overview.
+
+Understanding stateless/stateful separation is critical for cloud computing. This guide explains persistence patterns, file organization, and how these concepts transfer to AWS, Kubernetes, and production systems.
 
 ---
 
