@@ -190,6 +190,6 @@ cp ~/workspace/project/Dockerfile ~/shared/
 
 ## Next Steps
 
-- [Custom Environments](../guides/custom-environments.md) - Practical how-to
+- [Custom Environments](../core-guides/custom-environments.md) - Practical how-to
 - [Dockerfile Guide](../advanced/dockerfile-guide.md) - Advanced patterns
 - [Containers and Images](containers-and-images.md) - Why this works

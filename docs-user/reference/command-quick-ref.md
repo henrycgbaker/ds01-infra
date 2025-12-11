@@ -605,11 +605,11 @@ ls /opt/ds01-infra/docs-user/
 
 - → [Daily Workflow](../getting-started/daily-workflow.md)
 
-- → [Creating Projects](../guides/creating-projects.md)
+- → [Creating Projects](../core-guides/creating-projects.md)
 
-- → [Custom Environments](../guides/custom-environments.md)
+- → [Custom Environments](../core-guides/custom-environments.md)
 
-- → [Jupyter Notebooks](../guides/jupyter.md)
+- → [Jupyter Notebooks](../core-guides/jupyter.md)
 
 - → [Troubleshooting](../troubleshooting/)
 

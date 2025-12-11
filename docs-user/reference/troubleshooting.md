@@ -840,7 +840,7 @@ Permission denied (publickey)
 
 **Learn best practices:**
 → 
-- → [Daily Usage Patterns](../guides/daily-workflow.md)
+- → [Daily Usage Patterns](../core-guides/daily-workflow.md)
 
 **Command reference:**
 - → [Command Reference](command-reference.md)

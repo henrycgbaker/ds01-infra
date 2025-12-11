@@ -182,6 +182,6 @@ Think of it like a laptop:
 
 - [Workspaces and Persistence](workspaces-persistence.md) - Where to save files
 - [Containers and Images](containers-and-images.md) - How images work
-- [Long-Running Jobs](../guides/long-running-jobs.md) - Multi-day training
+- [Long-Running Jobs](../core-guides/long-running-jobs.md) - Multi-day training
 
 **Want to understand the industry context?** See [Ephemeral Philosophy](../background/ephemeral-philosophy.md) in Educational Computing Context.

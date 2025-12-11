@@ -450,9 +450,9 @@ docker rmi <image>
 - [Ephemeral Philosophy](ephemeral-philosophy.md) - Why containers are temporary
 
 **Start building:**
-- [Custom Images Guide](../guides/custom-images.md) - Build your environment
+- [Custom Images Guide](../core-guides/custom-images.md) - Build your environment
 - [Dockerfile Best Practices](../advanced/dockerfile-best-practices.md) - Advanced builds
 
 **Start using:**
 - [First Container](../getting-started/first-container.md) - Deploy now
-- [Daily Workflow](../guides/daily-workflow.md) - Common patterns
+- [Daily Workflow](../core-guides/daily-workflow.md) - Common patterns

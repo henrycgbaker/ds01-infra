@@ -33,12 +33,11 @@
 | [Dockerfile Best Practices](dockerfile-best-practices.md) | Build optimisation, layer caching |
 | [SSH Advanced](ssh-advanced.md) | Config files, port forwarding |
 
-### Specialized
+### Specialised
 
 | Guide | What You'll Learn |
 |-------|-------------------|
 | [Multi-MIG Training](multi-mig-training.md) | Distributed GPU training |
-| [VS Code Remote](vscode-remote.md) | Advanced VS Code setup |
 
 ---
 
@@ -69,7 +68,7 @@ docker logs my-project._.$(id -u)
 1. [Efficiency Tips](efficiency-tips.md) → [Dockerfile Best Practices](dockerfile-best-practices.md)
 
 **Remote access:**
-1. [SSH Advanced](ssh-advanced.md) → [VS Code Remote](vscode-remote.md)
+1. [SSH Advanced](ssh-advanced.md)
 
-**Specialized:**
+**Specialised:**
 1. [Multi-MIG Training](multi-mig-training.md)

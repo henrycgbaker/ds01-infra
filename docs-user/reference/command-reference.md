@@ -935,13 +935,13 @@ alias clist='container-list'
 ### Learn Workflows
 
 **Daily patterns:**
-- → [Daily Usage Patterns](../guides/daily-workflow.md)
+- → [Daily Usage Patterns](../core-guides/daily-workflow.md)
 
 **Project setup:**
-- → [Creating Projects](../guides/creating-projects.md)
+- → [Creating Projects](../core-guides/creating-projects.md)
 
 **Container management:**
-- → [Managing Containers](../guides/daily-workflow.md)
+- → [Managing Containers](../core-guides/daily-workflow.md)
 
 ### Troubleshooting
 
@@ -980,6 +980,6 @@ ds01-dashboard                      # System status
 
 **Complete reference for all DS01 commands with examples!**
 
-**Need examples?** → [Daily Usage Patterns](../guides/daily-workflow.md)
+**Need examples?** → [Daily Usage Patterns](../core-guides/daily-workflow.md)
 
 **Having issues?** → [Troubleshooting](troubleshooting.md)

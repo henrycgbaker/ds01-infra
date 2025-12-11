@@ -232,5 +232,5 @@ image-update my-project
 ## See Also
 
 - [Container Commands](container-commands.md)
-- [Custom Images Guide](../../guides/custom-images.md)
+- [Custom Images Guide](../../core-guides/custom-images.md)
 - [Dockerfile Best Practices](../../advanced/dockerfile-best-practices.md)

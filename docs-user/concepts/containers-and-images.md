@@ -144,6 +144,6 @@ Different projects = different environments = no conflicts.
 
 - [Ephemeral Containers](ephemeral-containers.md) - Why containers are temporary
 - [Workspaces and Persistence](workspaces-persistence.md) - Where files are saved
-- [Custom Images Guide](../guides/custom-images.md) - Practical how-to
+- [Custom Images Guide](../core-guides/custom-images.md) - Practical how-to
 
 **Want deeper Docker knowledge?** See [Containers & Docker](../background/containers-and-docker.md) in Educational Computing Context.

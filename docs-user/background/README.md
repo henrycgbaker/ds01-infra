@@ -187,8 +187,8 @@ By using DS01 and reading these docs, you're learning:
 - [Key Concepts](../concepts/) - Essential mental models
 
 **Want practical guides?**
-- [Daily Workflow](../guides/daily-workflow.md) - Common patterns
-- [Custom Images](../guides/custom-images.md) - Build your environment
+- [Daily Workflow](../core-guides/daily-workflow.md) - Common patterns
+- [Custom Images](../core-guides/custom-images.md) - Build your environment
 
 **Need reference?**
 - [Command Reference](../reference/command-quick-ref.md) - All commands

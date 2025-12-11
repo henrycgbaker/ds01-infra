@@ -5,7 +5,7 @@
 ```
 docs/
 ├── getting-started/    Start here
-├── guides/             Task-focused how-tos
+├── core-guides/             Task-focused how-tos
 ├── intermediate/       Atomic commands, CLI flags, scripting
 ├── advanced/           Docker direct, terminal workflows, batch jobs
 ├── concepts/           Key Concepts to Understand (DS01-specific)
@@ -16,7 +16,7 @@ docs/
 
 ### Separation of Concerns
 
->-  **Practical:** [Getting Started](getting-started/) → [Guides](guides/) → [Intermediate](intermediate/) → [Advanced](advanced/)
+>-  **Practical:** [Getting Started](getting-started/) → [Core Guides](core-guides/) → [Intermediate](intermediate/) → [Advanced](advanced/)
 >- **Conceptual:** [Key Concepts](concepts/) (DS01-specific) | [Background](background/) (career skills)
 >- **Reference:** [Commands Ref](reference/) | [Troubleshooting](troubleshooting/)
 
@@ -29,8 +29,8 @@ docs/
 
 1. [First-Time Setup](getting-started/first-time.md) - 15 minutes
 2. [Daily Workflow](getting-started/daily-workflow.md) - Core routine
-3. [Jupyter Setup](guides/jupyter.md) - If using notebooks
-4. [VS Code Remote](guides/vscode-remote.md) - If using VS Code
+3. [Jupyter Setup](core-guides/jupyter.md) - If using notebooks
+4. [VS Code Remote](core-guides/vscode-remote.md) - If using VS Code
 
 **Commands:** `project launch`, `exit`, `container deploy`, `container retire`
 
@@ -90,14 +90,14 @@ DS01 has two types of conceptual documentation with different purposes:
 
 Step-by-step instructions for common tasks:
 
-- [Daily Workflow](guides/daily-workflow.md) - Core routine
-- [Custom Images](guides/custom-images.md) - Install your own packages
-- [GPU Usage](guides/gpu-usage.md) - Request, monitor, release GPUs
-- [Long-Running Jobs](guides/long-running-jobs.md) - Overnight training
-- [Jupyter Setup](guides/jupyter.md) - Jupyter Lab with SSH tunnels
-- [VSCode Remote](guides/vscode-remote.md) - Remote development
+- [Daily Workflow](core-guides/daily-workflow.md) - Core routine
+- [Custom Images](core-guides/custom-images.md) - Install your own packages
+- [GPU Usage](core-guides/gpu-usage.md) - Request, monitor, release GPUs
+- [Long-Running Jobs](core-guides/long-running-jobs.md) - Overnight training
+- [Jupyter Setup](core-guides/jupyter.md) - Jupyter Lab with SSH tunnels
+- [VSCode Remote](core-guides/vscode-remote.md) - Remote development
 
-[All guides →](guides/)
+[All guides →](core-guides/)
 
 ---
 
@@ -135,8 +135,8 @@ Find your problem:
 | See all commands | [Quick Reference](quick-reference.md) |
 | Understand why packages disappear | [Containers and Images](concepts/containers-and-images.md) |
 | Understand why containers are temporary | [Ephemeral Containers](concepts/ephemeral-containers.md) |
-| Build a custom image | [Custom Images](guides/custom-images.md) |
-| Run Jupyter | [Jupyter Setup](guides/jupyter.md) |
+| Build a custom image | [Custom Images](core-guides/custom-images.md) |
+| Run Jupyter | [Jupyter Setup](core-guides/jupyter.md) |
 | Fix an error | [Troubleshooting](troubleshooting/) |
 | Learn industry practices | [Industry Parallels](background/industry-parallels.md) |
 | Learn Linux commands | [Linux Basics](background/linux-basics.md) |

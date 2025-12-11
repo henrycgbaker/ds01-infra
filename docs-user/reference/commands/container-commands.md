@@ -379,5 +379,5 @@ docker logs <project-name>._.$(whoami)    # View logs (replace <project-name>)
 ## See Also
 
 - [Image Commands](image-commands.md)
-- [Daily Workflow Guide](../../guides/daily-workflow.md)
+- [Daily Workflow Guide](../../core-guides/daily-workflow.md)
 - [Troubleshooting](../../troubleshooting/)

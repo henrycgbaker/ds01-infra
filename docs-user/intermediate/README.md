@@ -10,7 +10,7 @@
 - You want fine-grained control (create/start/stop/remove separately)
 - You're interested in scripting and automation
 
-**Not there yet?** → [Getting Started](../getting-started/) | [Guides](../guides/)
+**Not there yet?** → [Getting Started](../getting-started/) | [Core Guides](../core-guides/)
 
 **Beyond this?** → [Advanced](../advanced/)
 

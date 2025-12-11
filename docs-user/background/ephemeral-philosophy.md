@@ -657,8 +657,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 ### Learn Daily Workflows
 
 **Put philosophy into practice:**
-- → [Daily Usage Patterns](../guides/daily-workflow.md)
-- → [Managing Containers](../guides/daily-workflow.md)
+- → [Daily Usage Patterns](../core-guides/daily-workflow.md)
+- → [Managing Containers](../core-guides/daily-workflow.md)
 
 ### Understand Resources
 
@@ -682,6 +682,6 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 **Embrace the philosophy: Containers are temporary, workspaces are forever.**
 
-**Ready for daily workflows?** → [Daily Usage Patterns](../guides/daily-workflow.md)
+**Ready for daily workflows?** → [Daily Usage Patterns](../core-guides/daily-workflow.md)
 
 **Understand the technology?** → [Industry Practices](industry-practices.md)

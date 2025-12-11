@@ -193,6 +193,6 @@ project launch my-project
 
 - [Containers and Images](containers-and-images.md) - Why containers are temporary
 - [Ephemeral Containers](ephemeral-containers.md) - The design philosophy
-- [Creating Projects](../guides/creating-projects.md) - Set up a new project
+- [Creating Projects](../core-guides/creating-projects.md) - Set up a new project
 
 **Want deeper understanding?** See [Workspaces & Persistence](../background/workspaces-and-persistence.md) in Educational Computing Context.

@@ -104,4 +104,4 @@ For details on installing packages and environment management:
 ## Next Steps
 
 - → [SSH Setup](ssh-setup.md)
-- → [Daily Usage Patterns](../guides/daily-workflow.md)
+- → [Daily Usage Patterns](../core-guides/daily-workflow.md)

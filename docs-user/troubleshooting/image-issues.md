@@ -201,5 +201,5 @@ ERROR: Cannot install package-a and package-b because these package versions hav
 ## See Also
 
 - [Container Issues](container-issues.md)
-- [Custom Images Guide](../guides/custom-images.md)
+- [Custom Images Guide](../core-guides/custom-images.md)
 - [Dockerfile Best Practices](../advanced/dockerfile-best-practices.md)
