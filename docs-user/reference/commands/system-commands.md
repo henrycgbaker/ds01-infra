@@ -261,7 +261,6 @@ image-create --guided
 
 ### DS01 Variables
 ```bash
-DS01_LIMITS_FILE=~/.ds01-limits
 DS01_INSTALL_DIR=/opt/ds01-infra
 DS01_WORKSPACE=~/workspace
 ```

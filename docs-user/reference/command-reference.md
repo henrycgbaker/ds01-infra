@@ -862,9 +862,6 @@ image-create --guided
 ### DS01 Variables
 
 ```bash
-# Your resource limits file
-DS01_LIMITS_FILE=~/.ds01-limits
-
 # System installation
 DS01_INSTALL_DIR=/opt/ds01-infra
 
