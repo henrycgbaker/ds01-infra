@@ -2,9 +2,25 @@
 # /opt/ds01-infra/config/resource-limits.yaml
 #
 # Related files:
-# - config/groups/*.members    - Group member lists (one file per group)
-# - config/user-overrides.yaml - Per-user exceptions
+# - config/groups/*.members       - Group member lists (one file per group)
+# - config/group-overrides.txt    - Deterministic group assignment overrides
+# - config/user-overrides.yaml    - Per-user resource limit exceptions
 # - scripts/lib/error-messages.sh - Error message templates
+#
+# DATA FLOW (Single Source of Truth):
+#   /home/ scan + group-overrides.txt
+#       ↓ MERGE (add only)
+#   config/groups/*.members ← SINGLE SOURCE OF TRUTH
+#       ↓ reads
+#   This file (resource-limits.yaml) parser
+#       ↓ applies
+#   user-overrides.yaml (custom limits)
+#
+# 4-TIER GROUP MODEL:
+#   student    → MIG only, 32 CPUs, 32GB (default)
+#   researcher → Full GPU access, 64 CPUs, 128GB (PhD students, staff)
+#   faculty    → Full GPU access, 64 CPUs, 128GB (professors)
+#   admin      → Unlimited (datasciencelab only)
 
 # Default limits for all users (unless overridden by group or user-specific settings)
 defaults:
@@ -55,20 +71,39 @@ groups:
 
   researcher:
     # Members: config/groups/researcher.members
-    allow_full_gpu: true
+    # PhD students, research assistants, staff with research needs
+    allow_full_gpu: true            # Full GPU access for PhD work
     max_mig_per_container: 4        # Up to 4 MIG-equivalents per container (= 1 full GPU)
-    max_mig_instances: 8            # Can use up to 8 MIG instances or equivalent
-    max_cpus: 64                    # Increased for CPU-heavy workloads (sklearn)
-    memory: 128g                    # Increased for large datasets
-    memory_swap: 128g
+    max_mig_instances: 6            # Can use up to 6 MIG instances or equivalent
+    max_cpus: 48                    # Increased for CPU-heavy workloads
+    memory: 64g                     # Increased for large datasets
+    memory_swap: 64g
     shm_size: 32g
-    max_runtime: 24h
+    max_runtime: 48h                # Longer runtime for research jobs
     idle_timeout: 1h
     max_tasks: 65536                # High for parallel workloads
     max_containers_per_user: 5
     # TODO-NOT-IMPLEMENTED: Storage quotas
     # storage_workspace: 500G
     # storage_data: 1T
+
+  faculty:
+    # Members: config/groups/faculty.members
+    # Professors and senior researchers - teaching + research needs
+    allow_full_gpu: true            # Full GPU access
+    max_mig_per_container: 4        # Up to 4 MIG-equivalents per container
+    max_mig_instances: 8            # Can use up to 8 MIG instances
+    max_cpus: 64                    # High for demanding workloads
+    memory: 128g                    # Large memory for big models
+    memory_swap: 128g
+    shm_size: 64g
+    max_runtime: 72h                # Extended runtime for faculty
+    idle_timeout: 2h                # Longer idle timeout (teaching demos, etc.)
+    max_tasks: 65536
+    max_containers_per_user: 5
+    # TODO-NOT-IMPLEMENTED: Storage quotas
+    # storage_workspace: 1T
+    # storage_data: 2T
 
   admin:
     # Members: config/groups/admin.members
