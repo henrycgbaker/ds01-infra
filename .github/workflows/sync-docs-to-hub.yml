@@ -61,8 +61,8 @@ jobs:
         if: steps.changes.outputs.has_changes == 'true'
         working-directory: target
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "henrycgbaker"
+          git config user.email "henry.c.g.baker@gmail.com"
           git commit -m "docs: sync from ds01-infra
 
           Source: ${{ github.sha }}"

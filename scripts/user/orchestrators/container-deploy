@@ -112,6 +112,7 @@ detailed_help() {
     echo "  --image=NAME      Use specific Docker image (skip custom image check)"
     echo "  --cpu-only        No GPU allocation (for preprocessing)"
     echo "  -w, --workspace   Custom workspace directory"
+    echo "  --project=NAME    Mount ~/workspace/NAME as workspace"
     echo "  -d, --data        Mount additional data directory"
     echo "  --background      Start without opening terminal"
     echo "  --open            Start and open terminal immediately"

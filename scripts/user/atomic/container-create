@@ -100,6 +100,8 @@ detailed_help() {
     echo -e "${BOLD}Options:${NC}"
     echo "  --guided          Interactive mode with detailed explanations"
     echo "  --cpu-only        Create CPU-only container (no GPU allocation)"
+    echo "  --num-migs=N      Request N MIG partitions (default: 1)"
+    echo "  --prefer-full     Prefer full GPU over MIG partitions"
     echo "  -w, --workspace   Custom workspace directory"
     echo "                    Default: ~/workspace/<container-name>"
     echo "  -d, --data        Additional data directory to mount (read-only)"
