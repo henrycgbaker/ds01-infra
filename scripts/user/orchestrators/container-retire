@@ -151,6 +151,8 @@ detailed_help() {
     echo -e "${BOLD}Options:${NC}"
     echo "  --guided          Step-by-step with explanations"
     echo "  -f, --force       Skip all confirmations"
+    echo "  --save-packages   Auto-save new packages to image (no prompt)"
+    echo "  --images          Also remove Docker image after retiring"
     echo "  --dry-run         Preview without executing"
     echo "  --concepts        Show pre-run educational content"
     echo "  --info            Show this detailed reference"

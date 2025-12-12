@@ -88,8 +88,13 @@ dashboard allocations 20     # Last 20 GPU allocations
 **Complete onboarding wizard** (L4 wizard)
 
 ```bash
-user-setup
+user-setup [OPTIONS]
 ```
+
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--quick` | Expert mode: skip skill assessment, minimal prompts |
 
 **Aliases:** `user setup`, `new-user`
 
@@ -128,6 +133,32 @@ Containers: 2 / 3
 
 ---
 
+## ssh-config
+
+**SSH configuration utility**
+
+```bash
+ssh-config <command>
+```
+
+**Commands:**
+| Command | Description |
+|---------|-------------|
+| `generate` | Generate new SSH keys (ed25519) |
+| `test` | Test SSH connection to localhost |
+| `show` | Display public key and connection info |
+| `vscode` | Show VS Code Remote-SSH setup instructions |
+
+**Examples:**
+```bash
+ssh-config generate    # Create new SSH keys
+ssh-config test        # Test if SSH is working
+ssh-config show        # Display your public key
+ssh-config vscode      # Get VS Code setup instructions
+```
+
+---
+
 ## ssh-setup
 
 **Configure SSH keys** (L2 atomic)
@@ -162,13 +193,21 @@ ssh-setup --verify     # Check existing setup
 **Configure VSCode Remote** (L2 atomic)
 
 ```bash
-vscode-setup
+vscode-setup [OPTIONS]
 ```
 
-**Example:**
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--project=NAME` | Project-specific instructions |
+| `--container=NAME` | Container-specific instructions |
+| `--guided` | Educational mode |
+
+**Examples:**
 ```bash
-vscode-setup
-# Generates VSCode config for remote development
+vscode-setup                        # General setup guide
+vscode-setup --project=my-thesis    # Project-specific instructions
+vscode-setup --guided               # With explanations
 ```
 
 **See:** [VSCode Remote Guide](../../core-guides/vscode-remote.md)
@@ -187,12 +226,14 @@ shell-setup [OPTIONS]
 | Option | Description |
 |--------|-------------|
 | `--check` | Verify PATH only |
-| `--force` | Overwrite existing config |
+| `--force` | Reconfigure even if PATH already correct |
+| `--guided` | Educational mode |
 
 **Examples:**
 ```bash
 shell-setup --check   # Verify PATH
 shell-setup           # Fix PATH
+shell-setup --guided  # With explanations
 ```
 
 **Use when:** DS01 commands not found in PATH
@@ -232,17 +273,25 @@ jupyter-setup --port-forward  # Just port forwarding commands
 **Show all available commands**
 
 ```bash
-help
+help [OPTIONS]
 ```
 
-Lists all DS01 commands organised by category (containers, images, system, etc.).
+**Options:**
+| Option | Description |
+|--------|-------------|
+| `--atomic` | Show atomic container commands (advanced) |
+| `--admin` | Show admin commands (ds01-* prefix) |
+| `--inside` | Show inside-container commands |
+| `--full` | Show everything |
 
 **Alias:** `commands` (identical functionality)
 
-**Example:**
+**Examples:**
 ```bash
-help
-# Shows categorised list of all DS01 commands
+help              # Show main commands
+help --atomic     # Show advanced L2 commands
+help --admin      # Show admin tools
+help --full       # Show all commands
 ```
 
 ---

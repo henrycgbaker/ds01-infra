@@ -94,13 +94,24 @@ image-create custom --no-build                  # Just create Dockerfile
 **List your Docker images** (L2 atomic)
 
 ```bash
-image-list [--all]
+image-list [OPTIONS]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--all` | Include system images |
+| `-a, --all` | Show all images (not just yours) |
+| `-s, --size` | Show image sizes |
+| `-d, --detailed` | Show detailed info with Dockerfile locations |
+| `--guided` | Educational mode |
+
+**Examples:**
+```bash
+image-list              # List your images
+image-list --all        # List all images on server
+image-list --detailed   # Show detailed info with Dockerfile locations
+image-list --size       # Include image sizes
+```
 
 **Example output:**
 ```
@@ -155,18 +166,24 @@ image-update my-project --add "wandb optuna"  # Quick add from CLI
 **Remove Docker image** (L2 atomic)
 
 ```bash
-image-delete <project-name> [OPTIONS]
+image-delete [image-name...] [OPTIONS]
 ```
 
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--force` | Delete even if containers exist |
+| `--all` | Delete all your images (with confirmation) |
+| `-f, --force` | Force removal (stop/remove containers first) |
+| `--keep-dockerfile` | Don't delete the associated Dockerfile |
+| `--guided` | Educational mode |
 
 **Examples:**
 ```bash
-image-delete my-project
-image-delete my-project --force
+image-delete my-project                    # Remove image (with confirmation)
+image-delete img1 img2 img3                # Bulk delete multiple images
+image-delete --all                         # Remove all your images
+image-delete my-project --force            # Force remove (stops containers first)
+image-delete my-project --keep-dockerfile  # Keep Dockerfile for later rebuild
 ```
 
 **Note:** Containers using this image must be removed first (or use --force)
