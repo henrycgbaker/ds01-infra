@@ -65,7 +65,9 @@ show_help() {
     echo -e ""
     echo -e "${CYAN}Options:${NC}"
     echo -e "  --type=TYPE     Project type: ml, cv, nlp, rl, audio, ts, llm, custom"
+    echo -e "  --quick         Skip interactive prompts, use defaults (type=ml)"
     echo -e "  --guided        Include detailed explanations for beginners"
+    echo -e "  --no-git        Skip Git initialization"
     echo -e "  -h, --help      Quick reference (this message)"
     echo -e "  --info          Full reference with all options"
     echo -e "  --concepts      Learn about projects before running"
@@ -74,6 +76,7 @@ show_help() {
     echo -e "  project init                          # Interactive setup"
     echo -e "  project init my-thesis                # Create 'my-thesis' project"
     echo -e "  project init my-thesis --type=cv     # Computer vision project"
+    echo -e "  project init my-thesis --quick        # Quick setup with defaults"
     echo -e "  project init --guided                 # With explanations"
     echo -e ""
 }
@@ -101,6 +104,8 @@ show_info() {
     echo -e "                    llm    - LLM/GenAI (vllm, bitsandbytes, langchain)"
     echo -e "                    custom - No preset packages"
     echo -e ""
+    echo -e "  --quick         Skip interactive prompts, use defaults:"
+    echo -e "                    type=ml, data-science structure, git init"
     echo -e "  --desc=TEXT     Project description (optional)"
     echo -e "  --guided        Step-by-step with explanations"
     echo -e "  --no-git        Skip Git initialization"
@@ -190,11 +195,16 @@ GUIDED=false
 INTERACTIVE=true
 SKIP_GIT=false
 BLANK_STRUCTURE=false
+QUICK_MODE=false
 
 for arg in "$@"; do
     case $arg in
         --guided)
             GUIDED=true
+            ;;
+        --quick)
+            QUICK_MODE=true
+            INTERACTIVE=false
             ;;
         --type=*)
             PROJECT_TYPE_ARG="${arg#*=}"
@@ -236,6 +246,13 @@ done
 # Check if project name was provided (non-interactive mode)
 if [ -n "$PROJECT_NAME_ARG" ]; then
     INTERACTIVE=false
+fi
+
+# Quick mode requires project name
+if [ "$QUICK_MODE" = true ] && [ -z "$PROJECT_NAME_ARG" ]; then
+    echo -e "${RED}Error: --quick requires a project name${NC}"
+    echo -e "  Usage: project init my-project --quick"
+    exit 1
 fi
 
 # Use skill level if set (from user-setup's skill assessment)
@@ -319,31 +336,36 @@ PROJECT_DIR="$HOME/workspace/$PROJECT_NAME"
 
 # Check if exists
 if [ -d "$PROJECT_DIR" ]; then
-    echo -e "${YELLOW}Project directory already exists: $PROJECT_DIR${NC}"
-    echo -e ""
-    echo -e "  ${BOLD}1)${NC} Use existing ${DIM}(keep files, update config)${NC}"
-    echo -e "  ${BOLD}2)${NC} Overwrite ${DIM}(delete and recreate)${NC}"
-    echo -e "  ${BOLD}3)${NC} Cancel"
-    echo -e ""
-    read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-    read -p "Choice [1]: " DIR_CHOICE </dev/tty
-    DIR_CHOICE=${DIR_CHOICE:-1}
-    
-    case $DIR_CHOICE in
-        1)
-            EXISTING_PROJECT=true
-            ;;
-        2)
-            echo -e "${YELLOW}Removing existing directory...${NC}"
-            rm -rf "$PROJECT_DIR"
-            EXISTING_PROJECT=false
-            ;;
-       *)
-            echo -e "Cancelled."
-            exit 1
-            ;;
-    esac
-    
+    if [ "$QUICK_MODE" = true ]; then
+        # Quick mode: use existing directory
+        echo -e "${YELLOW}Project directory exists, updating config...${NC}"
+        EXISTING_PROJECT=true
+    else
+        echo -e "${YELLOW}Project directory already exists: $PROJECT_DIR${NC}"
+        echo -e ""
+        echo -e "  ${BOLD}1)${NC} Use existing ${DIM}(keep files, update config)${NC}"
+        echo -e "  ${BOLD}2)${NC} Overwrite ${DIM}(delete and recreate)${NC}"
+        echo -e "  ${BOLD}3)${NC} Cancel"
+        echo -e ""
+        read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+        read -p "Choice [1]: " DIR_CHOICE </dev/tty
+        DIR_CHOICE=${DIR_CHOICE:-1}
+
+        case $DIR_CHOICE in
+            1)
+                EXISTING_PROJECT=true
+                ;;
+            2)
+                echo -e "${YELLOW}Removing existing directory...${NC}"
+                rm -rf "$PROJECT_DIR"
+                EXISTING_PROJECT=false
+                ;;
+           *)
+                echo -e "Cancelled."
+                exit 1
+                ;;
+        esac
+    fi
 else
     EXISTING_PROJECT=false
 fi
@@ -373,6 +395,10 @@ if [ -n "$PROJECT_TYPE_ARG" ]; then
             ;;
     esac
     echo -e "Project type: ${CYAN}$PROJECT_TYPE${NC}"
+elif [ "$QUICK_MODE" = true ]; then
+    # Quick mode defaults to ml
+    PROJECT_TYPE="ml"
+    echo -e "Project type: ${CYAN}$PROJECT_TYPE${NC} (default)"
 elif [ "$INTERACTIVE" = true ]; then
     echo -e "Select project type:"
     echo -e "  ${BOLD}1)${NC} General ML ${DIM}(xgboost, lightgbm, optuna)${NC} ${GREEN}(Default)${NC}"
@@ -404,6 +430,9 @@ fi
 # Project description
 if [ -n "$PROJECT_DESC_ARG" ]; then
     PROJECT_DESC="$PROJECT_DESC_ARG"
+elif [ "$QUICK_MODE" = true ]; then
+    # Quick mode skips description
+    PROJECT_DESC=""
 elif [ "$INTERACTIVE" = true ]; then
     echo -e ""
     read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true

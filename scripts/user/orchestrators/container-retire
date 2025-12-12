@@ -78,6 +78,8 @@ usage() {
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
     echo "  -f, --force       Skip confirmation and save prompts (non-interactive)"
+    echo "  --save-packages   Automatically save new packages to image (no prompt)"
+    echo "  --images          Also remove the Docker image after retiring"
     echo "  --dry-run         Show what would be done"
     echo "  -h, --help        Show this help message"
     echo ""
@@ -263,6 +265,8 @@ GUIDED=false
 FORCE=false
 SKIP_INITIAL_CONFIRM=false
 DRY_RUN=false
+SAVE_PACKAGES=false
+REMOVE_IMAGE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -282,6 +286,16 @@ while [[ $# -gt 0 ]]; do
             ;;
         --dry-run)
             DRY_RUN=true
+            shift
+            ;;
+        --save-packages)
+            # Automatically save new packages via docker commit (no prompt)
+            SAVE_PACKAGES=true
+            shift
+            ;;
+        --images)
+            # Also remove the Docker image after retiring
+            REMOVE_IMAGE=true
             shift
             ;;
         -h|--help)
@@ -443,51 +457,64 @@ if [ "$CONTAINER_STATUS" = "running" ] && [ "$FORCE" != "true" ]; then
             # Format packages for display and command
             PKG_LIST=$(echo "$NEW_PACKAGES" | tr '\n' ' ' | sed 's/ $//')
 
-            echo -e "${YELLOW}💡${NC} Found ${BOLD}$PKG_COUNT${NC} new package(s) installed:"
+            echo -e "${YELLOW}Found ${BOLD}$PKG_COUNT${NC} new package(s) installed:"
             echo ""
             if [ "$PKG_COUNT" -le 10 ]; then
                 echo "$NEW_PACKAGES" | while read -r pkg; do
-                    [ -n "$pkg" ] && echo -e "  • ${CYAN}$pkg${NC}"
+                    [ -n "$pkg" ] && echo -e "  - ${CYAN}$pkg${NC}"
                 done
             else
                 echo "$NEW_PACKAGES" | head -8 | while read -r pkg; do
-                    [ -n "$pkg" ] && echo -e "  • ${CYAN}$pkg${NC}"
+                    [ -n "$pkg" ] && echo -e "  - ${CYAN}$pkg${NC}"
                 done
                 echo -e "  ${DIM}... and $((PKG_COUNT - 8)) more${NC}"
             fi
             echo ""
 
-            if [ "$GUIDED" = true ]; then
-                echo -e "${BOLD}Options to preserve these packages:${NC}"
-                echo ""
-                echo -e "  ${BOLD}1. Update Dockerfile (Recommended)${NC}"
-                echo "     Reproducible, version-controlled, shareable"
-                echo ""
-                echo -e "  ${BOLD}2. Docker commit (Quick but fragile)${NC}"
-                echo "     Fast, but lost on next Dockerfile rebuild"
-                echo ""
-            fi
-
-            echo -e "${BOLD}Recommended:${NC} Update Dockerfile with:"
-            echo -e "  ${GREEN}image-update $CONTAINER_NAME --add \"$PKG_LIST\"${NC}"
-            echo ""
-            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-            read -p "Save via docker commit instead? [y/N]: " SAVE_IMAGE </dev/tty
-
-            if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
-                echo ""
-                echo -e "${CYAN}Committing changes to image...${NC}"
+            # Handle --save-packages flag (auto-save without prompt)
+            if [ "$SAVE_PACKAGES" = true ]; then
+                echo -e "${CYAN}Committing changes to image (--save-packages)...${NC}"
                 if docker commit "$CONTAINER_TAG" "$IMAGE" > /dev/null 2>&1; then
-                    echo -e "${GREEN}✓${NC} Changes saved to image"
+                    echo -e "${GREEN}OK${NC} Changes saved to image"
                     PACKAGES_SAVED=true
                 else
-                    echo -e "${YELLOW}⚠${NC} Failed to commit changes"
+                    echo -e "${YELLOW}Warning:${NC} Failed to commit changes"
                 fi
-            else
                 echo ""
-                echo -e "Skipped. To add permanently: ${GREEN}image-update $CONTAINER_NAME --add \"$PKG_LIST\"${NC}"
+            else
+                # Interactive prompt
+                if [ "$GUIDED" = true ]; then
+                    echo -e "${BOLD}Options to preserve these packages:${NC}"
+                    echo ""
+                    echo -e "  ${BOLD}1. Update Dockerfile (Recommended)${NC}"
+                    echo "     Reproducible, version-controlled, shareable"
+                    echo ""
+                    echo -e "  ${BOLD}2. Docker commit (Quick but fragile)${NC}"
+                    echo "     Fast, but lost on next Dockerfile rebuild"
+                    echo ""
+                fi
+
+                echo -e "${BOLD}Recommended:${NC} Update Dockerfile with:"
+                echo -e "  ${GREEN}image-update $CONTAINER_NAME --add \"$PKG_LIST\"${NC}"
+                echo ""
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Save via docker commit instead? [y/N]: " SAVE_IMAGE </dev/tty
+
+                if [[ "$SAVE_IMAGE" =~ ^[Yy]$ ]]; then
+                    echo ""
+                    echo -e "${CYAN}Committing changes to image...${NC}"
+                    if docker commit "$CONTAINER_TAG" "$IMAGE" > /dev/null 2>&1; then
+                        echo -e "${GREEN}OK${NC} Changes saved to image"
+                        PACKAGES_SAVED=true
+                    else
+                        echo -e "${YELLOW}Warning:${NC} Failed to commit changes"
+                    fi
+                else
+                    echo ""
+                    echo -e "Skipped. To add permanently: ${GREEN}image-update $CONTAINER_NAME --add \"$PKG_LIST\"${NC}"
+                fi
+                echo ""
             fi
-            echo ""
         fi
     fi
 fi
@@ -583,8 +610,8 @@ if "$CONTAINER_REMOVE" "$CONTAINER_NAME" "${REMOVE_ARGS[@]}"; then
         echo ""
     fi
 
-    # Prompt for optional image deletion (always shown when custom image exists)
-    # --force skips container confirmations but not this prompt
+    # Handle image removal (--images flag or interactive prompt)
+    # --force skips container confirmations but not this prompt (unless --images is used)
     {
         # Get image info
         IMAGE_NAME="ds01-$(id -u)/$CONTAINER_NAME:latest"
@@ -596,40 +623,57 @@ if "$CONTAINER_REMOVE" "$CONTAINER_NAME" "${REMOVE_ARGS[@]}"; then
         fi
 
         if [ -n "$IMAGE_SIZE" ]; then
-            echo -e "${CYAN}━━━ Image Cleanup (Optional) ━━━${NC}"
-            echo ""
-
-            if [ "$GUIDED" = true ]; then
-                echo -e "${CYAN}ℹ${NC} ${BOLD}About Docker Images:${NC}"
-                echo "  • An image is like an executable built from your Dockerfile"
-                echo "  • It can be rebuilt anytime from the Dockerfile"
-                echo "  • Keeping it means faster container-deploy (no rebuild needed)"
-                echo "  • Removing it frees disk space but requires rebuild next time"
+            # Handle --images flag (auto-remove without prompt)
+            if [ "$REMOVE_IMAGE" = true ]; then
+                echo -e "${CYAN}━━━ Removing Docker Image (--images) ━━━${NC}"
                 echo ""
-            fi
-
-            echo -e "  Image: ${BOLD}$IMAGE_NAME${NC} (${IMAGE_SIZE})"
-            if [ -n "$DOCKERFILE_SIZE" ]; then
-                echo -e "  Dockerfile: ${GREEN}✓${NC} ~/dockerfiles/${CONTAINER_NAME}.Dockerfile (${DOCKERFILE_SIZE})"
-            fi
-            echo ""
-            echo -e "  ${GREEN}Default: Keep image${NC} (faster next deploy)"
-            read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
-            read -p "Also remove the Docker image? [y/N]: " REMOVE_IMAGE </dev/tty
-
-            if [[ "$REMOVE_IMAGE" =~ ^[Yy]$ ]]; then
+                echo -e "  Image: ${BOLD}$IMAGE_NAME${NC} (${IMAGE_SIZE})"
                 if docker rmi "$IMAGE_NAME" > /dev/null 2>&1; then
-                    echo -e "${GREEN}✓${NC} Image removed"
+                    echo -e "${GREEN}OK${NC} Image removed"
                     if [ -n "$DOCKERFILE_SIZE" ]; then
                         echo -e "${DIM}  (Can rebuild with: image-create $CONTAINER_NAME)${NC}"
                     fi
                 else
-                    echo -e "${YELLOW}⚠${NC} Could not remove image (may be in use)"
+                    echo -e "${YELLOW}Warning:${NC} Could not remove image (may be in use)"
                 fi
-            else
-                echo -e "${DIM}Image kept for faster redeployment${NC}"
+                echo ""
+            elif [ "$FORCE" != "true" ]; then
+                # Interactive prompt (unless --force)
+                echo -e "${CYAN}━━━ Image Cleanup (Optional) ━━━${NC}"
+                echo ""
+
+                if [ "$GUIDED" = true ]; then
+                    echo -e "${CYAN}i${NC} ${BOLD}About Docker Images:${NC}"
+                    echo "  - An image is like an executable built from your Dockerfile"
+                    echo "  - It can be rebuilt anytime from the Dockerfile"
+                    echo "  - Keeping it means faster container-deploy (no rebuild needed)"
+                    echo "  - Removing it frees disk space but requires rebuild next time"
+                    echo ""
+                fi
+
+                echo -e "  Image: ${BOLD}$IMAGE_NAME${NC} (${IMAGE_SIZE})"
+                if [ -n "$DOCKERFILE_SIZE" ]; then
+                    echo -e "  Dockerfile: ${GREEN}OK${NC} ~/dockerfiles/${CONTAINER_NAME}.Dockerfile (${DOCKERFILE_SIZE})"
+                fi
+                echo ""
+                echo -e "  ${GREEN}Default: Keep image${NC} (faster next deploy)"
+                read -r -t 0.1 -n 10000 discard </dev/tty 2>/dev/null || true
+                read -p "Also remove the Docker image? [y/N]: " REMOVE_IMAGE_PROMPT </dev/tty
+
+                if [[ "$REMOVE_IMAGE_PROMPT" =~ ^[Yy]$ ]]; then
+                    if docker rmi "$IMAGE_NAME" > /dev/null 2>&1; then
+                        echo -e "${GREEN}OK${NC} Image removed"
+                        if [ -n "$DOCKERFILE_SIZE" ]; then
+                            echo -e "${DIM}  (Can rebuild with: image-create $CONTAINER_NAME)${NC}"
+                        fi
+                    else
+                        echo -e "${YELLOW}Warning:${NC} Could not remove image (may be in use)"
+                    fi
+                else
+                    echo -e "${DIM}Image kept for faster redeployment${NC}"
+                fi
+                echo ""
             fi
-            echo ""
         fi
     }
 else
