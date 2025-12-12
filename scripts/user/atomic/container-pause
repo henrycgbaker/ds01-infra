@@ -61,8 +61,8 @@ usage() {
     echo "    • All running processes (resume when unpaused)"
     echo ""
     echo -e "${CYAN}To unpause:${NC}"
-    echo -e "  ${GREEN}container-run <name>${NC}       # Unpause and attach"
-    echo -e "  ${GREEN}docker unpause <name>${NC}     # Unpause only"
+    echo -e "  ${GREEN}container-unpause <name>${NC}  # Unpause only"
+    echo -e "  ${GREEN}container-run <name>${NC}      # Unpause and attach"
     echo ""
     echo -e "${YELLOW}⚠ Use pause for:${NC}"
     echo "  • Short breaks (lunch, meetings)"
@@ -163,8 +163,8 @@ pause_container() {
         echo -e "${BOLD}Container is now frozen.${NC}"
         echo ""
         echo -e "${BOLD}To resume:${NC}"
-        echo -e "  ${GREEN}container-run $container_name${NC}     # Unpause and attach"
-        echo -e "  ${GREEN}docker unpause $container_tag${NC}  # Unpause only"
+        echo -e "  ${GREEN}container-unpause $container_name${NC}  # Unpause only"
+        echo -e "  ${GREEN}container-run $container_name${NC}      # Unpause and attach"
         echo ""
 
         if [ "$max_pause_time" != "None" ] && [ "$max_pause_time" != "null" ]; then
