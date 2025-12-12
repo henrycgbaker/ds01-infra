@@ -754,28 +754,35 @@ vscode-setup
 
 **Syntax:**
 ```bash
-dashboard [OPTIONS]
+dashboard [SECTION] [OPTIONS]
 ```
 
 **Options:**
-- `--watch` - Continuous monitoring
-- `--json` - JSON output
-- `--help` - Show help
+- `--watch`, `-w` - Watch mode (2s refresh)
+- `--full` - Show all sections expanded
+- `--json` - JSON output for scripting
+
+**Sections:**
+- `gpu` - GPU/MIG utilization diagram
+- `cpu` - CPU usage by user diagram
+- `system` - CPU, Memory, Disk bars
+- `mig-config` - MIG partition configuration
+- `containers` - All containers with stats
+- `users` - Per-user resource summary
+- `temp` - GPU temperatures and power
+- `allocations [N]` - Recent N GPU allocations
+- `alerts` - Active alerts and warnings
 
 **Examples:**
 ```bash
-# View system status
-dashboard
-
-# Continuous monitoring
-dashboard --watch
+dashboard                    # Default compact view
+dashboard --full             # All sections expanded
+dashboard --watch            # Live monitoring
+dashboard gpu                # GPU section only
+dashboard containers         # Container list
+dashboard alerts             # Check for issues
+dashboard allocations 20     # Last 20 GPU allocations
 ```
-
-**What it shows:**
-- GPU availability and allocation
-- System resource usage
-- Active containers
-- User quotas
 
 ---
 

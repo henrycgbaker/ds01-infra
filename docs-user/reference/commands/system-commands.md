@@ -32,7 +32,7 @@ version                  # Show version
 **System status dashboard**
 
 ```bash
-dashboard [OPTIONS]
+dashboard [SECTION] [OPTIONS]
 ```
 
 View GPU availability, container status, and system resources.
@@ -40,20 +40,45 @@ View GPU availability, container status, and system resources.
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--watch`, `-w` | Continuous monitoring (2s refresh) |
+| `--watch`, `-w` | Watch mode (2s refresh) |
 | `--full` | Show all sections expanded |
 | `--json` | JSON output for scripting |
-| `gpu` | GPU/MIG utilisation only |
-| `system` | System resources only |
-| `containers` | Container list only |
-| `users` | Per-user breakdown |
+
+**Modular Sections:**
+| Section | Description |
+|---------|-------------|
+| `gpu` | GPU/MIG utilization diagram |
+| `cpu` | CPU usage by user diagram |
+| `system` | CPU, Memory, Disk bars |
+| `mig-config` | MIG partition configuration |
+| `containers` | All containers with stats |
+| `users` | Per-user resource summary |
+| `temp` | GPU temperatures and power |
+
+**Additional Views:**
+| Command | Description |
+|---------|-------------|
+| `allocations [N]` | Recent N GPU allocations (default: 10) |
+| `alerts` | Active alerts and warnings (idle containers, etc.) |
 
 **Examples:**
 ```bash
-dashboard              # Default view
-dashboard --watch      # Live monitoring
-dashboard gpu          # GPU section only
-dashboard users        # User resource summary
+dashboard                    # Default compact view (GPU, CPU by user, system)
+dashboard --full             # All sections expanded
+dashboard --watch            # Live monitoring
+dashboard --json             # JSON output for scripting
+
+# Individual sections
+dashboard gpu                # GPU/MIG utilization
+dashboard cpu                # CPU usage by user
+dashboard system             # System resources
+dashboard containers         # All containers
+dashboard users              # Per-user summary
+dashboard temp               # GPU temperatures
+
+# Additional views
+dashboard alerts             # Check for issues
+dashboard allocations 20     # Last 20 GPU allocations
 ```
 
 ---
