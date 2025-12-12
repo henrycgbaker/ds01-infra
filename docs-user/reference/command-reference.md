@@ -39,7 +39,7 @@ Complete reference for all DS01 commands with examples and options.
 - [vscode-setup](#vscode-setup) - Configure VSCode Remote (L2)
 
 **System:**
-- [ds01-dashboard](#ds01-dashboard) - System status dashboard
+- [dashboard](#dashboard) - System status dashboard
 
 ---
 
@@ -748,13 +748,13 @@ vscode-setup
 
 ## System Commands
 
-### ds01-dashboard
+### dashboard
 
 **System status dashboard**
 
 **Syntax:**
 ```bash
-ds01-dashboard [OPTIONS]
+dashboard [OPTIONS]
 ```
 
 **Options:**
@@ -765,10 +765,10 @@ ds01-dashboard [OPTIONS]
 **Examples:**
 ```bash
 # View system status
-ds01-dashboard
+dashboard
 
 # Continuous monitoring
-ds01-dashboard --watch
+dashboard --watch
 ```
 
 **What it shows:**
