@@ -38,8 +38,8 @@ jobs:
           cp source/docs-user/quick-reference.md target/docs/
           cp source/docs-user/quickstart.md target/docs/
           cp -r source/docs-user/getting-started target/docs/
-          cp -r source/docs-user/concepts target/docs/
-          cp -r source/docs-user/guides target/docs/
+          cp -r source/docs-user/key-concepts target/docs/
+          cp -r source/docs-user/core-guides target/docs/
           cp -r source/docs-user/intermediate target/docs/
           cp -r source/docs-user/background target/docs/
           cp -r source/docs-user/reference target/docs/

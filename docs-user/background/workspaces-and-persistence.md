@@ -4,7 +4,7 @@
 
 > **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
 >
-> **Just want the essentials?** See [Key Concepts: Workspaces and Persistence](../core-concepts/workspaces-persistence.md) for a shorter overview.
+> **Just want the essentials?** See [Key Concepts: Workspaces and Persistence](../key-concepts/workspaces-persistence.md) for a shorter overview.
 
 Understanding stateless/stateful separation is critical for cloud computing. This guide explains persistence patterns, file organisation, and how these concepts transfer to AWS, Kubernetes, and production systems.
 

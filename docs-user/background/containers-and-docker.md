@@ -4,7 +4,7 @@
 
 > **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
 >
-> **Just want to use DS01?** See [Key Concepts: Containers and Images](../core-concepts/containers-and-images.md) for a shorter overview, or skip to [First Container](../getting-started/first-container.md).
+> **Just want to use DS01?** See [Key Concepts: Containers and Images](../key-concepts/containers-and-images.md) for a shorter overview, or skip to [First Container](../getting-started/first-container.md).
 
 Containers are the foundation of DS01 and modern cloud computing. This guide explains what they are, why we use them, and how they work.
 

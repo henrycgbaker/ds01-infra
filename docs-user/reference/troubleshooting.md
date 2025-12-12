@@ -312,7 +312,7 @@ ModuleNotFoundError: No module named 'transformers'
 - Package not in image
 - Package name typo
 
-> **Note:** DS01 containers ARE your Python environment - you don't need venv or conda. See [Python Environments](../core-concepts/python-environments.md).
+> **Note:** DS01 containers ARE your Python environment - you don't need venv or conda. See [Python Environments](../key-concepts/python-environments.md).
 
 **Solutions:**
 1. **Check if installed:**

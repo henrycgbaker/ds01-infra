@@ -4,7 +4,7 @@
 
 > **Part of [Educational Computing Context](README.md)** - Career-relevant knowledge beyond DS01 basics.
 >
-> **Just want the essentials?** See [Key Concepts: Ephemeral Containers](../core-concepts/ephemeral-containers.md) for a shorter overview.
+> **Just want the essentials?** See [Key Concepts: Ephemeral Containers](../key-concepts/ephemeral-containers.md) for a shorter overview.
 
 DS01 embraces an **ephemeral container model** - a philosophy that containers are temporary compute sessions, not permanent fixtures. This guide explains why this approach is the industry standard and how to work effectively with it.
 

@@ -212,7 +212,7 @@ Start with systemd (if enabled in container).
 - All packages installed in container are available
 - **You don't need venv or conda** - the container IS your environment
 
-→ See [Python Environments in Containers](../core-concepts/python-environments.md) for details
+→ See [Python Environments in Containers](../key-concepts/python-environments.md) for details
 
 **Check available kernels:**
 ```bash
@@ -618,4 +618,4 @@ if epoch % 5 == 0:
 - → [VS Code Remote Guide](vscode-remote.md)
 - → [Long-Running Jobs](long-running-jobs.md)
 - → [Daily Workflow](../getting-started/daily-workflow.md)
-- → [Containers and Images](../core-concepts/containers-and-images.md)
+- → [Containers and Images](../key-concepts/containers-and-images.md)

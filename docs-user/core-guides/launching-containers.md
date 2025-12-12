@@ -523,7 +523,7 @@ dashboard
 
 **Understand container lifecycle:**
 
-- → [Ephemeral Containers Concept](../core-concepts/ephemeral-containers.md)
+- → [Ephemeral Containers Concept](../key-concepts/ephemeral-containers.md)
 
 **Create new projects:**
 

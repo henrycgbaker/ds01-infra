@@ -492,5 +492,5 @@ project launch my-thesis --open
 - → [Custom Environments Guide](custom-environments.md)
 - → [Jupyter Setup](jupyter-notebooks.md)
 - → [VS Code Remote](vscode-remote.md)
-- → [Containers and Images](../core-concepts/containers-and-images.md)
-- → [Workspaces and Persistence](../core-concepts/workspaces-persistence.md)
+- → [Containers and Images](../key-concepts/containers-and-images.md)
+- → [Workspaces and Persistence](../key-concepts/workspaces-persistence.md)

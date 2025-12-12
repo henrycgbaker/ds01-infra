@@ -2,7 +2,7 @@
 
 Build and customise Docker images for your specific research needs.
 
-> **Key concept:** DS01 containers ARE your Python environment - you don't need venv or conda inside containers. See [Python Environments in Containers](../core-concepts/python-environments.md) for why.
+> **Key concept:** DS01 containers ARE your Python environment - you don't need venv or conda inside containers. See [Python Environments in Containers](../key-concepts/python-environments.md) for why.
 
 ---
 
@@ -629,4 +629,4 @@ project launch my-project --open
 
 **Understand the concepts:**
 
-- → [Containers and Images](../core-concepts/containers-and-images.md)
+- → [Containers and Images](../key-concepts/containers-and-images.md)
