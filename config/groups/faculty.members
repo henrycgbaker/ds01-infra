@@ -1,0 +1,20 @@
+# ================================================
+# Faculty Group Members
+# ================================================
+# Professors and senior researchers with elevated access.
+# Faculty can request full GPUs and have higher resource limits.
+#
+# Format: One username per line matching /home/<username>
+# - Staff: firstname.lastname@hertie-school.lan
+# - Comments start with #
+#
+# IMPORTANT: Use the exact format from /home/<username>
+# Check with: ls /home/ | grep -i "name"
+#
+# NOTE: This file is auto-populated by sync-group-membership.sh
+# based on entries in config/group-overrides.txt
+# Manual additions are preserved (merge, not replace).
+# ================================================
+
+w.lowe@hertie-school.lan        # Will Lowe - Professor
+l.kaack@hertie-school.lan       # Lynn Kaack - Professor

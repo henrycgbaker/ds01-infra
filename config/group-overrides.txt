@@ -1,0 +1,38 @@
+# ================================================
+# DS01 Group Assignment Overrides
+# ================================================
+# This file overrides automatic group classification based on username patterns.
+#
+# PURPOSE: Deterministic group ASSIGNMENT (which group does user belong to?)
+# NOT FOR: Resource limits (use config/user-overrides.yaml for custom limits)
+#
+# FORMAT: username:group
+# - username: Exact match from /home/<username>
+# - group: One of: student, researcher, faculty, admin
+#
+# PRIORITY ORDER:
+# 1. archived.members (user skipped entirely)
+# 2. THIS FILE (explicit override)
+# 3. Pattern matching ([0-9]+@ = student, [a-z].[a-z]+@ = researcher)
+#
+# NOTE: This file is read by sync-group-membership.sh
+# Changes take effect on next sync (daily at 4am or run manually)
+# ================================================
+
+# === PhD students with staff-style accounts ===
+# These would auto-classify as "researcher" but some have numeric IDs
+204214@hertie-school.lan:researcher     # Silke Kaiser - PhD
+
+# === Faculty members ===
+# Professors get elevated access (faculty group)
+w.lowe@hertie-school.lan:faculty        # Will Lowe - Professor
+l.kaack@hertie-school.lan:faculty       # Lena Kaack - Professor
+
+# === System administrators ===
+# IT staff with admin-level access
+h.dang@hertie-school.lan:admin          # Huy Dang - IT
+h.baker@hertie-school.lan:admin         # Henry Baker - Admin account
+
+# === Researchers who should stay in researcher (explicit) ===
+# Use this to prevent staff-style accounts from being mis-classified
+c.fusarbassini@hertie-school.lan:researcher  # Chiara Fusarbassini - PhD

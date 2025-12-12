@@ -1,0 +1,21 @@
+# ================================================
+# Archived Group Members
+# ================================================
+# Users who no longer have access to DS01 resources.
+# Move users here instead of deleting them entirely.
+#
+# Why archive instead of delete:
+# - Preserves audit trail of who had access
+# - Allows easy restoration if user returns
+# - Prevents sync script from re-adding them
+#
+# Format: One username per line
+# - Comments start with #
+#
+# NOTE: Users in this file are SKIPPED by sync-group-membership.sh
+# They will not be added to any active group.
+# ================================================
+
+# Example entries (uncomment when archiving users):
+# 191992@hertie-school.lan  # Graduated 2022
+# 191446@hertie-school.lan  # Left program 2022
