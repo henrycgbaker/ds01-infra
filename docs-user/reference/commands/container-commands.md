@@ -347,12 +347,12 @@ Displays information about how to exit containers. This is an informational comm
 
 ## Common Patterns
 
-### Daily Workflow
+### Typical Workflow
 ```bash
-container-deploy my-project --open   # Morning
+container-deploy my-project --open   # Spin up for GPU work
 # Work...
 exit
-container-retire my-project          # Evening
+container-retire my-project          # Done, free GPU
 ```
 
 ### Parallel Experiments

@@ -480,7 +480,7 @@ container-run my-project
 pip install new-package  # Bad: Not reproducible
 
 # Do: Update image, recreate container
-image-update my-project  # Add package to Dockerfile
+image-update                  # Add package via interactive GUI
 container-retire my-project
 container-deploy my-project
 ```

@@ -42,19 +42,18 @@ Each container provides complete isolation - you don't need venv, conda, or virt
 
 ### At Image Build Time (Recommended)
 
-Add packages to your Dockerfile:
-
-```dockerfile
-# In ~/workspace/<project-name>/Dockerfile
-RUN pip install transformers datasets torch
-```
-
-Then rebuild your image:
+Use the interactive package manager:
 
 ```bash
-image-update <project-name>
-container-retire <project-name>
-container-deploy <project-name>
+image-update                  # Select image, add packages
+container-deploy
+```
+
+**Advanced:** Edit Dockerfile directly:
+```bash
+vim ~/workspace/<project-name>/Dockerfile
+# Add: RUN pip install transformers datasets torch
+image-update <project-name> --rebuild
 ```
 
 **Benefits:**
@@ -82,6 +81,7 @@ Or in Jupyter notebooks:
 
 **Note:** Runtime installs are lost when container is removed. Add frequently-used packages to your Dockerfile.
 
+> `container retire` offers you the option to write newly-installed pkgs back into the image. This is only a half-way house, as the underlying Dockerfile remains unchanged. 
 ---
 
 ## Selecting Python in VS Code

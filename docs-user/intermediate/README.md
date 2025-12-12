@@ -4,11 +4,11 @@
 
 ---
 
-## You're Ready If
+## This is aimed at those who:
 
-- You're comfortable with `project launch` and `container deploy|retire`
-- You want fine-grained control (create/start/stop/remove separately)
-- You're interested in scripting and automation
+- Are comfortable with `project launch` and `container deploy|retire`
+- Want fine-grained control (create/start/stop/remove separately)
+- Are interested in scripting and automation
 
 **Not there yet?** → [Getting Started](../getting-started/) | [Core Guides](../core-guides/)
 

@@ -8,7 +8,7 @@ docs/
 ├── core-guides/             Task-focused how-tos
 ├── intermediate/       Atomic commands, CLI flags, scripting
 ├── advanced/           Docker direct, terminal workflows, batch jobs
-├── concepts/           Key Concepts to Understand (DS01-specific)
+├── core-concepts/      Key Concepts to Understand (DS01-specific)
 ├── background/         Educational Computing Context (career skills)
 ├── reference/          Command quick reference
 └── troubleshooting/    Fix problems
@@ -17,7 +17,7 @@ docs/
 ### Separation of Concerns
 
 >-  **Practical:** [Getting Started](getting-started/) → [Core Guides](core-guides/) → [Intermediate](intermediate/) → [Advanced](advanced/)
->- **Conceptual:** [Key Concepts](concepts/) (DS01-specific) | [Background](background/) (career skills)
+>- **Conceptual:** [Key Concepts](core-concepts/) (DS01-specific) | [Background](background/) (career skills)
 >- **Reference:** [Commands Ref](reference/) | [Troubleshooting](troubleshooting/)
 
 ---
@@ -61,14 +61,14 @@ docs/
 DS01 has two types of conceptual documentation with different purposes:
 
 ### Key Concepts to Understand
-**DS01-specific mental models for effective usage** — [Overview](concepts/) (30-45 min total)
+**DS01-specific mental models for effective usage** — [Overview](core-concepts/) (30-45 min total)
 
 | Topic | What It Answers |
 |-------|----------------|
-| [Containers and Images](concepts/containers-and-images.md) | Why do packages disappear? Why rebuild images? |
-| [Ephemeral Containers](concepts/ephemeral-containers.md) | Why are containers temporary? Will I lose work? |
-| [Workspaces and Persistence](concepts/workspaces-persistence.md) | Where are my files? What persists? |
-| [Python Environments](concepts/python-environments.md) | Do I need venv/conda? |
+| [Containers and Images](core-concepts/containers-and-images.md) | Why do packages disappear? Why rebuild images? |
+| [Ephemeral Containers](core-concepts/ephemeral-containers.md) | Why are containers temporary? Will I lose work? |
+| [Workspaces and Persistence](core-concepts/workspaces-persistence.md) | Where are my files? What persists? |
+| [Python Environments](core-concepts/python-environments.md) | Do I need venv/conda? |
 
 **Read these:** When something confuses you, or before first use.
 
@@ -133,8 +133,8 @@ Find your problem:
 |--------------|----------|
 | Start my first container | [First Container](getting-started/first-container.md) |
 | See all commands | [Quick Reference](quick-reference.md) |
-| Understand why packages disappear | [Containers and Images](concepts/containers-and-images.md) |
-| Understand why containers are temporary | [Ephemeral Containers](concepts/ephemeral-containers.md) |
+| Understand why packages disappear | [Containers and Images](core-concepts/containers-and-images.md) |
+| Understand why containers are temporary | [Ephemeral Containers](core-concepts/ephemeral-containers.md) |
 | Build a custom image | [Custom Images](core-guides/custom-images.md) |
 | Run Jupyter | [Jupyter Setup](core-guides/jupyter.md) |
 | Fix an error | [Troubleshooting](troubleshooting/) |

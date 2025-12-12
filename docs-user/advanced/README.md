@@ -4,12 +4,12 @@
 
 ---
 
-## You're Ready If
+## This is aimed at those who 
 
-- You're comfortable with Docker (`docker run`, `docker exec`)
-- You prefer CLI over IDE/GUI
-- You want to build batch job pipelines
-- You need custom container configuration
+- Are comfortable with Docker (`docker run`, `docker exec`)
+- Prefer CLI over IDE/GUI
+- Want to build batch job pipelines
+- Need custom container configuration
 
 **Not there yet?** → [Intermediate](../intermediate/)
 

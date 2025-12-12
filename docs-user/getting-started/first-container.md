@@ -16,9 +16,9 @@ project-init --guided
 # 3a. Launch project (every login)
 project launch --guided
 
-#3b OR container-oriented workflow 
-image create # once (image-update for future use)
-container-deploy my-project --open # every login
+#3b OR container-oriented workflow
+image-create           # Once (then image-update for adding packages)
+container-deploy my-project --open # Every login
 
 # 3. You're now inside the container
 # Work in /workspace - files here are persistent
