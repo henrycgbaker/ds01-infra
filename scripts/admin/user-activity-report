@@ -1,0 +1,164 @@
+#!/bin/bash
+# ============================================================================
+# DS01 User Activity Report
+# ============================================================================
+# Generates a report of user activity for identifying stale/inactive accounts.
+#
+# USAGE:
+#   user-activity-report                    # Full report
+#   user-activity-report --inactive         # Only show inactive users (>6 months)
+#   user-activity-report --csv              # Output as CSV
+#   user-activity-report --days 90          # Custom inactivity threshold
+#
+# OUTPUT:
+#   - Users sorted by last activity date
+#   - Container count per user
+#   - Group membership
+#   - Inactive users highlighted
+#
+# CRON (monthly):
+#   0 9 1 * * root /opt/ds01-infra/scripts/admin/user-activity-report
+# ============================================================================
+
+set -e
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFRA_ROOT="${SCRIPT_DIR}/../.."
+GROUPS_DIR="${INFRA_ROOT}/config/groups"
+INACTIVE_DAYS=180  # 6 months
+OUTPUT_FORMAT="text"
+SHOW_ALL=true
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --inactive) SHOW_ALL=false; shift ;;
+        --csv) OUTPUT_FORMAT="csv"; shift ;;
+        --days)
+            INACTIVE_DAYS="$2"
+            shift 2
+            ;;
+        --help|-h)
+            echo "Usage: user-activity-report [OPTIONS]"
+            echo ""
+            echo "Generate user activity report for DS01."
+            echo ""
+            echo "Options:"
+            echo "  --inactive       Only show inactive users"
+            echo "  --csv            Output in CSV format"
+            echo "  --days N         Inactivity threshold in days (default: 180)"
+            exit 0
+            ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
+    esac
+done
+
+# Get user's group from members files
+get_user_group() {
+    local username="$1"
+    for group in admin faculty researcher student; do
+        local members_file="${GROUPS_DIR}/${group}.members"
+        if [[ -f "$members_file" ]] && grep -qE "^${username}(\s|$)" "$members_file" 2>/dev/null; then
+            echo "$group"
+            return
+        fi
+    done
+    echo "student"  # Default
+}
+
+# Get container count for user
+get_container_count() {
+    local username="$1"
+    docker ps -a --filter "label=aime.mlc.USER=$username" --format "{{.ID}}" 2>/dev/null | wc -l
+}
+
+# Calculate days since date
+days_since() {
+    local timestamp="$1"
+    local now=$(date +%s)
+    echo $(( (now - timestamp) / 86400 ))
+}
+
+# Header
+if [[ "$OUTPUT_FORMAT" == "csv" ]]; then
+    echo "Username,Last Activity,Days Inactive,Containers,Group,Status"
+else
+    echo "=============================================================="
+    echo "DS01 User Activity Report"
+    echo "Generated: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Inactivity threshold: ${INACTIVE_DAYS} days"
+    echo "=============================================================="
+    echo ""
+fi
+
+# Collect user data
+declare -A user_data
+cutoff_timestamp=$(date -d "${INACTIVE_DAYS} days ago" +%s)
+
+for dir in /home/*@hertie-school.lan /home/*@HERTIE-SCHOOL.LAN; do
+    [[ -d "$dir" ]] || continue
+
+    username=$(basename "$dir")
+    last_modified=$(stat -c %Y "$dir" 2>/dev/null || echo "0")
+    last_date=$(date -d "@$last_modified" "+%Y-%m-%d" 2>/dev/null || echo "unknown")
+    days_inactive=$(days_since "$last_modified")
+    containers=$(get_container_count "$username")
+    group=$(get_user_group "$username")
+
+    # Determine status
+    if [[ $last_modified -lt $cutoff_timestamp ]]; then
+        status="INACTIVE"
+    else
+        status="active"
+    fi
+
+    # Store data (sort key is last_modified for sorting)
+    user_data["$last_modified:$username"]="$username|$last_date|$days_inactive|$containers|$group|$status"
+done
+
+# Sort by last activity (oldest first for inactive, newest first for active)
+if [[ "$OUTPUT_FORMAT" == "csv" ]]; then
+    for key in $(echo "${!user_data[@]}" | tr ' ' '\n' | sort -n); do
+        IFS='|' read -r username last_date days_inactive containers group status <<< "${user_data[$key]}"
+
+        if [[ "$SHOW_ALL" == "true" ]] || [[ "$status" == "INACTIVE" ]]; then
+            echo "$username,$last_date,$days_inactive,$containers,$group,$status"
+        fi
+    done
+else
+    # Text output
+    inactive_count=0
+    active_count=0
+
+    echo "=== Users by Last Activity ==="
+    echo ""
+    printf "%-40s %-12s %-8s %-6s %-12s %s\n" "Username" "Last Active" "Days" "Cont." "Group" "Status"
+    printf "%s\n" "$(printf '=%.0s' {1..90})"
+
+    for key in $(echo "${!user_data[@]}" | tr ' ' '\n' | sort -n); do
+        IFS='|' read -r username last_date days_inactive containers group status <<< "${user_data[$key]}"
+
+        if [[ "$SHOW_ALL" == "true" ]] || [[ "$status" == "INACTIVE" ]]; then
+            if [[ "$status" == "INACTIVE" ]]; then
+                printf "%-40s %-12s %-8s %-6s %-12s \033[31m%s\033[0m\n" "$username" "$last_date" "$days_inactive" "$containers" "$group" "$status"
+                ((inactive_count++))
+            else
+                printf "%-40s %-12s %-8s %-6s %-12s %s\n" "$username" "$last_date" "$days_inactive" "$containers" "$group" "$status"
+                ((active_count++))
+            fi
+        fi
+    done
+
+    echo ""
+    echo "=============================================================="
+    echo "Summary:"
+    echo "  Active users: $active_count"
+    echo "  Inactive users (>${INACTIVE_DAYS} days): $inactive_count"
+    echo ""
+
+    if [[ $inactive_count -gt 0 ]]; then
+        echo "RECOMMENDATION: Consider archiving inactive users."
+        echo "Move to config/groups/archived.members to prevent re-sync."
+    fi
+fi

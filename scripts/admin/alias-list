@@ -159,6 +159,7 @@ show_atomic_commands() {
     echo -e "  ${GREEN}container-stop${NC}       Stop a running container"
     echo -e "  ${GREEN}container-remove${NC}     Remove a stopped container"
     echo -e "  ${GREEN}container-pause${NC}      Pause a container"
+    echo -e "  ${GREEN}container-unpause${NC}    Unpause (resume) a container"
     echo -e "  ${GREEN}container-stats${NC}      Show resource usage"
     echo -e "  ${GREEN}container-exit${NC}       Exit/detach from container"
     echo ""
