@@ -47,12 +47,17 @@ project-init [project-name] [OPTIONS]
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `--type=TYPE` | Project type: ml, cv, nlp, rl, audio, ts, llm, custom |
+| `--quick` | Skip interactive prompts, use defaults (type=ml) |
+| `--no-git` | Skip Git initialization |
 | `--guided` | Educational mode |
 
 **Examples:**
 ```bash
-project-init                # Interactive
-project-init my-research    # Specify name
+project-init                      # Interactive
+project-init my-research          # Specify name
+project-init my-thesis --type=cv  # Computer vision project
+project-init test --quick         # Quick setup with defaults
 ```
 
 **What it does:**

@@ -54,20 +54,34 @@ image-create [project-name] [OPTIONS]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--framework <name>` | Base framework (pytorch, tensorflow, jax) |
+| `-f, --framework NAME` | Base framework (pytorch, tensorflow, jax) |
+| `-t, --type TYPE` | Use case type: ml, cv, nlp, rl, audio, ts, llm, custom |
+| `-p, --packages "pkg1 pkg2"` | Additional Python packages |
+| `-s, --system "pkg1 pkg2"` | System packages via apt |
+| `-r, --requirements FILE` | Import from requirements.txt |
+| `--dockerfile PATH` | Use existing Dockerfile (skip creation) |
+| `--project-dockerfile` | Store Dockerfile in project dir |
+| `--no-build` | Create Dockerfile only, don't build |
 | `--guided` | Educational mode |
 
 **Examples:**
 ```bash
-image-create                              # Interactive
-image-create my-project --framework pytorch
+image-create                                    # Interactive
+image-create my-project -f pytorch -t cv        # CV project with PyTorch
+image-create nlp-exp -t nlp -p "wandb optuna"   # NLP with extra packages
+image-create my-proj -r ~/workspace/my-proj/requirements.txt  # From requirements
+image-create custom --no-build                  # Just create Dockerfile
 ```
 
-**What it does (4 phases):**
-1. Choose base framework (PyTorch, TensorFlow, JAX)
-2. Add Jupyter Lab and extensions
-3. Add data science packages
-4. Add custom packages (optional)
+**Use case types:**
+- `ml` - General ML (xgboost, lightgbm, shap, optuna)
+- `cv` - Computer Vision (timm, ultralytics, kornia)
+- `nlp` - NLP (transformers, peft, safetensors)
+- `rl` - Reinforcement Learning (gymnasium, stable-baselines3)
+- `audio` - Audio/Speech (librosa, soundfile)
+- `ts` - Time Series (statsmodels, prophet, darts)
+- `llm` - LLM/GenAI (vllm, bitsandbytes, langchain)
+- `custom` - Specify packages manually
 
 **Result:** Image tagged as `ds01-<user>/<project>:latest`
 
@@ -108,11 +122,13 @@ image-update [project-name] [OPTIONS]
 **Options:**
 | Option | Description |
 |--------|-------------|
+| `--add "pkg1 pkg2"` | Add Python packages directly |
+| `--add-system "pkg1"` | Add system packages via apt |
+| `-r, --requirements FILE` | Import from requirements.txt |
 | `--rebuild` | Rebuild image without modifying Dockerfile |
 | `--no-cache` | Force rebuild without cache |
-| `--add "pkg1 pkg2"` | Add packages directly |
-| `-r, --requirements FILE` | Import from requirements.txt |
 | `--edit` | Edit Dockerfile manually (advanced) |
+| `--guided` | Educational mode |
 
 **Examples:**
 ```bash

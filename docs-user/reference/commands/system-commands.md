@@ -8,7 +8,7 @@ Commands for system status, user setup, and configuration.
 
 ```bash
 # System dashboard
-dashboard                # Or: ds01-dashboard
+dashboard
 
 # First-time setup
 user-setup
@@ -27,43 +27,15 @@ version                  # Show version
 
 ---
 
-## ds01-dashboard
-
-**System status dashboard**
-
-```bash
-ds01-dashboard [OPTIONS]
-```
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `--watch` | Continuous monitoring |
-| `--json` | JSON output |
-
-**Examples:**
-```bash
-ds01-dashboard           # View status
-ds01-dashboard --watch   # Live monitoring
-```
-
-**Shows:**
-- GPU availability and allocation
-- System resource usage
-- Active containers
-- User quotas
-
----
-
 ## dashboard
 
-**User-friendly system dashboard** (alias for ds01-dashboard)
+**System status dashboard**
 
 ```bash
 dashboard [OPTIONS]
 ```
 
-Same as `ds01-dashboard` but shorter to type.
+View GPU availability, container status, and system resources.
 
 **Options:**
 | Option | Description |
@@ -142,19 +114,21 @@ ssh-setup [OPTIONS]
 **Options:**
 | Option | Description |
 |--------|-------------|
-| `--key-type <type>` | Key type (default: ed25519) |
-| `--no-passphrase` | Create without passphrase |
+| `--guided` | Show detailed explanations for beginners |
+| `--force` | Regenerate keys even if they exist |
+| `--verify` | Just verify existing setup |
 
 **Examples:**
 ```bash
-ssh-setup                              # Interactive
-ssh-setup --key-type ed25519           # Specify key type
+ssh-setup              # Interactive setup
+ssh-setup --guided     # With explanations
+ssh-setup --verify     # Check existing setup
 ```
 
 **What it does:**
-1. Generates SSH key pair
+1. Generates SSH key pair (ed25519)
 2. Displays public key (add to GitHub/GitLab)
-3. Configures SSH agent (optional)
+3. Verifies configuration
 
 ---
 
@@ -200,109 +174,6 @@ shell-setup           # Fix PATH
 
 ---
 
-## ds01-health-check
-
-**System health diagnostics**
-
-```bash
-ds01-health-check
-```
-
-**Checks:**
-- Docker daemon status
-- GPU driver availability
-- Systemd slices
-- Network connectivity
-
-**Use when:** Troubleshooting system issues
-
----
-
-## gpu-queue
-
-**GPU queue management**
-
-```bash
-gpu-queue [subcommand] [args]
-```
-
-**Subcommands:**
-| Command | Description |
-|---------|-------------|
-| `position <user>` | Check queue position for user |
-| `status` | View overall queue status |
-| `list` | List all queued requests |
-
-**Examples:**
-```bash
-gpu-queue position $USER   # Check your queue position
-gpu-queue status           # View queue status
-```
-
-**Use when:** All GPUs are allocated and you're waiting for availability.
-
----
-
-## ds01-gpu-util
-
-**GPU utilization monitor**
-
-```bash
-ds01-gpu-util [OPTIONS]
-```
-
-Shows actual GPU usage (not just allocation). Helps identify underutilized GPUs.
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `--json` | JSON output for scripting |
-
-**Examples:**
-```bash
-ds01-gpu-util           # Current GPU utilization snapshot
-ds01-gpu-util --json    # JSON output
-```
-
-**Shows:**
-- Current GPU utilization percentage
-- Memory usage per GPU
-- Which containers are using each GPU
-
-**Use when:** You want to see if GPUs are being actively used vs just allocated.
-
----
-
-## ds01-mig-util
-
-**MIG instance utilization monitor**
-
-```bash
-ds01-mig-util [OPTIONS]
-```
-
-Shows actual MIG instance utilization (not just allocation). Useful for tracking per-instance usage on partitioned GPUs.
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `--json` | JSON output for scripting |
-
-**Examples:**
-```bash
-ds01-mig-util           # Current MIG utilization snapshot
-ds01-mig-util --json    # JSON output
-```
-
-**Shows:**
-- Per-MIG instance utilization
-- Memory usage per instance
-- Container assignments
-
-**Use when:** Your system uses MIG (Multi-Instance GPU) and you want to see actual usage.
-
----
-
 ## jupyter-setup
 
 **Configure Jupyter Lab access**
@@ -328,59 +199,6 @@ jupyter-setup --port-forward  # Just port forwarding commands
 ```
 
 **Use when:** Setting up Jupyter Lab access from your local machine.
-
----
-
-## quota-check
-
-**Check disk quota usage**
-
-```bash
-quota-check [OPTIONS]
-```
-
-Shows your current disk usage against your quota limit.
-
-**Options:**
-| Option | Description |
-|--------|-------------|
-| `--all` | Check all users (admin only) |
-
-**Examples:**
-```bash
-quota-check           # Check your quota
-```
-
-**Shows:**
-- Current disk usage
-- Quota limit
-- Percentage used
-- Warning if near limit
-
----
-
-## install-to-image
-
-**Install packages to running container and update image**
-
-```bash
-install-to-image <container-name> <packages...>
-```
-
-Installs Python packages to a running container and optionally commits the changes to the Docker image.
-
-**Examples:**
-```bash
-install-to-image my-project wandb optuna
-install-to-image thesis transformers datasets
-```
-
-**What it does:**
-1. Starts the container (if stopped)
-2. Runs `pip install` inside the container
-3. Optionally commits changes to create new image version
-
-**Note:** For reproducible environments, prefer updating your Dockerfile with `image-update --add "packages"`.
 
 ---
 

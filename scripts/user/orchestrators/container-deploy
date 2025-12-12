@@ -48,6 +48,8 @@ usage() {
     echo ""
     echo -e "${CYAN}Options:${NC}"
     echo "  --guided          Show detailed explanations for beginners"
+    echo "  --framework=NAME  Use AIME base framework (pytorch, tensorflow)"
+    echo "  --image=NAME      Use specific Docker image (skip custom image check)"
     echo "  --cpu-only        Create CPU-only container (no GPU)"
     echo "  -w, --workspace   Workspace directory (default: ~/workspace/<name>)"
     echo "  --project=NAME    Mount ~/workspace/NAME as workspace"
@@ -106,6 +108,8 @@ detailed_help() {
     echo ""
     echo -e "${BOLD}Options:${NC}"
     echo "  --guided          Step-by-step with explanations"
+    echo "  --framework=NAME  Use AIME base framework (pytorch, tensorflow)"
+    echo "  --image=NAME      Use specific Docker image (skip custom image check)"
     echo "  --cpu-only        No GPU allocation (for preprocessing)"
     echo "  -w, --workspace   Custom workspace directory"
     echo "  -d, --data        Mount additional data directory"
@@ -287,6 +291,8 @@ CONTAINER_NAME=""
 GUIDED=false
 PROJECT_ARG=""
 WORKSPACE_ARG=""
+FRAMEWORK_ARG=""
+IMAGE_ARG=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -309,6 +315,19 @@ while [[ $# -gt 0 ]]; do
             ;;
         --workspace=*)
             WORKSPACE_ARG="${1#*=}"
+            shift
+            ;;
+        --framework=*)
+            FRAMEWORK_ARG="${1#*=}"
+            shift
+            ;;
+        --image=*)
+            IMAGE_ARG="${1#*=}"
+            shift
+            ;;
+        --cpu-only|--dry-run)
+            # Pass these flags through to container-create
+            CREATE_ARGS+=("$1")
             shift
             ;;
         -h|--help)
@@ -368,63 +387,79 @@ if [ "$GUIDED" = true ]; then
 fi
 
 # ============================================================================
-# PRE-CHECK: Verify custom image exists (for robust container creation)
+# PRE-CHECK: Handle image selection
 # ============================================================================
-# Custom images built via image-create have pre-configured users, which:
-# - Avoids memory-intensive docker commit phase
-# - Avoids orphaned containers on failure
-# - Ensures proper DS01 labels are applied
+# Priority: --image > --framework > custom image (ds01-{uid}/{name}:latest)
 #
-# Image naming convention: ds01-{uid}/{name}:latest
+# --framework: Use AIME base framework (bypasses custom image requirement)
+# --image: Use specific Docker image (bypasses custom image requirement)
+# (default): Require custom image built via image-create
 # ============================================================================
 
 if [ -n "$CONTAINER_NAME" ]; then
-    EXPECTED_IMAGE="ds01-${USER_ID}/${CONTAINER_NAME}:latest"
-
-    # Check if custom image exists
-    if ! docker images -q "$EXPECTED_IMAGE" 2>/dev/null | grep -q .; then
-        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo -e "${BOLD}Custom Image Required${NC}"
-        echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-        echo ""
-        echo -e "Image not found: ${CYAN}${EXPECTED_IMAGE}${NC}"
-        echo ""
-        echo "To ensure reliable container creation, DS01 requires you to"
-        echo "build a custom image first. This image includes your user"
-        echo "configuration pre-built, avoiding runtime setup issues."
-        echo ""
-        echo -e "${BOLD}Quick fix:${NC}"
-        echo -e "  ${GREEN}image-create ${CONTAINER_NAME}${NC}"
-        echo ""
-        echo "Then retry:"
-        echo -e "  ${GREEN}container deploy ${CONTAINER_NAME}${NC}"
-        echo ""
-
-        if [ "$GUIDED" = true ]; then
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo -e "${BOLD}Why Custom Images?${NC}"
-            echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-            echo ""
-            echo "Custom images (built via image-create) have your user already"
-            echo "configured inside them. This means:"
-            echo ""
-            echo "  ✓ No memory-intensive docker commit step"
-            echo "  ✓ Faster container startup"
-            echo "  ✓ More reliable (no orphaned containers on failure)"
-            echo "  ✓ Proper tracking labels always applied"
-            echo ""
-            echo "Think of it like installing an OS: you do it once, then use it"
-            echo "many times. image-create is the 'install', container-deploy is"
-            echo "the 'use'."
-            echo ""
-        fi
-
-        exit 1
+    if [ -n "$IMAGE_ARG" ]; then
+        # --image specified: pass to container-create
+        CREATE_ARGS+=("$IMAGE_ARG")
+        echo -e "${DIM}Using specified image: ${IMAGE_ARG}${NC}"
+    elif [ -n "$FRAMEWORK_ARG" ]; then
+        # --framework specified: pass framework name to container-create
+        CREATE_ARGS+=("$FRAMEWORK_ARG")
+        echo -e "${DIM}Using AIME base framework: ${FRAMEWORK_ARG}${NC}"
     else
-        # Custom image found - pass it to container-create as second positional arg
-        # container-create expects: container-create <name> <image>
-        CREATE_ARGS+=("$EXPECTED_IMAGE")
-        echo -e "${DIM}Using custom image: ${EXPECTED_IMAGE}${NC}"
+        # Default: require custom image
+        EXPECTED_IMAGE="ds01-${USER_ID}/${CONTAINER_NAME}:latest"
+
+        # Check if custom image exists
+        if ! docker images -q "$EXPECTED_IMAGE" 2>/dev/null | grep -q .; then
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo -e "${BOLD}Custom Image Required${NC}"
+            echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+            echo ""
+            echo -e "Image not found: ${CYAN}${EXPECTED_IMAGE}${NC}"
+            echo ""
+            echo "To ensure reliable container creation, DS01 requires you to"
+            echo "build a custom image first. This image includes your user"
+            echo "configuration pre-built, avoiding runtime setup issues."
+            echo ""
+            echo -e "${BOLD}Options:${NC}"
+            echo ""
+            echo -e "  ${GREEN}1)${NC} Build custom image (recommended):"
+            echo -e "     ${GREEN}image-create ${CONTAINER_NAME}${NC}"
+            echo ""
+            echo -e "  ${GREEN}2)${NC} Use AIME base framework directly:"
+            echo -e "     ${GREEN}container deploy ${CONTAINER_NAME} --framework=pytorch${NC}"
+            echo -e "     ${GREEN}container deploy ${CONTAINER_NAME} --framework=tensorflow${NC}"
+            echo ""
+            echo -e "  ${GREEN}3)${NC} Use a specific image:"
+            echo -e "     ${GREEN}container deploy ${CONTAINER_NAME} --image=<image-name>${NC}"
+            echo ""
+
+            if [ "$GUIDED" = true ]; then
+                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo -e "${BOLD}Why Custom Images?${NC}"
+                echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+                echo ""
+                echo "Custom images (built via image-create) have your user already"
+                echo "configured inside them. This means:"
+                echo ""
+                echo "  ✓ No memory-intensive docker commit step"
+                echo "  ✓ Faster container startup"
+                echo "  ✓ More reliable (no orphaned containers on failure)"
+                echo "  ✓ Proper tracking labels always applied"
+                echo ""
+                echo "Think of it like installing an OS: you do it once, then use it"
+                echo "many times. image-create is the 'install', container-deploy is"
+                echo "the 'use'."
+                echo ""
+            fi
+
+            exit 1
+        else
+            # Custom image found - pass it to container-create as second positional arg
+            # container-create expects: container-create <name> <image>
+            CREATE_ARGS+=("$EXPECTED_IMAGE")
+            echo -e "${DIM}Using custom image: ${EXPECTED_IMAGE}${NC}"
+        fi
     fi
 fi
 
